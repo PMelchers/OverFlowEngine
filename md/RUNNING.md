@@ -72,4 +72,5 @@ Stop the backend/frontend dev servers with `Ctrl+C` in their terminals.
 
 ## Troubleshooting
 - **Run button shows "could not reach backend"** — make sure `uvicorn` is running on port 8000 and CORS origin matches the frontend's dev URL (`http://localhost:5173`, set in `backend/app/main.py`).
-- **Port already in use** — another process is bound to 5173/8000/5432/6379; stop it or change the port.
+- **Port already in use** — another process is bound to 5173/8000/5432/6379; stop it or change the port. On Windows this can show up as `WinError 10013` when starting `uvicorn`, which looks like a permissions error but usually just means something (often a leftover `uvicorn` process from an earlier run) is already listening on that port — find it with `Get-NetTCPConnection -LocalPort 8000` / `Get-Process -Id <pid>` and stop it.
+- **`pip install` fails with `pg_config executable not found` while building `psycopg2`** (seen on Ubuntu) — pip is trying to build `psycopg2-binary` from source because no prebuilt wheel exists for your Python version (common if you're on a very new/just-released Python). Install libpq's dev headers and re-run: `sudo apt install libpq-dev python3-dev`.

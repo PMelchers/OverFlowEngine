@@ -59,10 +59,17 @@ if [ ! -x "$VENV_PY" ]; then
 fi
 
 step "Checking backend dependencies"
-if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic" >/dev/null 2>&1; then
+if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic, psycopg2" >/dev/null 2>&1; then
   warn "Backend dependencies missing, installing from requirements.txt..."
-  "$VENV_PY" -m pip install -q -r "$BACKEND_DIR/requirements.txt"
-  ok "Backend dependencies installed"
+  if "$VENV_PY" -m pip install -q -r "$BACKEND_DIR/requirements.txt"; then
+    ok "Backend dependencies installed"
+  else
+    err "pip install failed - see the output above for the real error."
+    err "If it mentions 'pg_config executable not found' while building psycopg2, install libpq's dev headers and retry:"
+    err "  sudo apt install libpq-dev python3-dev"
+    err "If your Python version is very new (e.g. just-released), psycopg2-binary may not have a prebuilt wheel for it yet - that's the same underlying issue: pip falls back to building from source and needs libpq-dev."
+    exit 1
+  fi
 else
   ok "Backend dependencies satisfied"
 fi
@@ -94,6 +101,18 @@ step "Starting backend (FastAPI) on http://localhost:8000"
 
 step "Starting frontend (Vite) on http://localhost:5173"
 (cd "$FRONTEND_DIR" && nohup npm run dev > "$ROOT/frontend.log" 2>&1 &)
+
+# Both launch in the background, so give them a moment and actually confirm the
+# backend came up instead of just assuming it did - a failure there (e.g. a
+# missing dependency) would otherwise fail silently in backend.log.
+sleep 3
+step "Verifying backend started"
+if command -v curl >/dev/null 2>&1 && curl -s -o /dev/null -w '' http://localhost:8000/health 2>/dev/null; then
+  ok "Backend is responding on http://localhost:8000"
+else
+  err "Backend doesn't seem to be responding yet. Check backend.log for the real error:"
+  err "  tail -n 40 backend.log"
+fi
 
 echo ""
 ok "OverFlowEngine is starting up in the background."
