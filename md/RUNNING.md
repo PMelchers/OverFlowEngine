@@ -31,16 +31,29 @@ Right now `POST /workflows/run` just echoes the graph back — it doesn't touch 
 
 ## First-time setup
 
-```bash
-# Backend
+The quick-start scripts above do all of this for you automatically (including creating `backend/.env` from `.env.example`). Only follow these manual steps if you want to set things up by hand instead.
+
+**Windows (PowerShell):**
+```powershell
 cd backend
 python -m venv .venv
-./.venv/Scripts/activate      # Windows (PowerShell: .venv\Scripts\Activate.ps1)
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env          # adjust if needed
+Copy-Item .env.example .env    # adjust if needed
 
-# Frontend
-cd frontend
+cd ..\frontend
+npm install
+```
+
+**Linux:**
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env           # adjust if needed
+
+cd ../frontend
 npm install
 ```
 
@@ -54,8 +67,9 @@ docker compose up -d
 ```
 
 **2. Backend** (from `backend/`)
-```bash
-./.venv/Scripts/activate
+```powershell
+.venv\Scripts\Activate.ps1     # Windows
+source .venv/bin/activate      # Linux
 uvicorn app.main:app --reload --port 8000
 ```
 API docs at http://localhost:8000/docs, health check at http://localhost:8000/health.
@@ -78,4 +92,10 @@ docker compose down       # stop Postgres/Redis (add -v to also wipe data volume
 ## Troubleshooting
 - **Run button shows "could not reach backend"** — make sure `uvicorn` is running on port 8000 and CORS origin matches the frontend's dev URL (`http://localhost:5173`, set in `backend/app/main.py`).
 - **Port already in use / `WinError 10013`** — `start.ps1`/`start.ps2` now automatically free ports 8000 and 5173 before launching, so this should self-heal on the next run. If it still happens, run `.\stop.ps1` (Windows) or `./stop.ps2` (Linux) first, or manually find the process with `Get-NetTCPConnection -LocalPort 8000` (Windows) / `lsof -ti:8000` (Linux) and stop it.
-- **`pip install` fails with `pg_config executable not found` while building `psycopg2`** (seen on Ubuntu) — pip is trying to build `psycopg2-binary` from source because no prebuilt wheel exists for your Python version (common if you're on a very new/just-released Python). Install libpq's dev headers and re-run: `sudo apt install libpq-dev python3-dev`.
+- **`ModuleNotFoundError: No module named 'psycopg2'`** — `backend/.env` is gitignored, so if it was created before the project switched from `psycopg2` to `psycopg` (v3), it still has the old `DATABASE_URL=postgresql://...` scheme. Fix it in place or regenerate it:
+  ```bash
+  sed -i 's#DATABASE_URL=postgresql://#DATABASE_URL=postgresql+psycopg://#' backend/.env
+  # or just: rm backend/.env   (the next script run recreates it from .env.example)
+  ```
+- **`pip install` fails building `pydantic-core` or `psycopg[binary]` from source** (seen on very new Python releases, e.g. 3.14) — `requirements.txt` uses `>=` minimum versions specifically so pip picks a release with a prebuilt wheel for your Python instead of an old exact pin with no wheel. If it still tries to compile from source, your Python is likely newer than any released wheel yet; either wait for upstream wheels or install build deps: `sudo apt install libpq-dev python3-dev`.
+- **Don't run the start/stop scripts with `sudo`** — it isn't needed and leaves `backend/.venv`/`frontend/node_modules` root-owned, which then breaks normal (non-sudo) runs. If Docker needs `sudo`, fix that once with `sudo usermod -aG docker $USER` (then re-log in) instead. If you already ran with `sudo`, reclaim ownership: `sudo chown -R $USER:$USER backend/.venv frontend/node_modules`.

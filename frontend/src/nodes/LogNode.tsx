@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -5,6 +6,24 @@ import type { BlockNodeData } from './types'
 
 export default function LogNode({ data }: NodeProps<BlockNodeData>) {
   const active = data.status === 'active'
+  const availableVariables = data.availableVariables ?? []
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const insertVariable = (name: string) => {
+    if (!name) return
+    const token = `{${name}}`
+    const input = inputRef.current
+    const current = data.message ?? ''
+    const start = input?.selectionStart ?? current.length
+    const end = input?.selectionEnd ?? current.length
+    const next = current.slice(0, start) + token + current.slice(end)
+    data.onChange?.({ message: next })
+    requestAnimationFrame(() => {
+      input?.focus()
+      const caret = start + token.length
+      input?.setSelectionRange(caret, caret)
+    })
+  }
 
   return (
     <GridSnapBox
@@ -15,12 +34,27 @@ export default function LogNode({ data }: NodeProps<BlockNodeData>) {
       <Handle type="target" position={Position.Left} className="!bg-slate-500" />
       <BlockHeader icon="»" badgeClassName="bg-slate-600" />
       <input
+        ref={inputRef}
         type="text"
         value={data.message ?? ''}
         placeholder="e.g. count is {count}"
         onChange={(e) => data.onChange?.({ message: e.target.value })}
         className="nodrag w-full rounded border border-slate-400 bg-white px-2 py-1 text-sm"
       />
+      {availableVariables.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => insertVariable(e.target.value)}
+          className="nodrag mt-1 w-full rounded border border-slate-400 bg-white px-2 py-1 text-sm text-slate-600"
+        >
+          <option value="">Insert a variable...</option>
+          {availableVariables.map((v) => (
+            <option key={v.name} value={v.name}>
+              {v.name} ({v.varType})
+            </option>
+          ))}
+        </select>
+      )}
       <p className="mt-1 text-[11px] text-slate-500">Use {'{varName}'} to insert a saved variable.</p>
       <Handle type="source" position={Position.Right} className="!bg-slate-500" />
     </GridSnapBox>

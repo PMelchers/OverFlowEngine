@@ -281,7 +281,11 @@ function CanvasInner() {
   // (breaking focus/clicks mid-edit) whenever this object's identity changes.
   useEffect(() => {
     setNodes((nds) =>
-      nds.map((n) => (n.type === 'if' || n.type === 'ifOne' ? { ...n, data: { ...n.data, availableVariables } } : n)),
+      nds.map((n) =>
+        n.type === 'if' || n.type === 'ifOne' || n.type === 'log'
+          ? { ...n, data: { ...n.data, availableVariables } }
+          : n,
+      ),
     )
   }, [availableVariables, setNodes])
 
@@ -502,7 +506,9 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(id, patch),
           ...(TRIGGER_NODE_TYPES.has(kind) ? { onTrigger: runWorkflow } : {}),
-          ...(kind === 'if' || kind === 'ifOne' ? { availableVariables: availableVariablesRef.current } : {}),
+          ...(kind === 'if' || kind === 'ifOne' || kind === 'log'
+            ? { availableVariables: availableVariablesRef.current }
+            : {}),
         },
       }
       setNodes((nds) => [...nds, newNode])
@@ -657,7 +663,9 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(sn.id, patch),
           ...(TRIGGER_NODE_TYPES.has(sn.type) ? { onTrigger: runWorkflow } : {}),
-          ...(sn.type === 'if' || sn.type === 'ifOne' ? { availableVariables: availableVariablesRef.current } : {}),
+          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log'
+            ? { availableVariables: availableVariablesRef.current }
+            : {}),
         },
       }))
       const loadedEdges: Edge[] = block.subgraph.edges.map((se) => ({
