@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://overflow:overflow@localhost:5432/overflow")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://overflow:overflow@localhost:5432/overflow")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
