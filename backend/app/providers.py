@@ -2,6 +2,31 @@ import httpx
 
 _TIMEOUT = 6.0
 
+# Which models a credential can offer, scoped to the platform its key was
+# recognized as belonging to - keeps the AI Model block from suggesting a
+# model the linked key can't actually call.
+PROVIDER_MODELS: dict[str, list[str]] = {
+    "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"],
+    "anthropic": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4.5"],
+    "google": ["gemini-2.5-pro", "gemini-2.5-flash"],
+    "test": ["test-model"],
+}
+
+
+def detect_provider(api_key: str) -> str:
+    """Recognizes which platform a key is from by its own format, so the
+    user never has to tell us which provider they're linking."""
+    key = api_key.strip()
+    if key.lower().startswith("test"):
+        return "test"
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith("sk-"):
+        return "openai"
+    if key.startswith("AIza"):
+        return "google"
+    return "other"
+
 
 def verify_api_key(provider: str, api_key: str) -> bool | None:
     """Checks a key against its provider with a lightweight, read-only call.

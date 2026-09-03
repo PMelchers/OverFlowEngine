@@ -62,7 +62,9 @@ export interface BlockNodeData {
   prompt?: string
   // ai-model block (circular) - unlocked by picking one of the user's verified API keys
   credentialId?: number | null
-  /** display label once unlocked, e.g. "Personal key (openai)" - also what the AI Agent block reads as its model */
+  /** the linked credential's auto-detected provider - scopes which models can be chosen */
+  provider?: string
+  /** the chosen model id, e.g. "gpt-4o" - also what the AI Agent block reads as its model */
   model?: string
   // ai-input block reuses `value` (the text/expression fed into the agent)
   // ai-output block reuses `label` as the variable name the result is saved into

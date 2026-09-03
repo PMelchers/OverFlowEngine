@@ -11,6 +11,8 @@ export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
   const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
   const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
   const connectedModel = modelNode?.data.model
+    ? `${modelNode.data.model} (${modelNode.data.provider})`
+    : undefined
 
   return (
     <GridSnapBox

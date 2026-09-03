@@ -10,17 +10,27 @@ type Credential = {
   created_at: string
 }
 
-const PROVIDERS = ['openai', 'anthropic', 'google', 'test', 'other']
+// Mirrors backend/app/providers.py:detect_provider - a live preview only,
+// the backend re-detects from the key itself and is the source of truth.
+function detectProviderPreview(key: string): string | null {
+  const k = key.trim()
+  if (!k) return null
+  if (k.toLowerCase().startsWith('test')) return 'test'
+  if (k.startsWith('sk-ant-')) return 'anthropic'
+  if (k.startsWith('sk-')) return 'openai'
+  if (k.startsWith('AIza')) return 'google'
+  return 'other'
+}
 
 export default function AccountPanel({ onClose }: { onClose: () => void }) {
   const { user, logout, authedFetch } = useAuth()
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [provider, setProvider] = useState(PROVIDERS[0])
   const [label, setLabel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
+  const detectedProvider = detectProviderPreview(apiKey)
 
   const loadCredentials = async () => {
     setLoading(true)
@@ -48,7 +58,7 @@ export default function AccountPanel({ onClose }: { onClose: () => void }) {
       const res = await authedFetch('/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, label, api_key: apiKey }),
+        body: JSON.stringify({ label, api_key: apiKey }),
       })
       // Clear the key out of this form immediately regardless of outcome, so
       // it never lingers on screen after being submitted.
@@ -84,7 +94,8 @@ export default function AccountPanel({ onClose }: { onClose: () => void }) {
 
         <h3 className="mb-2 text-sm font-semibold text-gray-700">AI API keys</h3>
         <p className="mb-2 text-xs text-gray-500">
-          Link an API key from an AI provider so AI Agent blocks can use it.
+          Paste an API key - we recognize which platform it's from automatically, no need to pick it
+          yourself.
         </p>
 
         {loading ? (
@@ -123,33 +134,14 @@ export default function AccountPanel({ onClose }: { onClose: () => void }) {
         )}
 
         <form onSubmit={addCredential} className="space-y-2 border-t border-gray-200 pt-3">
-          <div className="flex gap-2">
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              required
-              placeholder="Label, e.g. Personal key"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
-            />
-          </div>
-          {provider === 'test' && (
-            <p className="text-[11px] text-gray-400">
-              "test" doesn't call a real provider - any value verifies instantly, for trying out AI Model
-              blocks without a real key.
-            </p>
-          )}
+          <input
+            type="text"
+            required
+            placeholder="Label, e.g. Personal key"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          />
           <input
             type="password"
             required
@@ -158,6 +150,15 @@ export default function AccountPanel({ onClose }: { onClose: () => void }) {
             onChange={(e) => setApiKey(e.target.value)}
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
           />
+          {detectedProvider && (
+            <p className={`text-[11px] ${detectedProvider === 'other' ? 'text-amber-600' : 'text-gray-400'}`}>
+              {detectedProvider === 'other'
+                ? "Doesn't look like a recognized key format (OpenAI, Anthropic, Google) - won't be accepted."
+                : detectedProvider === 'test'
+                  ? 'Recognized as a test key - verifies instantly, no real provider called.'
+                  : `Recognized as ${detectedProvider}`}
+            </p>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"

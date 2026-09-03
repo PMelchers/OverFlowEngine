@@ -65,7 +65,6 @@ class LoginIn(BaseModel):
 
 
 class CredentialIn(BaseModel):
-    provider: str
     label: str
     api_key: str
 
@@ -140,20 +139,27 @@ def create_credential(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not body.provider.strip() or not body.label.strip() or not body.api_key.strip():
-        raise HTTPException(status_code=400, detail="Provider, label, and API key are all required")
+    if not body.label.strip() or not body.api_key.strip():
+        raise HTTPException(status_code=400, detail="Label and API key are both required")
 
     api_key = body.api_key.strip()
-    verified = providers.verify_api_key(body.provider, api_key)
+    provider = providers.detect_provider(api_key)
+    if provider == "other":
+        raise HTTPException(
+            status_code=400,
+            detail="Could not recognize which platform this key is from - check it's copied correctly.",
+        )
+
+    verified = providers.verify_api_key(provider, api_key)
     if verified is False:
         raise HTTPException(
             status_code=400,
-            detail=f"{body.provider} rejected this API key - double check it's correct.",
+            detail=f"{provider} rejected this API key - double check it's correct.",
         )
 
     cred = models.AiCredential(
         user_id=current_user.id,
-        provider=body.provider.strip(),
+        provider=provider,
         label=body.label.strip(),
         api_key=api_key,
         verified=bool(verified),
@@ -162,6 +168,11 @@ def create_credential(
     db.commit()
     db.refresh(cred)
     return _credential_out(cred)
+
+
+@app.get("/models/{provider}")
+def list_models(provider: str):
+    return {"provider": provider, "models": providers.PROVIDER_MODELS.get(provider, [])}
 
 
 @app.delete("/credentials/{credential_id}")
