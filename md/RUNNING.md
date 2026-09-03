@@ -1,5 +1,21 @@
 # Running OverFlowEngine
 
+## Quick start
+
+Two scripts check your tooling, install anything missing, start Postgres/Redis, and launch both servers for you. Both are safe to re-run any time.
+
+**Windows (PowerShell):**
+```powershell
+.\start.ps1
+```
+Backend and frontend each open in their own PowerShell window so you can see their logs directly.
+
+**Ubuntu / other Linux:**
+```bash
+./start.ps2
+```
+(The `.ps2` name is just this project's "startup script #2" naming — it's a bash script, not PowerShell.) Backend and frontend run in the background; logs go to `backend.log` and `frontend.log` in the project root. Tail them with `tail -f backend.log` / `tail -f frontend.log`. If it's not executable yet, run `chmod +x start.ps2` first.
+
 ## What needs to be running
 
 | Component | Purpose | Required for MVP? |

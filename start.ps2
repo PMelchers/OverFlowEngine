@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Startup script #2 - for Ubuntu (and other Debian-based Linux) users.
+# Starts OverFlowEngine end-to-end:
+#  - checks required tooling is installed
+#  - installs backend/frontend dependencies if missing
+#  - starts Postgres + Redis via Docker Compose
+#  - launches the backend (FastAPI) and frontend (Vite) in the background
+
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
+ok()   { printf '\033[32m    OK: %s\033[0m\n' "$1"; }
+warn() { printf '\033[33m    WARN: %s\033[0m\n' "$1"; }
+err()  { printf '\033[31m    ERROR: %s\033[0m\n' "$1"; }
+
+missing=()
+
+step "Checking required tools"
+check_tool() {
+  local name="$1" cmd="$2" apt_pkg="$3"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    err "$name not found (expected command '$cmd' on PATH). Install with: sudo apt install $apt_pkg"
+    missing+=("$name")
+    return 1
+  fi
+  local version
+  version="$("$cmd" --version 2>/dev/null | head -n1)"
+  ok "$name found - ${version:-(unknown version)}"
+}
+check_tool "Node.js" node "nodejs"
+check_tool "npm" npm "npm"
+check_tool "Python" python3 "python3 python3-venv"
+check_tool "Docker" docker "docker.io"
+
+if [ "${#missing[@]}" -gt 0 ]; then
+  err "Missing required tools: ${missing[*]}. Install them (see suggestions above) and re-run this script."
+  exit 1
+fi
+
+step "Checking Docker is running"
+if docker info >/dev/null 2>&1; then
+  ok "Docker daemon is running"
+  docker_running=1
+else
+  warn "Docker daemon not reachable. On Ubuntu: sudo systemctl start docker (and add yourself to the docker group: sudo usermod -aG docker \$USER, then re-log in)."
+  docker_running=0
+fi
+
+BACKEND_DIR="$ROOT/backend"
+FRONTEND_DIR="$ROOT/frontend"
+VENV_PY="$BACKEND_DIR/.venv/bin/python"
+
+step "Checking backend environment"
+if [ ! -x "$VENV_PY" ]; then
+  warn "Backend virtualenv not found, creating it..."
+  python3 -m venv "$BACKEND_DIR/.venv"
+  ok "Created .venv"
+fi
+
+step "Checking backend dependencies"
+if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic" >/dev/null 2>&1; then
+  warn "Backend dependencies missing, installing from requirements.txt..."
+  "$VENV_PY" -m pip install -q -r "$BACKEND_DIR/requirements.txt"
+  ok "Backend dependencies installed"
+else
+  ok "Backend dependencies satisfied"
+fi
+
+if [ ! -f "$BACKEND_DIR/.env" ]; then
+  cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
+  ok "Created backend/.env from .env.example"
+fi
+
+step "Checking frontend dependencies"
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+  warn "node_modules not found, running npm install..."
+  (cd "$FRONTEND_DIR" && npm install)
+  ok "Frontend dependencies installed"
+else
+  ok "Frontend dependencies satisfied"
+fi
+
+if [ "$docker_running" -eq 1 ]; then
+  step "Starting Postgres + Redis (docker compose)"
+  (cd "$ROOT" && docker compose up -d)
+  ok "Postgres (5432) and Redis (6379) starting"
+else
+  warn "Skipping Postgres/Redis (Docker not running)"
+fi
+
+step "Starting backend (FastAPI) on http://localhost:8000"
+(cd "$BACKEND_DIR" && nohup "$VENV_PY" -m uvicorn app.main:app --reload --port 8000 > "$ROOT/backend.log" 2>&1 &)
+
+step "Starting frontend (Vite) on http://localhost:5173"
+(cd "$FRONTEND_DIR" && nohup npm run dev > "$ROOT/frontend.log" 2>&1 &)
+
+echo ""
+ok "OverFlowEngine is starting up in the background."
+echo "    Frontend: http://localhost:5173  (log: frontend.log)"
+echo "    Backend:  http://localhost:8000/docs  (log: backend.log)"
+if [ "$docker_running" -eq 0 ]; then
+  warn "Postgres/Redis were NOT started - start Docker and re-run if needed."
+fi
