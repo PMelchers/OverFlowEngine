@@ -15,6 +15,20 @@ function Write-Err($msg)  { Write-Host "    ERROR: $msg" -ForegroundColor Red }
 
 $missing = @()
 
+function Stop-ProcessOnPort($port) {
+    $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if (-not $conns) { return }
+    $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $pids) {
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($proc) {
+            Write-Warn "Port $port is in use by '$($proc.ProcessName)' (PID $procId) - stopping it"
+            # /T kills the whole process tree (uvicorn --reload / vite spawn child workers)
+            taskkill /PID $procId /T /F *> $null
+        }
+    }
+}
+
 Write-Step "Checking required tools"
 
 function Test-Tool($name, $command, $versionArgs) {
@@ -104,18 +118,25 @@ if ($dockerRunning) {
     Write-Warn "Skipping Postgres/Redis (Docker not running)"
 }
 
+# Clear any leftover processes still bound to our ports (e.g. an orphaned
+# uvicorn --reload worker or vite process from a previous run that didn't
+# exit cleanly) before starting fresh ones.
+Write-Step "Freeing ports 8000 and 5173 if needed"
+Stop-ProcessOnPort 8000
+Stop-ProcessOnPort 5173
+
 # Launch backend
 Write-Step "Starting backend (FastAPI) on http://localhost:8000"
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
-    "cd `"$backendDir`"; .venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --port 8000"
+    "`$Host.UI.RawUI.WindowTitle = 'OverFlowEngine Backend'; cd `"$backendDir`"; .venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --port 8000"
 )
 
 # Launch frontend
 Write-Step "Starting frontend (Vite) on http://localhost:5173"
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
-    "cd `"$frontendDir`"; npm run dev"
+    "`$Host.UI.RawUI.WindowTitle = 'OverFlowEngine Frontend'; cd `"$frontendDir`"; npm run dev"
 )
 
 Write-Host ""

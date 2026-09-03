@@ -59,15 +59,15 @@ if [ ! -x "$VENV_PY" ]; then
 fi
 
 step "Checking backend dependencies"
-if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic, psycopg2" >/dev/null 2>&1; then
+if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic, psycopg" >/dev/null 2>&1; then
   warn "Backend dependencies missing, installing from requirements.txt..."
   if "$VENV_PY" -m pip install -q -r "$BACKEND_DIR/requirements.txt"; then
     ok "Backend dependencies installed"
   else
     err "pip install failed - see the output above for the real error."
-    err "If it mentions 'pg_config executable not found' while building psycopg2, install libpq's dev headers and retry:"
+    err "If it mentions 'pg_config executable not found' while building psycopg, install libpq's dev headers and retry:"
     err "  sudo apt install libpq-dev python3-dev"
-    err "If your Python version is very new (e.g. just-released), psycopg2-binary may not have a prebuilt wheel for it yet - that's the same underlying issue: pip falls back to building from source and needs libpq-dev."
+    err "If your Python version is very new (e.g. just-released), psycopg[binary] may not have a prebuilt wheel for it yet - that's the same underlying issue: pip falls back to building from source and needs libpq-dev."
     exit 1
   fi
 else
@@ -94,6 +94,23 @@ if [ "$docker_running" -eq 1 ]; then
   ok "Postgres (5432) and Redis (6379) starting"
 else
   warn "Skipping Postgres/Redis (Docker not running)"
+fi
+
+free_port() {
+  local port="$1" pids
+  pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    warn "Port $port is in use (PID(s): $pids) - stopping it"
+    kill -9 $pids 2>/dev/null || true
+  fi
+}
+
+step "Freeing ports 8000 and 5173 if needed"
+if command -v lsof >/dev/null 2>&1; then
+  free_port 8000
+  free_port 5173
+else
+  warn "lsof not found, skipping automatic port cleanup (install with: sudo apt install lsof)"
 fi
 
 step "Starting backend (FastAPI) on http://localhost:8000"
