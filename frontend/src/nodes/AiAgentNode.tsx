@@ -1,10 +1,16 @@
-import { Handle, Position, type NodeProps } from 'reactflow'
+import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import { AI_MODEL_OPTIONS, type BlockNodeData } from './types'
+import type { BlockNodeData } from './types'
 
 export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
   const active = data.status === 'active'
+  const nodeId = useNodeId()
+  const edges = useEdges()
+  const nodes = useNodes<BlockNodeData>()
+  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
+  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
+  const connectedModel = modelNode?.data.model
 
   return (
     <GridSnapBox
@@ -23,17 +29,15 @@ export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
       </BlockHeader>
 
       <label className="mb-1 block text-[11px] font-medium text-fuchsia-700">Model</label>
-      <select
-        value={data.model ?? AI_MODEL_OPTIONS[0]}
-        onChange={(e) => data.onChange?.({ model: e.target.value })}
-        className="nodrag mb-2 w-full rounded border border-fuchsia-300 bg-white px-2 py-1 text-sm"
+      <p
+        className={`mb-2 w-full rounded border px-2 py-1 text-sm ${
+          connectedModel
+            ? 'border-fuchsia-300 bg-white text-fuchsia-700'
+            : 'border-dashed border-fuchsia-300 bg-fuchsia-50 text-fuchsia-400'
+        }`}
       >
-        {AI_MODEL_OPTIONS.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
+        {connectedModel ?? 'Connect an AI Model block below ↓'}
+      </p>
 
       <label className="mb-1 block text-[11px] font-medium text-fuchsia-700">Instructions</label>
       <textarea
@@ -49,6 +53,7 @@ export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-fuchsia-500" />
+      <Handle type="target" position={Position.Bottom} id="model" className="!bg-fuchsia-500" />
     </GridSnapBox>
   )
 }

@@ -16,7 +16,10 @@ import {
   useNodesState,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import AccountPanel from './AccountPanel'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
+import AuthModal from './AuthModal'
+import { useAuth } from './auth'
 import {
   deleteCustomBlock,
   listCustomBlocks,
@@ -27,6 +30,7 @@ import {
 } from './customBlocks'
 import AiAgentNode from './nodes/AiAgentNode'
 import AiInputNode from './nodes/AiInputNode'
+import AiModelNode from './nodes/AiModelNode'
 import AiOutputNode from './nodes/AiOutputNode'
 import AppTriggerNode from './nodes/AppTriggerNode'
 import BlockNode from './nodes/BlockNode'
@@ -36,7 +40,7 @@ import IfNode from './nodes/IfNode'
 import IfSingleNode from './nodes/IfSingleNode'
 import LogNode from './nodes/LogNode'
 import TriggerNode from './nodes/TriggerNode'
-import { AI_MODEL_OPTIONS, APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
+import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
 import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 
@@ -53,6 +57,7 @@ const nodeTypes = {
   aiAgent: AiAgentNode,
   aiInput: AiInputNode,
   aiOutput: AiOutputNode,
+  aiModel: AiModelNode,
 }
 
 /** Blocks that can start a workflow run - React Flow's `type` field, not the BlockKind palette id. */
@@ -149,11 +154,13 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
     case 'choice':
       return { label, options: [] }
     case 'aiAgent':
-      return { label, model: AI_MODEL_OPTIONS[0], prompt: '' }
+      return { label, prompt: '' }
     case 'aiInput':
       return { label, value: '' }
     case 'aiOutput':
       return { label: 'agentReply' }
+    case 'aiModel':
+      return { label: 'Model', credentialId: null }
     case 'appTrigger':
       return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage' }
     default:
@@ -228,6 +235,9 @@ function CanvasInner() {
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>([])
   const [alignGuides, setAlignGuides] = useState<AlignmentGuides>({})
   const [editingBlock, setEditingBlock] = useState<CustomBlock | null>(null)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [accountPanelOpen, setAccountPanelOpen] = useState(false)
+  const { user } = useAuth()
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const preEditSnapshot = useRef<{ nodes: Node<BlockNodeData>[]; edges: Edge[] } | null>(null)
@@ -795,8 +805,27 @@ function CanvasInner() {
           >
             Wipe Saved Data
           </button>
+          {user ? (
+            <button
+              type="button"
+              onClick={() => setAccountPanelOpen(true)}
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              👤 {user.email}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAuthModalOpen(true)}
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Sign in
+            </button>
+          )}
         </header>
       )}
+      {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {accountPanelOpen && <AccountPanel onClose={() => setAccountPanelOpen(false)} />}
       <div className="flex flex-1 min-h-0">
         <Palette
           customBlocks={customBlocks}

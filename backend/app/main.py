@@ -1,9 +1,10 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from . import executor, models
+from . import auth, executor, models, providers
 from .db import Base, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
@@ -19,6 +20,14 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    # create_all only creates missing tables, not missing columns on existing
+    # ones - this project has no migration tool, so patch older ai_credentials
+    # tables in place instead of requiring a manual DB reset.
+    with engine.connect() as conn:
+        conn.execute(
+            text("ALTER TABLE ai_credentials ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false")
+        )
+        conn.commit()
 
 
 class NodeIn(BaseModel):
@@ -43,6 +52,134 @@ class Workflow(BaseModel):
 class ChoiceContinue(BaseModel):
     run_id: str
     choice: str
+
+
+class RegisterIn(BaseModel):
+    email: str
+    password: str
+
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class CredentialIn(BaseModel):
+    provider: str
+    label: str
+    api_key: str
+
+
+def _user_out(user: models.User) -> dict:
+    return {"id": user.id, "email": user.email}
+
+
+def _mask_key(key: str) -> str:
+    if len(key) <= 4:
+        return "*" * len(key)
+    return f"{'*' * (len(key) - 4)}{key[-4:]}"
+
+
+def _credential_out(cred: models.AiCredential) -> dict:
+    return {
+        "id": cred.id,
+        "provider": cred.provider,
+        "label": cred.label,
+        "api_key_masked": _mask_key(cred.api_key),
+        "verified": cred.verified,
+        "created_at": cred.created_at,
+    }
+
+
+@app.post("/auth/register", status_code=status.HTTP_201_CREATED)
+def register(body: RegisterIn, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    if "@" not in email or not body.password:
+        raise HTTPException(status_code=400, detail="A valid email and non-empty password are required")
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(status_code=400, detail="An account with that email already exists")
+    user = models.User(email=email, password_hash=auth.hash_password(body.password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = auth.create_token(user.id, user.email)
+    return {"token": token, "user": _user_out(user)}
+
+
+@app.post("/auth/login")
+def login(body: LoginIn, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if user is None or not auth.verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = auth.create_token(user.id, user.email)
+    return {"token": token, "user": _user_out(user)}
+
+
+@app.get("/auth/me")
+def me(current_user: models.User = Depends(auth.get_current_user)):
+    return _user_out(current_user)
+
+
+@app.get("/credentials")
+def list_credentials(
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    creds = (
+        db.query(models.AiCredential)
+        .filter(models.AiCredential.user_id == current_user.id)
+        .order_by(models.AiCredential.created_at.desc())
+        .all()
+    )
+    return [_credential_out(c) for c in creds]
+
+
+@app.post("/credentials", status_code=status.HTTP_201_CREATED)
+def create_credential(
+    body: CredentialIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not body.provider.strip() or not body.label.strip() or not body.api_key.strip():
+        raise HTTPException(status_code=400, detail="Provider, label, and API key are all required")
+
+    api_key = body.api_key.strip()
+    verified = providers.verify_api_key(body.provider, api_key)
+    if verified is False:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{body.provider} rejected this API key - double check it's correct.",
+        )
+
+    cred = models.AiCredential(
+        user_id=current_user.id,
+        provider=body.provider.strip(),
+        label=body.label.strip(),
+        api_key=api_key,
+        verified=bool(verified),
+    )
+    db.add(cred)
+    db.commit()
+    db.refresh(cred)
+    return _credential_out(cred)
+
+
+@app.delete("/credentials/{credential_id}")
+def delete_credential(
+    credential_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    cred = (
+        db.query(models.AiCredential)
+        .filter(models.AiCredential.id == credential_id, models.AiCredential.user_id == current_user.id)
+        .first()
+    )
+    if cred is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    db.delete(cred)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.get("/health")

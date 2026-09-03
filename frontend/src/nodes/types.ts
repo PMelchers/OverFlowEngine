@@ -59,8 +59,11 @@ export interface BlockNodeData {
    *  saved block propagate to every instance stamped out from it */
   sourceBlockId?: string
   // ai-agent block
-  model?: string
   prompt?: string
+  // ai-model block (circular) - unlocked by picking one of the user's verified API keys
+  credentialId?: number | null
+  /** display label once unlocked, e.g. "Personal key (openai)" - also what the AI Agent block reads as its model */
+  model?: string
   // ai-input block reuses `value` (the text/expression fed into the agent)
   // ai-output block reuses `label` as the variable name the result is saved into
   // app-trigger block
@@ -82,6 +85,7 @@ export type BlockKind =
   | 'aiAgent'
   | 'aiInput'
   | 'aiOutput'
+  | 'aiModel'
 
 export type PaletteCategory = 'core' | 'agentic'
 
@@ -95,15 +99,6 @@ export interface PaletteItem {
   category: PaletteCategory
 }
 
-export const AI_MODEL_OPTIONS = [
-  'claude-sonnet-5',
-  'claude-opus-5',
-  'claude-haiku-4.5',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gemini-1.5-pro',
-]
-
 export const APP_TRIGGER_SOURCES = ['Microsoft Teams', 'Slack', 'Email', 'Webhook']
 
 export const PALETTE_ITEMS: PaletteItem[] = [
@@ -116,6 +111,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'log', label: 'Log Block', description: 'Prints a message to the backend console', color: 'bg-slate-200 border-slate-500', icon: '»', badgeClassName: 'bg-slate-600', category: 'core' },
   { kind: 'choice', label: 'Choice Block', description: 'Pauses and asks the user to pick a path', color: 'bg-teal-100 border-teal-500', icon: '◇', badgeClassName: 'bg-teal-600', category: 'core' },
   { kind: 'aiInput', label: 'AI Input Block', description: 'Defines the text/data fed into an AI agent', color: 'bg-violet-100 border-violet-400', icon: 'IN', badgeClassName: 'bg-violet-600', category: 'agentic' },
-  { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model you pick', color: 'bg-fuchsia-100 border-fuchsia-400', icon: '◈', badgeClassName: 'bg-fuchsia-600', category: 'agentic' },
+  { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model connected below it', color: 'bg-fuchsia-100 border-fuchsia-400', icon: '◈', badgeClassName: 'bg-fuchsia-600', category: 'agentic' },
   { kind: 'aiOutput', label: 'AI Output Block', description: 'Captures what the agent responded with', color: 'bg-pink-100 border-pink-400', icon: 'OUT', badgeClassName: 'bg-pink-600', category: 'agentic' },
+  { kind: 'aiModel', label: 'AI Model', description: 'Unlock with a verified API key, then connect it under an AI Agent block', color: 'bg-fuchsia-50 border-fuchsia-300', icon: '◎', badgeClassName: 'bg-fuchsia-500', category: 'agentic' },
 ]

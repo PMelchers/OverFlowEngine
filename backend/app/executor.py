@@ -56,6 +56,7 @@ def _advance(db: Session, state: dict) -> dict:
     """Run the queue until it drains (workflow finished) or a Choice block needs input."""
     node_by_id = state["node_by_id"]
     adjacency = state["adjacency"]
+    incoming = state["incoming"]
     eval_vars = state["eval_vars"]
     queue = state["queue"]
     visited = state["visited"]
@@ -147,7 +148,10 @@ def _advance(db: Session, state: dict) -> dict:
             )
 
         elif ntype == "aiAgent":
-            model = data.get("model", "unknown model")
+            model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
+            model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
+            model_data = (model_node.get("data") or {}) if model_node else {}
+            model = model_data.get("model") or "no model connected"
             input_text = ai_io.get("input")
             if input_text:
                 simulated_output = f'[preview reply from {model}] responding to: "{input_text}"'
@@ -218,8 +222,10 @@ def _advance(db: Session, state: dict) -> dict:
 def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
+    incoming: dict[str, list[dict]] = {}
     for e in edges:
         adjacency.setdefault(e["source"], []).append(e)
+        incoming.setdefault(e["target"], []).append(e)
 
     eval_vars = {name: _coerce(v["type"], v["value"]) for name, v in _variables_snapshot(db).items()}
     trigger_ids = [n["id"] for n in nodes if n.get("type") in ("trigger", "appTrigger")]
@@ -227,6 +233,7 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
     state = {
         "node_by_id": node_by_id,
         "adjacency": adjacency,
+        "incoming": incoming,
         "eval_vars": eval_vars,
         "queue": list(trigger_ids),
         "visited": set(),
