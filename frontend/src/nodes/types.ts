@@ -71,7 +71,15 @@ export interface BlockNodeData {
   // app-trigger block
   sourceApp?: string
   outputVariable?: string
+  /** sample sender address, e.g. for an email trigger - saved as "{outputVariable}From" so a
+   *  downstream App Action block can reply to whoever sent the original message */
+  fromAddress?: string
   // app-trigger block reuses `value` for the sample incoming message/payload
+  // app-action block (sends a message/reply back out to another app)
+  targetApp?: string
+  to?: string
+  subject?: string
+  body?: string
 }
 
 export type BlockKind =
@@ -88,6 +96,7 @@ export type BlockKind =
   | 'aiInput'
   | 'aiOutput'
   | 'aiModel'
+  | 'appAction'
 
 export type PaletteCategory = 'core' | 'agentic'
 
@@ -105,7 +114,8 @@ export const APP_TRIGGER_SOURCES = ['Microsoft Teams', 'Slack', 'Email', 'Webhoo
 
 export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400', icon: '▶', badgeClassName: 'bg-purple-600', category: 'core' },
-  { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
+  { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
+  { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: '↩', badgeClassName: 'bg-emerald-600', category: 'core' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: '●', badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: '◆', badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: '☰', badgeClassName: 'bg-amber-600', category: 'core' },

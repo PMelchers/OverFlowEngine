@@ -34,11 +34,20 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
         ))}
       </select>
 
+      <label className="mb-1 block text-[11px] font-medium text-cyan-700">Sample sender (e.g. email address)</label>
+      <input
+        type="text"
+        value={data.fromAddress ?? ''}
+        onChange={(e) => data.onChange?.({ fromAddress: e.target.value })}
+        placeholder="e.g. someone@example.com"
+        className="nodrag mb-2 w-full rounded border border-cyan-300 bg-white px-2 py-1 text-sm"
+      />
+
       <label className="mb-1 block text-[11px] font-medium text-cyan-700">Sample incoming message</label>
       <textarea
         value={data.value ?? ''}
         onChange={(e) => data.onChange?.({ value: e.target.value })}
-        placeholder="e.g. @bot please restart the pipeline"
+        placeholder="e.g. Please reply confirming the meeting time"
         rows={2}
         className="nodrag mb-2 w-full resize-none rounded border border-cyan-300 bg-white px-2 py-1 text-xs"
       />
@@ -51,6 +60,12 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
         onChange={(e) => data.onChange?.({ outputVariable: e.target.value })}
         className="nodrag w-full rounded border border-cyan-300 bg-white px-2 py-1 text-sm"
       />
+      {data.outputVariable && data.fromAddress && (
+        <p className="mt-1 text-[10px] text-cyan-600">
+          Sender also saved as {'{' + data.outputVariable + 'From}'} - reference it in an App Action
+          block's "To" field to reply.
+        </p>
+      )}
 
       <button
         type="button"

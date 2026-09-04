@@ -188,6 +188,7 @@ def _advance(db: Session, state: dict) -> dict:
         elif ntype == "appTrigger":
             source_app = data.get("sourceApp", "an app")
             payload = data.get("value", "")
+            from_address = (data.get("fromAddress") or "").strip()
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
                 _upsert_variable(db, output_var, "string", payload)
@@ -195,8 +196,25 @@ def _advance(db: Session, state: dict) -> dict:
                 message = (
                     f'"{label}" received a message from {source_app}, saved as "{output_var}" = "{payload}"'
                 )
+                if from_address:
+                    from_var = f"{output_var}From"
+                    _upsert_variable(db, from_var, "string", from_address)
+                    eval_vars[from_var] = from_address
+                    message += f', sender saved as "{from_var}" = "{from_address}"'
             else:
                 message = f'"{label}" received a message from {source_app}: "{payload}"'
+            steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
+
+        elif ntype == "appAction":
+            target_app = data.get("targetApp", "an app")
+            to = _render_message(data.get("to", ""), eval_vars)
+            subject = _render_message(data.get("subject", ""), eval_vars)
+            body = _render_message(data.get("body", ""), eval_vars)
+            subject_part = f' "{subject}"' if subject else ""
+            message = (
+                f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
+                "(simulated - real send not wired up yet)"
+            )
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "trigger":

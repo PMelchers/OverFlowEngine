@@ -28,10 +28,12 @@ import {
   saveCustomBlock,
   type CustomBlock,
 } from './customBlocks'
+import FlowsPanel from './FlowsPanel'
 import AiAgentNode from './nodes/AiAgentNode'
 import AiInputNode from './nodes/AiInputNode'
 import AiModelNode from './nodes/AiModelNode'
 import AiOutputNode from './nodes/AiOutputNode'
+import AppActionNode from './nodes/AppActionNode'
 import AppTriggerNode from './nodes/AppTriggerNode'
 import BlockNode from './nodes/BlockNode'
 import ChoiceNode from './nodes/ChoiceNode'
@@ -43,10 +45,12 @@ import TriggerNode from './nodes/TriggerNode'
 import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
 import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
+import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from './templates'
 
 const nodeTypes = {
   trigger: TriggerNode,
   appTrigger: AppTriggerNode,
+  appAction: AppActionNode,
   block: BlockNode,
   ifOne: IfSingleNode,
   if: IfNode,
@@ -162,7 +166,9 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
     case 'aiModel':
       return { label: 'Model', credentialId: null }
     case 'appTrigger':
-      return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage' }
+      return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage', fromAddress: '' }
+    case 'appAction':
+      return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
     default:
       return { label }
   }
@@ -237,7 +243,9 @@ function CanvasInner() {
   const [editingBlock, setEditingBlock] = useState<CustomBlock | null>(null)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [accountPanelOpen, setAccountPanelOpen] = useState(false)
-  const { user } = useAuth()
+  const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const { user, authedFetch } = useAuth()
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const preEditSnapshot = useRef<{ nodes: Node<BlockNodeData>[]; edges: Edge[] } | null>(null)
@@ -292,7 +300,7 @@ function CanvasInner() {
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.type === 'if' || n.type === 'ifOne' || n.type === 'log'
+        n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -516,7 +524,7 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(id, patch),
           ...(TRIGGER_NODE_TYPES.has(kind) ? { onTrigger: runWorkflow } : {}),
-          ...(kind === 'if' || kind === 'ifOne' || kind === 'log'
+          ...(kind === 'if' || kind === 'ifOne' || kind === 'log' || kind === 'appAction'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -548,6 +556,52 @@ function CanvasInner() {
     [setNodes, updateNodeData],
   )
 
+  /** Inserts a whole template's blocks as plain, individually-editable nodes (not collapsed
+   *  into a Group) - fresh ids so dropping the same template twice doesn't collide. */
+  const insertTemplate = useCallback(
+    (template: WorkflowTemplate, dropPosition?: { x: number; y: number }) => {
+      idCount += 1
+      const batch = idCount
+      const idMap = new Map(template.nodes.map((n) => [n.id, `tmpl${batch}-${n.id}`]))
+
+      let base = dropPosition
+      if (!base) {
+        const current = nodesRef.current
+        base = current.length === 0 ? { x: 0, y: 0 } : { x: Math.max(...current.map((n) => n.position.x)) + 400, y: 0 }
+      }
+
+      const newNodes: Node<BlockNodeData>[] = template.nodes.map((n) => {
+        const id = idMap.get(n.id)!
+        return {
+          id,
+          type: n.type,
+          position: { x: base!.x + n.position.x, y: base!.y + n.position.y },
+          data: {
+            ...n.data,
+            status: 'idle',
+            onChange: (patch) => updateNodeData(id, patch),
+            ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
+            ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
+              ? { availableVariables: availableVariablesRef.current }
+              : {}),
+          },
+        }
+      })
+      const newEdges: Edge[] = template.edges.map((e) => ({
+        id: `tmpl${batch}-${e.id}`,
+        source: idMap.get(e.source)!,
+        target: idMap.get(e.target)!,
+        sourceHandle: e.sourceHandle ?? undefined,
+        targetHandle: e.targetHandle ?? undefined,
+      }))
+
+      setNodes((nds) => [...nds, ...newNodes])
+      setEdges((eds) => [...eds, ...newEdges])
+      addLog(`Inserted template "${template.label}" (${newNodes.length} blocks)`)
+    },
+    [setNodes, setEdges, updateNodeData, runWorkflow, addLog],
+  )
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -568,9 +622,16 @@ function CanvasInner() {
         return
       }
 
+      if (payload.startsWith(TEMPLATE_DRAG_PREFIX)) {
+        const templateId = payload.slice(TEMPLATE_DRAG_PREFIX.length)
+        const template = TEMPLATES.find((t) => t.id === templateId)
+        if (template) insertTemplate(template, position)
+        return
+      }
+
       createNodeFromKind(payload as BlockKind, position)
     },
-    [screenToFlowPosition, customBlocks, createNodeFromCustomBlock, createNodeFromKind],
+    [screenToFlowPosition, customBlocks, createNodeFromCustomBlock, createNodeFromKind, insertTemplate],
   )
 
   const groupSelected = useCallback(() => {
@@ -673,7 +734,7 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(sn.id, patch),
           ...(TRIGGER_NODE_TYPES.has(sn.type) ? { onTrigger: runWorkflow } : {}),
-          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log'
+          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log' || sn.type === 'appAction'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -758,6 +819,78 @@ function CanvasInner() {
     exitEditMode()
   }, [editingBlock, addLog, exitEditMode])
 
+  const saveCurrentFlow = useCallback(
+    async (name: string) => {
+      const currentNodes = nodesRef.current
+      const currentEdges = edgesRef.current
+      if (currentNodes.length === 0) {
+        throw new Error('Add at least one block before saving')
+      }
+      const payload = {
+        name,
+        nodes: currentNodes.map((n) => ({
+          id: n.id,
+          type: n.type ?? 'block',
+          data: sanitizeData(n.data),
+          position: n.position,
+        })),
+        edges: currentEdges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
+        })),
+      }
+      const res = await authedFetch('/flows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.detail ?? 'Could not save this flow')
+      }
+      addLog(`Saved flow "${name}"`)
+    },
+    [authedFetch, addLog],
+  )
+
+  const loadFlow = useCallback(
+    (flowNodes: SubgraphNode[], flowEdges: SubgraphEdge[]) => {
+      if (nodesRef.current.length > 0 && !window.confirm('Loading this flow will replace your current canvas. Continue?')) {
+        return
+      }
+      const loadedNodes: Node<BlockNodeData>[] = flowNodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        position: n.position,
+        data: {
+          ...n.data,
+          status: 'idle',
+          onChange: (patch) => updateNodeData(n.id, patch),
+          ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
+          ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
+            ? { availableVariables: availableVariablesRef.current }
+            : {}),
+        },
+      }))
+      const loadedEdges: Edge[] = flowEdges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.sourceHandle ?? undefined,
+        targetHandle: e.targetHandle ?? undefined,
+      }))
+      setNodes(loadedNodes)
+      setEdges(loadedEdges)
+      setSelectedIds(new Set())
+      addLog('Loaded flow')
+      requestAnimationFrame(() => fitView({ padding: 0.3 }))
+    },
+    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog],
+  )
+
   const canGroup = selectedIds.size >= 2
 
   return (
@@ -790,6 +923,40 @@ function CanvasInner() {
             Drag blocks from the left onto the canvas. Ctrl/Shift-click or drag-select multiple blocks, then
             group them into one reusable block. Click the Start button to run the workflow.
           </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen((o) => !o)}
+              className="rounded border border-purple-300 px-3 py-1 text-sm font-medium text-purple-700 hover:bg-purple-50"
+            >
+              🧩 Templates
+            </button>
+            {templatesOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
+                <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+                  <p className="mb-1 px-1 text-[11px] text-gray-400">
+                    Click to drop into the canvas, or drag it to place exactly where you want.
+                  </p>
+                  {TEMPLATES.map((t) => (
+                    <div
+                      key={t.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData(DRAG_DATA_FORMAT, TEMPLATE_DRAG_PREFIX + t.id)}
+                      onClick={() => {
+                        insertTemplate(t)
+                        setTemplatesOpen(false)
+                      }}
+                      className="cursor-grab rounded p-2 hover:bg-purple-50"
+                    >
+                      <p className="text-sm font-medium text-gray-800">{t.label}</p>
+                      <p className="text-xs text-gray-500">{t.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button
             type="button"
             onClick={groupSelected}
@@ -805,6 +972,15 @@ function CanvasInner() {
           >
             Wipe Saved Data
           </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => setFlowsPanelOpen(true)}
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              💾 My Flows
+            </button>
+          )}
           {user ? (
             <button
               type="button"
@@ -826,6 +1002,9 @@ function CanvasInner() {
       )}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
       {accountPanelOpen && <AccountPanel onClose={() => setAccountPanelOpen(false)} />}
+      {flowsPanelOpen && (
+        <FlowsPanel onClose={() => setFlowsPanelOpen(false)} onLoad={loadFlow} onSaveCurrent={saveCurrentFlow} />
+      )}
       <div className="flex flex-1 min-h-0">
         <Palette
           customBlocks={customBlocks}

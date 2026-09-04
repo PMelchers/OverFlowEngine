@@ -24,6 +24,17 @@ class AiCredential(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class SavedFlow(Base):
+    __tablename__ = "saved_flows"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    nodes = Column(JSON, nullable=False)
+    edges = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Variable(Base):
     __tablename__ = "variables"
 

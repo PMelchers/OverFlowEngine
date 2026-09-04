@@ -69,6 +69,12 @@ class CredentialIn(BaseModel):
     api_key: str
 
 
+class FlowIn(BaseModel):
+    name: str
+    nodes: list[dict]
+    edges: list[dict]
+
+
 def _user_out(user: models.User) -> dict:
     return {"id": user.id, "email": user.email}
 
@@ -189,6 +195,66 @@ def delete_credential(
     if cred is None:
         raise HTTPException(status_code=404, detail="Credential not found")
     db.delete(cred)
+    db.commit()
+    return {"status": "deleted"}
+
+
+def _flow_summary(flow: models.SavedFlow) -> dict:
+    return {"id": flow.id, "name": flow.name, "created_at": flow.created_at}
+
+
+@app.get("/flows")
+def list_flows(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    flows = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.user_id == current_user.id)
+        .order_by(models.SavedFlow.created_at.desc())
+        .all()
+    )
+    return [_flow_summary(f) for f in flows]
+
+
+@app.get("/flows/{flow_id}")
+def get_flow(
+    flow_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    flow = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.user_id == current_user.id)
+        .first()
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {**_flow_summary(flow), "nodes": flow.nodes, "edges": flow.edges}
+
+
+@app.post("/flows", status_code=status.HTTP_201_CREATED)
+def create_flow(
+    body: FlowIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="A flow name is required")
+    if not body.nodes:
+        raise HTTPException(status_code=400, detail="Add at least one block before saving")
+    flow = models.SavedFlow(user_id=current_user.id, name=body.name.strip(), nodes=body.nodes, edges=body.edges)
+    db.add(flow)
+    db.commit()
+    db.refresh(flow)
+    return _flow_summary(flow)
+
+
+@app.delete("/flows/{flow_id}")
+def delete_flow(
+    flow_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    flow = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.user_id == current_user.id)
+        .first()
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    db.delete(flow)
     db.commit()
     return {"status": "deleted"}
 
