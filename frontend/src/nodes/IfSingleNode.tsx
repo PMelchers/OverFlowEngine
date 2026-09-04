@@ -16,20 +16,28 @@ export default function IfSingleNode({ data }: NodeProps<BlockNodeData>) {
   return (
     <GridSnapBox
       className={`w-80 rounded-lg border-2 px-3 py-2 shadow-sm transition-all duration-300 hover:shadow-md ${
-        active ? 'node-flash border-green-500 bg-green-100' : 'border-amber-400 bg-amber-50'
+        active
+          ? 'node-flash border-green-500 bg-green-100 dark:border-green-600 dark:bg-green-950'
+          : 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950'
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-amber-500" />
       <BlockHeader icon="◆" badgeClassName="bg-amber-600">
-        <span className="text-sm font-semibold text-amber-800">If this is true...</span>
+        <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">If this is true...</span>
       </BlockHeader>
-      <p className="mb-2 text-[11px] text-gray-500">Check one thing, then send the flow down Yes or No.</p>
+      <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">
+        Check one thing, then send the flow down Yes or No.
+      </p>
 
       <ConditionRow cond={cond} availableVariables={availableVariables} onUpdate={update} />
 
       <div className="mt-2 flex justify-between text-xs font-semibold">
-        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700">✓ Yes</span>
-        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600">✗ No</span>
+        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900 dark:text-green-300">
+          ✓ Yes
+        </span>
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600 dark:bg-red-900 dark:text-red-300">
+          ✗ No
+        </span>
       </div>
       <Handle
         type="source"

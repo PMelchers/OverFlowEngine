@@ -32,23 +32,23 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-80 rounded-lg bg-white p-5 shadow-xl"
+        className="w-80 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800"
       >
-        <h2 className="mb-3 text-lg font-semibold text-gray-800">
+        <h2 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-100">
           {mode === 'login' ? 'Sign in' : 'Create account'}
         </h2>
 
-        <label className="mb-2 block text-sm text-gray-600">
+        <label className="mb-2 block text-sm text-gray-600 dark:text-gray-300">
           Email
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           />
         </label>
-        <label className="mb-3 block text-sm text-gray-600">
+        <label className="mb-3 block text-sm text-gray-600 dark:text-gray-300">
           Password
           <input
             type="password"
@@ -56,11 +56,11 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
             minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           />
         </label>
 
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <button
           type="submit"
@@ -70,7 +70,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
           {busy ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
         </button>
 
-        <p className="mt-3 text-center text-xs text-gray-500">
+        <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
           {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
           <button
             type="button"
@@ -78,7 +78,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
               setError(null)
               setMode(mode === 'login' ? 'register' : 'login')
             }}
-            className="font-medium text-indigo-600 hover:underline"
+            className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
           >
             {mode === 'login' ? 'Create one' : 'Sign in'}
           </button>
@@ -87,7 +87,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
         <button
           type="button"
           onClick={onClose}
-          className="mt-2 w-full text-center text-xs text-gray-400 hover:text-gray-600"
+          className="mt-2 w-full text-center text-xs text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
         >
           Cancel
         </button>

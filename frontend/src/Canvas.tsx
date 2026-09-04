@@ -46,6 +46,7 @@ import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph,
 import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from './templates'
+import { useTheme } from './theme'
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -246,6 +247,7 @@ function CanvasInner() {
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const { user, authedFetch } = useAuth()
+  const { theme } = useTheme()
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const preEditSnapshot = useRef<{ nodes: Node<BlockNodeData>[]; edges: Edge[] } | null>(null)
@@ -894,11 +896,13 @@ function CanvasInner() {
   const canGroup = selectedIds.size >= 2
 
   return (
-    <div className="h-screen w-screen flex flex-col">
+    <div className="h-screen w-screen flex flex-col dark:bg-gray-900">
       {editingBlock ? (
-        <header className="flex items-center gap-4 border-b border-2 border-indigo-400 bg-indigo-50 px-4 py-2">
-          <h1 className="text-lg font-semibold text-indigo-800">✎ Editing "{editingBlock.label}"</h1>
-          <span className="flex-1 text-sm text-indigo-600">
+        <header className="flex items-center gap-4 border-b border-2 border-indigo-400 bg-indigo-50 px-4 py-2 dark:border-indigo-800 dark:bg-indigo-950">
+          <h1 className="text-lg font-semibold text-indigo-800 dark:text-indigo-200">
+            ✎ Editing "{editingBlock.label}"
+          </h1>
+          <span className="flex-1 text-sm text-indigo-600 dark:text-indigo-300">
             Edit the chain below like any other workflow, then save your changes back to this saved block.
           </span>
           <button
@@ -911,15 +915,15 @@ function CanvasInner() {
           <button
             type="button"
             onClick={exitEditMode}
-            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
+            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900"
           >
             ✕ Cancel
           </button>
         </header>
       ) : (
-        <header className="flex items-center gap-4 border-b border-gray-200 px-4 py-2">
-          <h1 className="text-lg font-semibold">OverFlowEngine</h1>
-          <span className="flex-1 text-sm text-gray-500">
+        <header className="flex items-center gap-4 border-b border-gray-200 px-4 py-2 dark:border-gray-700 dark:bg-gray-900">
+          <h1 className="text-lg font-semibold dark:text-gray-100">OverFlowEngine</h1>
+          <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
             Drag blocks from the left onto the canvas. Ctrl/Shift-click or drag-select multiple blocks, then
             group them into one reusable block. Click the Start button to run the workflow.
           </span>
@@ -927,15 +931,15 @@ function CanvasInner() {
             <button
               type="button"
               onClick={() => setTemplatesOpen((o) => !o)}
-              className="rounded border border-purple-300 px-3 py-1 text-sm font-medium text-purple-700 hover:bg-purple-50"
+              className="rounded border border-purple-300 px-3 py-1 text-sm font-medium text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950"
             >
               🧩 Templates
             </button>
             {templatesOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
-                <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
-                  <p className="mb-1 px-1 text-[11px] text-gray-400">
+                <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                  <p className="mb-1 px-1 text-[11px] text-gray-400 dark:text-gray-500">
                     Click to drop into the canvas, or drag it to place exactly where you want.
                   </p>
                   {TEMPLATES.map((t) => (
@@ -947,10 +951,10 @@ function CanvasInner() {
                         insertTemplate(t)
                         setTemplatesOpen(false)
                       }}
-                      className="cursor-grab rounded p-2 hover:bg-purple-50"
+                      className="cursor-grab rounded p-2 hover:bg-purple-50 dark:hover:bg-purple-950"
                     >
-                      <p className="text-sm font-medium text-gray-800">{t.label}</p>
-                      <p className="text-xs text-gray-500">{t.description}</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
                     </div>
                   ))}
                 </div>
@@ -961,14 +965,14 @@ function CanvasInner() {
             type="button"
             onClick={groupSelected}
             disabled={!canGroup}
-            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-950"
           >
             Group Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
           </button>
           <button
             type="button"
             onClick={wipeData}
-            className="rounded border border-red-300 px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="rounded border border-red-300 px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
           >
             Wipe Saved Data
           </button>
@@ -976,7 +980,7 @@ function CanvasInner() {
             <button
               type="button"
               onClick={() => setFlowsPanelOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               💾 My Flows
             </button>
@@ -985,7 +989,7 @@ function CanvasInner() {
             <button
               type="button"
               onClick={() => setAccountPanelOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               👤 {user.email}
             </button>
@@ -993,7 +997,7 @@ function CanvasInner() {
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Sign in
             </button>
@@ -1012,7 +1016,7 @@ function CanvasInner() {
           onEditCustomBlock={startEditingBlock}
           editingBlockId={editingBlock?.id}
         />
-        <div className="flex-1" ref={wrapperRef} onDragOver={onDragOver} onDrop={onDrop}>
+        <div className="flex-1 dark:bg-gray-900" ref={wrapperRef} onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1032,7 +1036,7 @@ function CanvasInner() {
             snapGrid={[10, 10]}
             fitView
           >
-            <Background gap={10} />
+            <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
             <Controls />
             <AlignmentGuideLines guides={alignGuides} />
           </ReactFlow>
@@ -1042,10 +1046,10 @@ function CanvasInner() {
             ))}
           </datalist>
         </div>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3">
+        <aside className="w-80 shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
           {pendingChoice && (
-            <div className="mb-4 rounded-lg border-2 border-teal-500 bg-teal-50 p-3">
-              <p className="mb-2 text-sm font-semibold text-teal-800">
+            <div className="mb-4 rounded-lg border-2 border-teal-500 bg-teal-50 p-3 dark:border-teal-700 dark:bg-teal-950">
+              <p className="mb-2 text-sm font-semibold text-teal-800 dark:text-teal-200">
                 Choose a path: {pendingChoice.label}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -1063,33 +1067,33 @@ function CanvasInner() {
             </div>
           )}
 
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Saved Variables</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Saved Variables</h2>
           {Object.keys(variables).length === 0 && (
-            <p className="mb-3 text-sm text-gray-400">Nothing saved yet.</p>
+            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">Nothing saved yet.</p>
           )}
           <ul className="mb-4 space-y-1">
             {Object.entries(variables).map(([name, v]) => (
-              <li key={name} className="font-mono text-xs text-gray-600">
-                {name} = {v.value} <span className="text-gray-400">({v.type})</span>
+              <li key={name} className="font-mono text-xs text-gray-600 dark:text-gray-400">
+                {name} = {v.value} <span className="text-gray-400 dark:text-gray-500">({v.type})</span>
               </li>
             ))}
           </ul>
 
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Activation Log</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Activation Log</h2>
             <button
               type="button"
               onClick={() => setLogs([])}
               disabled={logs.length === 0}
-              className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Clear Log
             </button>
           </div>
-          {logs.length === 0 && <p className="text-sm text-gray-400">No activity yet.</p>}
+          {logs.length === 0 && <p className="text-sm text-gray-400 dark:text-gray-500">No activity yet.</p>}
           <ul className="space-y-1">
             {logs.map((entry, i) => (
-              <li key={i} className="font-mono text-xs text-gray-600">
+              <li key={i} className="font-mono text-xs text-gray-600 dark:text-gray-400">
                 {entry}
               </li>
             ))}

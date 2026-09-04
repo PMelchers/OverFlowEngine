@@ -53,8 +53,8 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
         onClick={() => setOpen((o) => !o)}
         className={`flex h-20 w-20 flex-col items-center justify-center rounded-full border-4 text-center shadow-sm transition-all hover:shadow-md ${
           locked
-            ? 'border-gray-400 bg-gray-100 text-gray-400'
-            : 'border-fuchsia-500 bg-fuchsia-100 text-fuchsia-700'
+            ? 'border-gray-400 bg-gray-100 text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400'
+            : 'border-fuchsia-500 bg-fuchsia-100 text-fuchsia-700 dark:border-fuchsia-600 dark:bg-fuchsia-950 dark:text-fuchsia-300'
         }`}
         title={locked ? 'Click to unlock with a verified API key' : `${data.provider}: ${data.model ?? 'no model chosen yet'}`}
       >
@@ -65,14 +65,16 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
       </button>
 
       {open && (
-        <div className="absolute top-24 z-10 w-56 rounded-lg border border-gray-300 bg-white p-2 text-left shadow-lg">
+        <div className="absolute top-24 z-10 w-56 rounded-lg border border-gray-300 bg-white p-2 text-left shadow-lg dark:border-gray-600 dark:bg-gray-800">
           {locked ? (
             <>
-              <p className="mb-1 text-[11px] font-semibold text-gray-600">Pick a verified API key</p>
+              <p className="mb-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                Pick a verified API key
+              </p>
               {loading ? (
-                <p className="text-xs text-gray-400">Loading...</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Loading...</p>
               ) : credentials.length === 0 ? (
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-400 dark:text-gray-500">
                   No verified API keys yet - add one from the account menu (paste a real key, or type
                   anything starting with "test" to try this out without a real provider).
                 </p>
@@ -83,9 +85,9 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
                       <button
                         type="button"
                         onClick={() => unlock(c)}
-                        className="w-full rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50"
+                        className="w-full rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50 dark:text-gray-200 dark:hover:bg-fuchsia-950"
                       >
-                        ✓ {c.label} <span className="text-gray-400">({c.provider})</span>
+                        ✓ {c.label} <span className="text-gray-400 dark:text-gray-500">({c.provider})</span>
                       </button>
                     </li>
                   ))}
@@ -94,9 +96,11 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
             </>
           ) : (
             <>
-              <p className="mb-1 text-[11px] font-semibold text-gray-600">Pick a {data.provider} model</p>
+              <p className="mb-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                Pick a {data.provider} model
+              </p>
               {modelOptions.length === 0 ? (
-                <p className="text-xs text-gray-400">No known models for this platform yet.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">No known models for this platform yet.</p>
               ) : (
                 <ul className="space-y-1">
                   {modelOptions.map((m) => (
@@ -104,8 +108,10 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
                       <button
                         type="button"
                         onClick={() => pickModel(m)}
-                        className={`w-full rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50 ${
-                          data.model === m ? 'bg-fuchsia-100 font-medium' : ''
+                        className={`w-full rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950 ${
+                          data.model === m
+                            ? 'bg-fuchsia-100 font-medium dark:bg-fuchsia-900 dark:text-fuchsia-200'
+                            : 'dark:text-gray-200'
                         }`}
                       >
                         {m}
@@ -117,7 +123,7 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
               <button
                 type="button"
                 onClick={relock}
-                className="mt-1 w-full rounded px-2 py-1 text-left text-xs text-red-500 hover:bg-red-50"
+                className="mt-1 w-full rounded px-2 py-1 text-left text-xs text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
               >
                 🔒 Lock / change key
               </button>

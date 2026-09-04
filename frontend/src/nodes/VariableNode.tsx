@@ -12,7 +12,9 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
   return (
     <GridSnapBox
       className={`w-80 rounded-lg border-2 px-3 py-2 shadow-sm transition-all duration-300 hover:shadow-md ${
-        active ? 'node-flash border-green-500 bg-green-100' : 'border-sky-400 bg-sky-50'
+        active
+          ? 'node-flash border-green-500 bg-green-100 dark:border-green-600 dark:bg-green-950'
+          : 'border-sky-400 bg-sky-50 dark:border-sky-700 dark:bg-sky-950'
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-sky-500" />
@@ -23,7 +25,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
         value={data.label}
         placeholder="name"
         onChange={(e) => data.onChange?.({ label: e.target.value })}
-        className="nodrag mb-1 w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm"
+        className="nodrag mb-1 w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm dark:border-sky-700 dark:bg-gray-900 dark:text-gray-100"
       />
 
       <select
@@ -40,7 +42,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
           }
           data.onChange?.(patch)
         }}
-        className="nodrag mb-1 w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm"
+        className="nodrag mb-1 w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm dark:border-sky-700 dark:bg-gray-900 dark:text-gray-100"
       >
         {TYPE_OPTIONS.map((t) => (
           <option key={t} value={t}>
@@ -53,7 +55,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
         <select
           value={data.value ?? 'false'}
           onChange={(e) => data.onChange?.({ value: e.target.value })}
-          className="nodrag w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm"
+          className="nodrag w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm dark:border-sky-700 dark:bg-gray-900 dark:text-gray-100"
         >
           <option value="true">true</option>
           <option value="false">false</option>
@@ -64,7 +66,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
           value={data.value ?? ''}
           placeholder="value"
           onChange={(e) => data.onChange?.({ value: e.target.value })}
-          className="nodrag w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm"
+          className="nodrag w-full rounded border border-sky-300 bg-white px-2 py-1 text-sm dark:border-sky-700 dark:bg-gray-900 dark:text-gray-100"
         />
       )}
 

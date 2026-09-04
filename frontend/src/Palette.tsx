@@ -57,20 +57,20 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
   const items = PALETTE_ITEMS.filter((item) => item.category === tab)
 
   return (
-    <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3">
+    <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">Blocks</h2>
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Blocks</h2>
         <button
           type="button"
           onClick={toggleDescriptions}
           title={showDescriptions ? 'Hide descriptions' : 'Show descriptions'}
-          className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100"
+          className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
         >
           {showDescriptions ? 'Hide info' : 'Show info'}
         </button>
       </div>
 
-      <div className="mb-3 flex overflow-hidden rounded border border-gray-300 text-xs font-semibold">
+      <div className="mb-3 flex overflow-hidden rounded border border-gray-300 text-xs font-semibold dark:border-gray-600">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -81,7 +81,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
                 ? t.key === 'agentic'
                   ? 'bg-fuchsia-600 text-white'
                   : 'bg-gray-700 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100'
+                : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
             {t.label}
@@ -90,7 +90,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
       </div>
 
       {showDescriptions && (
-        <p className="mb-3 text-xs text-gray-400">
+        <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">
           {tab === 'agentic'
             ? 'Blocks that call out to an AI model.'
             : 'Drag a block onto the canvas.'}
@@ -112,9 +112,9 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
         ))}
       </div>
 
-      <h2 className="mb-2 mt-5 text-sm font-semibold text-gray-700">My Blocks</h2>
+      <h2 className="mb-2 mt-5 text-sm font-semibold text-gray-700 dark:text-gray-200">My Blocks</h2>
       {customBlocks.length === 0 && (
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           Select 2+ blocks on the canvas and click "Group Selected" to save a reusable chain here.
         </p>
       )}
@@ -126,13 +126,15 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
               key={block.id}
               draggable
               onDragStart={(e) => onDragStartCustom(e, block.id)}
-              className="group relative cursor-grab rounded-lg border-2 border-indigo-400 bg-indigo-50 px-3 py-2 text-sm shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
+              className="group relative cursor-grab rounded-lg border-2 border-indigo-400 bg-indigo-50 px-3 py-2 text-sm shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing dark:border-indigo-700 dark:bg-indigo-950"
             >
               <BlockHeader icon="⬡" badgeClassName="bg-indigo-600">
-                <span className="font-medium text-gray-800">{block.label}</span>
+                <span className="font-medium text-gray-800 dark:text-gray-100">{block.label}</span>
               </BlockHeader>
               {showDescriptions && (
-                <div className="text-xs text-gray-500">{block.subgraph.nodes.length} blocks chained</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {block.subgraph.nodes.length} blocks chained
+                </div>
               )}
               <div className="absolute right-1 top-1 hidden gap-1 group-hover:flex">
                 <button

@@ -9,8 +9,8 @@ export default function TriggerNode({ data }: NodeProps<BlockNodeData>) {
     <GridSnapBox
       className={`w-40 rounded-lg border-2 px-4 py-3 shadow-sm transition-all duration-300 hover:shadow-md ${
         active
-          ? 'node-flash border-green-500 bg-green-100'
-          : 'border-purple-400 bg-purple-50'
+          ? 'node-flash border-green-500 bg-green-100 dark:border-green-600 dark:bg-green-950'
+          : 'border-purple-400 bg-purple-50 dark:border-purple-700 dark:bg-purple-950'
       }`}
     >
       <div className="flex justify-center">

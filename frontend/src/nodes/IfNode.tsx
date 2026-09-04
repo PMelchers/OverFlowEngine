@@ -25,28 +25,36 @@ export default function IfNode({ data }: NodeProps<BlockNodeData>) {
   return (
     <GridSnapBox
       className={`w-80 rounded-lg border-2 px-3 py-2 shadow-sm transition-all duration-300 hover:shadow-md ${
-        active ? 'node-flash border-green-500 bg-green-100' : 'border-amber-400 bg-amber-50'
+        active
+          ? 'node-flash border-green-500 bg-green-100 dark:border-green-600 dark:bg-green-950'
+          : 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950'
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-amber-500" />
       <BlockHeader icon="☰" badgeClassName="bg-amber-600">
-        <span className="text-sm font-semibold text-amber-800">If all/any of these are true...</span>
+        <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+          If all/any of these are true...
+        </span>
       </BlockHeader>
-      <p className="mb-2 text-[11px] text-gray-500">Check multiple things, then send the flow down Yes or No.</p>
+      <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">
+        Check multiple things, then send the flow down Yes or No.
+      </p>
 
       <div className="space-y-2">
         {conditions.length === 0 && (
-          <p className="text-xs text-gray-400">No checks yet - add one below.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">No checks yet - add one below.</p>
         )}
         {conditions.map((cond, i) => (
           <div key={i}>
             {i > 0 && (
-              <div className="mb-1.5 flex overflow-hidden rounded border border-amber-300 text-[11px] font-semibold">
+              <div className="mb-1.5 flex overflow-hidden rounded border border-amber-300 text-[11px] font-semibold dark:border-amber-800">
                 <button
                   type="button"
                   onClick={() => update(i, { combinator: 'and' })}
                   className={`nodrag flex-1 py-0.5 ${
-                    (cond.combinator ?? 'and') === 'and' ? 'bg-amber-500 text-white' : 'bg-white text-amber-700'
+                    (cond.combinator ?? 'and') === 'and'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-white text-amber-700 dark:bg-gray-900 dark:text-amber-300'
                   }`}
                 >
                   AND (both must be true)
@@ -54,8 +62,10 @@ export default function IfNode({ data }: NodeProps<BlockNodeData>) {
                 <button
                   type="button"
                   onClick={() => update(i, { combinator: 'or' })}
-                  className={`nodrag flex-1 border-l border-amber-300 py-0.5 ${
-                    cond.combinator === 'or' ? 'bg-amber-500 text-white' : 'bg-white text-amber-700'
+                  className={`nodrag flex-1 border-l border-amber-300 py-0.5 dark:border-amber-800 ${
+                    cond.combinator === 'or'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-white text-amber-700 dark:bg-gray-900 dark:text-amber-300'
                   }`}
                 >
                   OR (either can be true)
@@ -75,14 +85,18 @@ export default function IfNode({ data }: NodeProps<BlockNodeData>) {
       <button
         type="button"
         onClick={addCondition}
-        className="nodrag mt-1.5 w-full rounded border border-amber-300 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+        className="nodrag mt-1.5 w-full rounded border border-amber-300 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-900"
       >
         + Add another check
       </button>
 
       <div className="mt-2 flex justify-between text-xs font-semibold">
-        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700">✓ Yes</span>
-        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600">✗ No</span>
+        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900 dark:text-green-300">
+          ✓ Yes
+        </span>
+        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600 dark:bg-red-900 dark:text-red-300">
+          ✗ No
+        </span>
       </div>
       <Handle
         type="source"

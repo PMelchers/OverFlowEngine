@@ -1,11 +1,14 @@
 import Canvas from './Canvas'
 import { AuthProvider } from './auth'
+import { ThemeProvider } from './theme'
 
 function App() {
   return (
-    <AuthProvider>
-      <Canvas />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Canvas />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
