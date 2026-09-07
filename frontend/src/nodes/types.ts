@@ -85,11 +85,15 @@ export interface BlockNodeData {
   origin?: string
   destination?: string
   travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
+  /** extra stops between origin and destination - "|"-separated (not comma, so a stop name
+   *  can itself contain a comma), e.g. "{routeActivities}" or "Eiffel Tower|Louvre" */
+  waypoints?: string
   // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
-  // activity-suggestion block (AI suggests stops along a route; console-logged, added to the
-  // route only if accepted) - reuses `outputVariable` for the variable name the accepted
-  // suggestion is saved into, which a downstream Maps Route block can weave into its Destination
-  // with e.g. "{destinationCountry}, via {routeActivities}"
+  // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
+  // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
+  // a simulated one if no AI Model block is connected. Reuses `outputVariable` for the variable
+  // name the accepted stops are saved into as a "|"-separated list, meant to be referenced from a
+  // downstream Maps Route block's Waypoints field, e.g. "{routeActivities}"
   activityContext?: string
   interests?: string
 }
@@ -131,7 +135,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
   { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: '↩', badgeClassName: 'bg-emerald-600', category: 'core' },
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500', icon: '🗺', badgeClassName: 'bg-lime-600', category: 'core' },
-  { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400', icon: '💡', badgeClassName: 'bg-orange-600', category: 'agentic' },
+  { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route (connect an AI Model block for real suggestions) and adds them as route waypoints only if accepted', color: 'bg-orange-100 border-orange-400', icon: '💡', badgeClassName: 'bg-orange-600', category: 'agentic' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: '●', badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: '◆', badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: '☰', badgeClassName: 'bg-amber-600', category: 'core' },

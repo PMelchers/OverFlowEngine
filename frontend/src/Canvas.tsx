@@ -178,7 +178,15 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
     case 'appAction':
       return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
     case 'mapsAction':
-      return { label, mapsProvider: 'google', origin: '', destination: '', travelMode: 'driving', outputVariable: '' }
+      return {
+        label,
+        mapsProvider: 'google',
+        origin: '',
+        destination: '',
+        waypoints: '',
+        travelMode: 'driving',
+        outputVariable: '',
+      }
     case 'activitySuggestion':
       return { label, activityContext: '', interests: '', outputVariable: '' }
     default:

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Handle, Position, type NodeProps } from 'reactflow'
+import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
 import type { BlockNodeData } from './types'
@@ -8,6 +8,14 @@ export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const contextRef = useRef<HTMLInputElement>(null)
+  const nodeId = useNodeId()
+  const edges = useEdges()
+  const nodes = useNodes<BlockNodeData>()
+  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
+  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
+  const connectedModel = modelNode?.data.model
+    ? `${modelNode.data.model} (${modelNode.data.provider})`
+    : undefined
 
   const insertIntoContext = (name: string) => {
     if (!name) return
@@ -72,6 +80,17 @@ export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData
         </select>
       )}
 
+      <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">Model</label>
+      <p
+        className={`mb-2 w-full rounded border px-2 py-1 text-sm ${
+          connectedModel
+            ? 'border-orange-300 bg-white text-orange-700 dark:border-orange-700 dark:bg-gray-900 dark:text-orange-300'
+            : 'border-dashed border-orange-300 bg-orange-50 text-orange-400 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-500'
+        }`}
+      >
+        {connectedModel ?? 'Connect an AI Model block below ↓ for real suggestions'}
+      </p>
+
       <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
         Interests (optional)
       </label>
@@ -95,12 +114,14 @@ export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData
       />
 
       <p className="mt-1 text-[10px] text-orange-700 dark:text-orange-400">
-        Prints the suggestion to the console and pauses the run. Accepting saves it to the variable
-        above - reference it from a Maps Route block's Destination (e.g. "..., via {'{routeActivities}'}")
-        to fold it into the route. Rejecting leaves the route unchanged.
+        Pauses the run with the suggested stops. Accepting saves them to the variable above as a
+        "|"-separated list - reference it from a Maps Route block's Waypoints field (e.g.{' '}
+        {'{routeActivities}'}) to add them as real stops on the route. Rejecting leaves the route
+        unchanged.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-orange-500" />
+      <Handle type="target" position={Position.Bottom} id="model" className="!bg-orange-500" />
     </GridSnapBox>
   )
 }

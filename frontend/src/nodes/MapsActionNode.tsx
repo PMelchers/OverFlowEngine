@@ -15,6 +15,7 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const destRef = useRef<HTMLInputElement>(null)
+  const waypointsRef = useRef<HTMLInputElement>(null)
 
   const insertIntoDestination = (name: string) => {
     if (!name) return
@@ -25,6 +26,22 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
     const end = el?.selectionEnd ?? current.length
     const next = current.slice(0, start) + token + current.slice(end)
     data.onChange?.({ destination: next })
+    requestAnimationFrame(() => {
+      el?.focus()
+      const caret = start + token.length
+      el?.setSelectionRange(caret, caret)
+    })
+  }
+
+  const insertIntoWaypoints = (name: string) => {
+    if (!name) return
+    const token = `{${name}}`
+    const el = waypointsRef.current
+    const current = data.waypoints ?? ''
+    const start = el?.selectionStart ?? current.length
+    const end = el?.selectionEnd ?? current.length
+    const next = current.slice(0, start) + token + current.slice(end)
+    data.onChange?.({ waypoints: next })
     requestAnimationFrame(() => {
       el?.focus()
       const caret = start + token.length
@@ -106,6 +123,35 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
           className="nodrag mb-2 w-full rounded border border-lime-400 bg-white px-2 py-1 text-sm text-lime-700 dark:border-lime-700 dark:bg-gray-900 dark:text-lime-300"
         >
           <option value="">Insert a variable into Destination...</option>
+          {availableVariables.map((v) => (
+            <option key={v.name} value={v.name}>
+              {v.name} ({v.varType})
+            </option>
+          ))}
+        </select>
+      )}
+
+      <label className="mb-1 block text-[11px] font-medium text-lime-800 dark:text-lime-300">
+        Waypoints (optional stops, "|"-separated)
+      </label>
+      <input
+        ref={waypointsRef}
+        type="text"
+        value={data.waypoints ?? ''}
+        placeholder="e.g. {routeActivities} or Eiffel Tower|Louvre"
+        onChange={(e) => data.onChange?.({ waypoints: e.target.value })}
+        className="nodrag mb-1 w-full rounded border border-lime-400 bg-white px-2 py-1 text-sm dark:border-lime-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+      {availableVariables.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => {
+            insertIntoWaypoints(e.target.value)
+            e.target.value = ''
+          }}
+          className="nodrag mb-2 w-full rounded border border-lime-400 bg-white px-2 py-1 text-sm text-lime-700 dark:border-lime-700 dark:bg-gray-900 dark:text-lime-300"
+        >
+          <option value="">Insert a variable into Waypoints...</option>
           {availableVariables.map((v) => (
             <option key={v.name} value={v.name}>
               {v.name} ({v.varType})
