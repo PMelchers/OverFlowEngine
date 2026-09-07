@@ -1115,6 +1115,7 @@ function CanvasInner() {
             snapToGrid
             snapGrid={[10, 10]}
             defaultEdgeOptions={defaultEdgeOptions}
+            proOptions={{ hideAttribution: true }}
             fitView
           >
             <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
