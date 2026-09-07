@@ -108,11 +108,15 @@ export interface BlockNodeData {
   origin?: string
   destination?: string
   travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
+  /** extra stops between origin and destination - "|"-separated (not comma, so a stop name
+   *  can itself contain a comma), e.g. "{routeActivities}" or "Eiffel Tower|Louvre" */
+  waypoints?: string
   // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
-  // activity-suggestion block (AI suggests stops along a route; console-logged, added to the
-  // route only if accepted) - reuses `outputVariable` for the variable name the accepted
-  // suggestion is saved into, which a downstream Maps Route block can weave into its Destination
-  // with e.g. "{destinationCountry}, via {routeActivities}"
+  // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
+  // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
+  // a simulated one if no AI Model block is connected. Reuses `outputVariable` for the variable
+  // name the accepted stops are saved into as a "|"-separated list, meant to be referenced from a
+  // downstream Maps Route block's Waypoints field, e.g. "{routeActivities}"
   activityContext?: string
   interests?: string
 }

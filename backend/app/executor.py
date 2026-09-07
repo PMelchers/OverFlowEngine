@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, providers
 from .conditions import evaluate_conditions
 from .maps import build_maps_url
 
@@ -168,15 +168,35 @@ def _advance(db: Session, state: dict) -> dict:
             model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
             model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
             model_data = (model_node.get("data") or {}) if model_node else {}
-            model = model_data.get("model") or "no model connected"
+            model = model_data.get("model")
+            credential_id = model_data.get("credentialId")
             input_text = ai_io.get("input")
-            if input_text:
-                simulated_output = f'[preview reply from {model}] responding to: "{input_text}"'
-                message = f'AI Agent "{label}" received "{input_text}" -> simulated a reply from {model} (real model calls not wired up yet)'
+            instructions = (data.get("prompt") or "").strip()
+            # No AI Input block connected -> the Instructions field doubles as the
+            # message itself, so a standalone AI Agent block works on its own.
+            # Instructions become a system prompt only once a real input arrives too.
+            system_prompt = instructions if input_text else None
+            user_message = input_text or instructions
+
+            if not user_message:
+                message = f'AI Agent "{label}" has no input or instructions to send, skipping'
+            elif not credential_id or not model:
+                message = f'AI Agent "{label}" has no AI Model block connected/unlocked, skipping'
             else:
-                simulated_output = f"[preview reply from {model}] (no AI Input block provided any input)"
-                message = f'AI Agent "{label}" ran with no input -> simulated a reply from {model} (real model calls not wired up yet)'
-            ai_io["output"] = simulated_output
+                cred = (
+                    db.query(models.AiCredential)
+                    .filter_by(id=credential_id, user_id=state.get("user_id"))
+                    .one_or_none()
+                )
+                if cred is None:
+                    message = f'AI Agent "{label}" could not use its linked API key - log in as the account that added it'
+                else:
+                    try:
+                        reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
+                        ai_io["output"] = reply
+                        message = f'AI Agent "{label}" replied via {model}: "{reply}"'
+                    except providers.ModelCallError as exc:
+                        message = f'AI Agent "{label}" call to {model} failed: {exc}'
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "aiOutput":
@@ -237,30 +257,74 @@ def _advance(db: Session, state: dict) -> dict:
         elif ntype == "activitySuggestion":
             context = _render_message(data.get("activityContext", ""), eval_vars)
             interests = _render_message(data.get("interests", ""), eval_vars)
-            # Simulated AI "thinking" about the route, in the same style as the AI Agent
-            # block until real model calls are wired up - a plausible-looking suggestion
-            # built from the route context rather than a live model response.
-            # Kept as a short, comma-separated stop list (not a full sentence) so it can be
-            # dropped straight into a Maps Route block's Destination if accepted.
-            if interests:
-                stops = f"a scenic viewpoint, a spot known for {interests}, and a notable landmark"
-            else:
-                stops = "a scenic viewpoint, a well-reviewed local café, and a notable landmark"
-            suggestion_message = f"Along the way to {context or 'your destination'}, consider: {stops}."
+            output_var = (data.get("outputVariable") or "").strip()
+
+            # Same "model" handle/lookup pattern as the AI Agent block - connecting an AI
+            # Model block below makes this a real, live suggestion instead of a simulated one.
+            model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
+            model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
+            model_data = (model_node.get("data") or {}) if model_node else {}
+            model = model_data.get("model")
+            credential_id = model_data.get("credentialId")
+
+            stops: list[str] = []
+            ai_backed = False
+            call_error: str | None = None
+
+            if credential_id and model:
+                cred = (
+                    db.query(models.AiCredential)
+                    .filter_by(id=credential_id, user_id=state.get("user_id"))
+                    .one_or_none()
+                )
+                if cred is None:
+                    call_error = "could not use its linked API key - log in as the account that added it"
+                else:
+                    system_prompt = (
+                        "You suggest interesting points of interest to stop at along a travel route. "
+                        "Reply with ONLY a short list of 3-5 concrete stop names separated by '|', "
+                        "nothing else - no numbering, no explanation, no full sentences."
+                    )
+                    user_message = f"Route to: {context or 'the destination'}."
+                    if interests:
+                        user_message += f" Traveler interests: {interests}."
+                    try:
+                        reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
+                        stops = [s.strip(" .\t-") for s in reply.split("|")]
+                        stops = [s for s in stops if s]
+                        ai_backed = True
+                    except providers.ModelCallError as exc:
+                        call_error = str(exc)
+
+            if not stops:
+                # No AI Model block connected (or the call failed) - fall back to a
+                # plausible-looking suggestion built from the route context, in the same
+                # style the AI Agent block uses before a real model call is wired up.
+                if interests:
+                    stops = ["a scenic viewpoint", f"a spot known for {interests}", "a notable landmark"]
+                else:
+                    stops = ["a scenic viewpoint", "a well-reviewed local spot", "a notable landmark"]
+
+            suggestion_message = f"Along the way to {context or 'your destination'}, consider: {', '.join(stops)}."
             logger.info(f"[SUGGESTION] {suggestion_message}")
             print(f"[OverFlowEngine][SUGGESTION] {suggestion_message}")
-            output_var = (data.get("outputVariable") or "").strip()
+
+            source_note = "AI-suggested" if ai_backed else "simulated - connect an AI Model block below for real suggestions"
+            message = f'"{label}" suggests ({source_note}): {suggestion_message}'
+            if call_error:
+                message += f" [model call failed: {call_error}, fell back to a simulated suggestion]"
+
             steps.append(
                 {
                     "node_id": node_id,
                     "type": ntype,
                     "label": label,
-                    "message": f'"{label}" suggests: {suggestion_message}',
+                    "message": message,
                     "options": ["Accept", "Reject"],
                 }
             )
             state["awaiting_node"] = node_id
-            state["awaiting_suggestion"] = {"text": stops, "output_var": output_var}
+            state["awaiting_suggestion"] = {"stops": stops, "output_var": output_var}
             return {
                 "status": "awaiting_choice",
                 "node_id": node_id,
@@ -275,14 +339,17 @@ def _advance(db: Session, state: dict) -> dict:
             origin = _render_message(data.get("origin", ""), eval_vars)
             destination = _render_message(data.get("destination", ""), eval_vars)
             mode = data.get("travelMode", "driving")
-            url = build_maps_url(provider, origin, destination, mode)
+            waypoints_raw = _render_message(data.get("waypoints", ""), eval_vars)
+            waypoints = [w.strip() for w in waypoints_raw.split("|") if w.strip()]
+            url = build_maps_url(provider, origin, destination, mode, waypoints)
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
                 _upsert_variable(db, output_var, "string", url)
                 eval_vars[output_var] = url
             provider_label = "Apple Maps" if provider == "apple" else "Google Maps"
             origin_part = f' from "{origin}"' if origin else ""
-            message = f'"{label}" built a {provider_label} route{origin_part} to "{destination}": {url}'
+            stops_part = f" via {len(waypoints)} stop(s)" if waypoints else ""
+            message = f'"{label}" built a {provider_label} route{origin_part} to "{destination}"{stops_part}: {url}'
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "trigger":
@@ -355,9 +422,15 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
         pending = state.pop("awaiting_suggestion", None)
         accepted = choice.strip().lower() == "accept"
         if accepted and pending and pending.get("output_var"):
-            _upsert_variable(db, pending["output_var"], "string", pending["text"])
-            state["eval_vars"][pending["output_var"]] = pending["text"]
-            message = f'Accepted the suggestion at "{label}" - saved to "{pending["output_var"]}" for the route to pick up'
+            # "|"-joined (not ",") so a stop name that itself contains a comma survives -
+            # matches the separator a Maps Route block's Waypoints field splits on.
+            stops_value = " | ".join(pending.get("stops") or [])
+            _upsert_variable(db, pending["output_var"], "string", stops_value)
+            state["eval_vars"][pending["output_var"]] = stops_value
+            message = (
+                f'Accepted the suggestion at "{label}" - saved to "{pending["output_var"]}" '
+                "for a Maps Route block's Waypoints to pick up"
+            )
         elif accepted:
             message = f'Accepted the suggestion at "{label}", but it has no output variable configured to save into'
         else:

@@ -56,7 +56,7 @@ export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
       />
 
       <p className="mt-1 text-[10px] text-fuchsia-500 dark:text-fuchsia-400">
-        Preview block - runs as a placeholder step until real model calls are wired up.
+        Calls the connected model for real - make sure you're logged in as the account that added its API key.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-fuchsia-500" />
