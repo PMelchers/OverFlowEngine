@@ -29,3 +29,53 @@ html.dark body {
 .node-flash {
   animation: node-flash 0.7s ease-out;
 }
+
+/* Nicer connector lines: rounded caps, a soft shadow, and a highlight on hover/selection. */
+.react-flow__edge-path {
+  stroke-linecap: round;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.15));
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3.5px !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3.5px !important;
+  stroke: #ec4899 !important;
+}
+
+.react-flow__connection-path {
+  stroke-linecap: round;
+}
+
+/* Consistent, slightly larger handles with a ring so they read clearly against any block color. */
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-radius: 9999px;
+  transition: transform 0.15s ease;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.25);
+}
+
+html.dark .react-flow__handle {
+  border-color: #1f2937;
+}
+
+/* A gentle lift on hover so blocks feel tactile without a layout-affecting box-shadow. */
+.react-flow__node {
+  transition: filter 0.15s ease;
+}
+
+.react-flow__node:hover {
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.18));
+}
+
+html.dark .react-flow__node:hover {
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.45));
+}

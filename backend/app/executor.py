@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .conditions import evaluate_conditions
+from .maps import build_maps_url
 
 logger = logging.getLogger("overflowengine.workflow")
 
@@ -215,6 +216,21 @@ def _advance(db: Session, state: dict) -> dict:
                 f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
                 "(simulated - real send not wired up yet)"
             )
+            steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
+
+        elif ntype == "mapsAction":
+            provider = (data.get("mapsProvider") or "google").strip().lower()
+            origin = _render_message(data.get("origin", ""), eval_vars)
+            destination = _render_message(data.get("destination", ""), eval_vars)
+            mode = data.get("travelMode", "driving")
+            url = build_maps_url(provider, origin, destination, mode)
+            output_var = (data.get("outputVariable") or "").strip()
+            if output_var:
+                _upsert_variable(db, output_var, "string", url)
+                eval_vars[output_var] = url
+            provider_label = "Apple Maps" if provider == "apple" else "Google Maps"
+            origin_part = f' from "{origin}"' if origin else ""
+            message = f'"{label}" built a {provider_label} route{origin_part} to "{destination}": {url}'
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "trigger":

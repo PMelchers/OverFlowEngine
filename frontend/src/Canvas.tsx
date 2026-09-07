@@ -7,7 +7,9 @@ import {
   useReactFlow,
   useViewport,
   type Connection,
+  type DefaultEdgeOptions,
   type Edge,
+  MarkerType,
   type Node,
   type NodeDragHandler,
   type OnSelectionChangeParams,
@@ -41,6 +43,7 @@ import GroupNode from './nodes/GroupNode'
 import IfNode from './nodes/IfNode'
 import IfSingleNode from './nodes/IfSingleNode'
 import LogNode from './nodes/LogNode'
+import MapsActionNode from './nodes/MapsActionNode'
 import TriggerNode from './nodes/TriggerNode'
 import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
 import VariableNode from './nodes/VariableNode'
@@ -52,6 +55,7 @@ const nodeTypes = {
   trigger: TriggerNode,
   appTrigger: AppTriggerNode,
   appAction: AppActionNode,
+  mapsAction: MapsActionNode,
   block: BlockNode,
   ifOne: IfSingleNode,
   if: IfNode,
@@ -170,6 +174,8 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage', fromAddress: '' }
     case 'appAction':
       return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
+    case 'mapsAction':
+      return { label, mapsProvider: 'google', origin: '', destination: '', travelMode: 'driving', outputVariable: '' }
     default:
       return { label }
   }
@@ -250,6 +256,18 @@ function CanvasInner() {
   const { theme } = useTheme()
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
+
+  // Smooth, rounded connector lines with a matching arrowhead instead of React Flow's
+  // thin default bezier - recomputed only when the theme flips so the color stays readable.
+  const defaultEdgeOptions = useMemo<DefaultEdgeOptions>(() => {
+    const stroke = theme === 'dark' ? '#a5b4fc' : '#6366f1'
+    return {
+      type: 'smoothstep',
+      pathOptions: { borderRadius: 16 },
+      style: { stroke, strokeWidth: 2.5 },
+      markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: stroke },
+    }
+  }, [theme])
   const preEditSnapshot = useRef<{ nodes: Node<BlockNodeData>[]; edges: Edge[] } | null>(null)
 
   const nodesRef = useRef<Node<BlockNodeData>[]>([])
@@ -302,7 +320,7 @@ function CanvasInner() {
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
+        n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -526,7 +544,7 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(id, patch),
           ...(TRIGGER_NODE_TYPES.has(kind) ? { onTrigger: runWorkflow } : {}),
-          ...(kind === 'if' || kind === 'ifOne' || kind === 'log' || kind === 'appAction'
+          ...(kind === 'if' || kind === 'ifOne' || kind === 'log' || kind === 'appAction' || kind === 'mapsAction'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -583,7 +601,7 @@ function CanvasInner() {
             status: 'idle',
             onChange: (patch) => updateNodeData(id, patch),
             ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
-            ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
+            ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
           },
@@ -736,7 +754,7 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(sn.id, patch),
           ...(TRIGGER_NODE_TYPES.has(sn.type) ? { onTrigger: runWorkflow } : {}),
-          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log' || sn.type === 'appAction'
+          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log' || sn.type === 'appAction' || sn.type === 'mapsAction'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -872,7 +890,7 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(n.id, patch),
           ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
-          ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction'
+          ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -1034,6 +1052,7 @@ function CanvasInner() {
             elementsSelectable
             snapToGrid
             snapGrid={[10, 10]}
+            defaultEdgeOptions={defaultEdgeOptions}
             fitView
           >
             <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />

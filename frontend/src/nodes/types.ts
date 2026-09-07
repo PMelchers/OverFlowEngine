@@ -80,6 +80,12 @@ export interface BlockNodeData {
   to?: string
   subject?: string
   body?: string
+  // maps-action block (builds a real Google/Apple Maps directions URL - no API key needed)
+  mapsProvider?: 'google' | 'apple'
+  origin?: string
+  destination?: string
+  travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
+  // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
 }
 
 export type BlockKind =
@@ -97,6 +103,7 @@ export type BlockKind =
   | 'aiOutput'
   | 'aiModel'
   | 'appAction'
+  | 'mapsAction'
 
 export type PaletteCategory = 'core' | 'agentic'
 
@@ -116,6 +123,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400', icon: '▶', badgeClassName: 'bg-purple-600', category: 'core' },
   { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
   { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: '↩', badgeClassName: 'bg-emerald-600', category: 'core' },
+  { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500', icon: '🗺', badgeClassName: 'bg-lime-600', category: 'core' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: '●', badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: '◆', badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: '☰', badgeClassName: 'bg-amber-600', category: 'core' },
