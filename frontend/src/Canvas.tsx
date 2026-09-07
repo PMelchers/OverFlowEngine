@@ -443,7 +443,7 @@ function CanvasInner() {
 
     let result: RunResult
     try {
-      const res = await fetch(`${API_BASE}/workflows/run`, {
+      const res = await authedFetch('/workflows/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -460,7 +460,7 @@ function CanvasInner() {
     }
 
     await playResult(result)
-  }, [running, addLog, playResult])
+  }, [running, addLog, playResult, authedFetch])
 
   const resolveChoice = useCallback(
     async (option: string) => {

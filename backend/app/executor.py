@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, providers
 from .conditions import evaluate_conditions
 from .maps import build_maps_url
 
@@ -152,15 +152,35 @@ def _advance(db: Session, state: dict) -> dict:
             model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
             model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
             model_data = (model_node.get("data") or {}) if model_node else {}
-            model = model_data.get("model") or "no model connected"
+            model = model_data.get("model")
+            credential_id = model_data.get("credentialId")
             input_text = ai_io.get("input")
-            if input_text:
-                simulated_output = f'[preview reply from {model}] responding to: "{input_text}"'
-                message = f'AI Agent "{label}" received "{input_text}" -> simulated a reply from {model} (real model calls not wired up yet)'
+            instructions = (data.get("prompt") or "").strip()
+            # No AI Input block connected -> the Instructions field doubles as the
+            # message itself, so a standalone AI Agent block works on its own.
+            # Instructions become a system prompt only once a real input arrives too.
+            system_prompt = instructions if input_text else None
+            user_message = input_text or instructions
+
+            if not user_message:
+                message = f'AI Agent "{label}" has no input or instructions to send, skipping'
+            elif not credential_id or not model:
+                message = f'AI Agent "{label}" has no AI Model block connected/unlocked, skipping'
             else:
-                simulated_output = f"[preview reply from {model}] (no AI Input block provided any input)"
-                message = f'AI Agent "{label}" ran with no input -> simulated a reply from {model} (real model calls not wired up yet)'
-            ai_io["output"] = simulated_output
+                cred = (
+                    db.query(models.AiCredential)
+                    .filter_by(id=credential_id, user_id=state.get("user_id"))
+                    .one_or_none()
+                )
+                if cred is None:
+                    message = f'AI Agent "{label}" could not use its linked API key - log in as the account that added it'
+                else:
+                    try:
+                        reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
+                        ai_io["output"] = reply
+                        message = f'AI Agent "{label}" replied via {model}: "{reply}"'
+                    except providers.ModelCallError as exc:
+                        message = f'AI Agent "{label}" call to {model} failed: {exc}'
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "aiOutput":
@@ -289,7 +309,7 @@ def _advance(db: Session, state: dict) -> dict:
     return {"status": "completed", "run_id": run.id, "steps": flush_new_steps(), "variables": variables_snapshot}
 
 
-def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
+def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int | None = None) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
     incoming: dict[str, list[dict]] = {}
@@ -309,6 +329,7 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
         "visited": set(),
         "steps": [{"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow triggered"}],
         "ai_io": {"input": None},
+        "user_id": user_id,
     }
 
     result = _advance(db, state)

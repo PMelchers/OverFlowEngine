@@ -265,10 +265,14 @@ def health():
 
 
 @app.post("/workflows/run")
-def run_workflow(workflow: Workflow, db: Session = Depends(get_db)):
+def run_workflow(
+    workflow: Workflow,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(auth.get_current_user_optional),
+):
     nodes = [n.model_dump() for n in workflow.nodes]
     edges = [e.model_dump() for e in workflow.edges]
-    return executor.run_workflow(db, nodes, edges)
+    return executor.run_workflow(db, nodes, edges, user_id=current_user.id if current_user else None)
 
 
 @app.post("/workflows/continue")
