@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   addEdge,
   Background,
@@ -262,6 +263,7 @@ function CanvasInner() {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
+  const templatesButtonRef = useRef<HTMLButtonElement>(null)
 
   // Smooth, rounded connector lines with a matching arrowhead instead of React Flow's
   // thin default bezier - recomputed only when the theme flips so the color stays readable.
@@ -643,8 +645,15 @@ function CanvasInner() {
       setNodes((nds) => [...nds, ...newNodes])
       setEdges((eds) => [...eds, ...newEdges])
       addLog(`Inserted template "${template.label}" (${newNodes.length} blocks)`)
+      // Bring the newly-dropped blocks into view - without this, inserting a second
+      // template (or one via the click path, which places it past whatever's already on
+      // the canvas) can land entirely outside the current viewport and look like nothing
+      // happened.
+      requestAnimationFrame(() =>
+        fitView({ padding: 0.3, nodes: newNodes.map((n) => ({ id: n.id })), duration: 300 }),
+      )
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, addLog],
+    [setNodes, setEdges, updateNodeData, runWorkflow, addLog, fitView],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -1000,37 +1009,60 @@ function CanvasInner() {
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="relative">
               <button
+                ref={templatesButtonRef}
                 type="button"
                 onClick={() => setTemplatesOpen((o) => !o)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 shadow-sm transition-all duration-150 hover:border-purple-300 hover:bg-purple-100 hover:shadow active:scale-[0.97] dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300 dark:hover:bg-purple-900"
               >
                 🧩 Templates
               </button>
-              {templatesOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-800">
-                    <p className="mb-1 px-2 pt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                      Click to drop into the canvas, or drag it to place exactly where you want.
-                    </p>
-                    {TEMPLATES.map((t) => (
+              {templatesOpen &&
+                (() => {
+                  const rect = templatesButtonRef.current?.getBoundingClientRect()
+                  const top = (rect?.bottom ?? 0) + 8
+                  const right = rect ? window.innerWidth - rect.right : 16
+                  // Rendered through a portal straight into <body>, positioned with fixed
+                  // viewport coordinates from the button's own rect - anchoring it inside the
+                  // header instead let some ancestor's stacking context (backdrop-blur, or
+                  // React Flow's own internal z-index) trap it below the canvas pane, so drags
+                  // and even plain clicks landed on the pane underneath instead of the menu.
+                  return createPortal(
+                    <>
+                      <div className="fixed inset-0 z-[100]" onClick={() => setTemplatesOpen(false)} />
                       <div
-                        key={t.id}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData(DRAG_DATA_FORMAT, TEMPLATE_DRAG_PREFIX + t.id)}
-                        onClick={() => {
-                          insertTemplate(t)
-                          setTemplatesOpen(false)
-                        }}
-                        className="cursor-grab rounded-lg p-2 transition-colors duration-100 hover:bg-purple-50 dark:hover:bg-purple-950"
+                        style={{ top, right }}
+                        className="fixed z-[101] w-80 overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-800"
                       >
-                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
+                        <p className="mb-1 px-2 pt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                          Click anywhere on a template to drop it into the canvas, or drag it to place it
+                          exactly where you want.
+                        </p>
+                        {TEMPLATES.map((t) => (
+                          <div
+                            key={t.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(DRAG_DATA_FORMAT, TEMPLATE_DRAG_PREFIX + t.id)
+                              // Close the dropdown (and its backdrop) the instant the drag starts -
+                              // otherwise the backdrop still covers the canvas mid-drag and the drop
+                              // never reaches it.
+                              setTemplatesOpen(false)
+                            }}
+                            onClick={() => {
+                              insertTemplate(t)
+                              setTemplatesOpen(false)
+                            }}
+                            className="cursor-pointer rounded-lg p-2 transition-colors duration-100 hover:bg-purple-50 dark:hover:bg-purple-950"
+                          >
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
+                    </>,
+                    document.body,
+                  )
+                })()}
             </div>
 
             <button
