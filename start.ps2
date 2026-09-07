@@ -59,7 +59,7 @@ if [ ! -x "$VENV_PY" ]; then
 fi
 
 step "Checking backend dependencies"
-if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic, psycopg" >/dev/null 2>&1; then
+if ! "$VENV_PY" -c "import fastapi, uvicorn, pydantic, psycopg, httpx, dotenv" >/dev/null 2>&1; then
   warn "Backend dependencies missing, installing from requirements.txt..."
   if "$VENV_PY" -m pip install -q -r "$BACKEND_DIR/requirements.txt"; then
     ok "Backend dependencies installed"
