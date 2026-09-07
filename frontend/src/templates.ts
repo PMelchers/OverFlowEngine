@@ -26,6 +26,9 @@ export interface WorkflowTemplate {
 /** Drag payload prefix so Canvas's onDrop can tell a template drag apart from a plain palette-kind drag. */
 export const TEMPLATE_DRAG_PREFIX = 'template::'
 
+/** Horizontal gap between blocks in a single left-to-right row (block width is 320px). */
+const STEP = 380
+
 export const TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'email-auto-reply',
@@ -36,7 +39,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'trigger',
         type: 'appTrigger',
-        position: { x: 0, y: 0 },
+        position: { x: 0 * STEP, y: 0 },
         data: {
           label: 'Outlook Trigger',
           sourceApp: 'Email',
@@ -48,55 +51,55 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'readInput',
         type: 'aiInput',
-        position: { x: 380, y: 0 },
+        position: { x: 1 * STEP, y: 0 },
         data: { label: 'readInput', value: 'Extract the instructions from this email: {incomingMessage}' },
       },
       {
         id: 'readAgent',
         type: 'aiAgent',
-        position: { x: 760, y: 0 },
+        position: { x: 2 * STEP, y: 0 },
         data: { label: 'Reader Agent', prompt: 'Extract clear, actionable instructions from the email.' },
       },
       {
         id: 'readModel',
         type: 'aiModel',
-        position: { x: 880, y: 240 },
+        position: { x: 2 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'extracted',
         type: 'aiOutput',
-        position: { x: 1140, y: 0 },
+        position: { x: 3 * STEP, y: 0 },
         data: { label: 'extractedInstructions' },
       },
       {
         id: 'replyInput',
         type: 'aiInput',
-        position: { x: 1140, y: 400 },
+        position: { x: 4 * STEP, y: 0 },
         data: { label: 'replyInput', value: 'Write a polite reply based on: {extractedInstructions}' },
       },
       {
         id: 'replyAgent',
         type: 'aiAgent',
-        position: { x: 760, y: 400 },
+        position: { x: 5 * STEP, y: 0 },
         data: { label: 'Writer Agent', prompt: 'Write a polite, concise reply email.' },
       },
       {
         id: 'replyModel',
         type: 'aiModel',
-        position: { x: 880, y: 640 },
+        position: { x: 5 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'replyText',
         type: 'aiOutput',
-        position: { x: 380, y: 400 },
+        position: { x: 6 * STEP, y: 0 },
         data: { label: 'replyText' },
       },
       {
         id: 'send',
         type: 'appAction',
-        position: { x: 0, y: 400 },
+        position: { x: 7 * STEP, y: 0 },
         data: {
           label: 'Send Reply',
           targetApp: 'Email',
@@ -127,31 +130,31 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'trigger',
         type: 'trigger',
-        position: { x: 0, y: 340 },
+        position: { x: 0 * STEP, y: 0 },
         data: { label: 'Plan My Trip' },
       },
       {
         id: 'country',
         type: 'variable',
-        position: { x: 460, y: 0 },
+        position: { x: 1 * STEP, y: 0 },
         data: { label: 'destinationCountry', varType: 'string', value: 'Italy' },
       },
       {
         id: 'transport',
         type: 'variable',
-        position: { x: 460, y: 340 },
+        position: { x: 2 * STEP, y: 0 },
         data: { label: 'transportMode', varType: 'string', value: 'car' },
       },
       {
         id: 'activities',
         type: 'variable',
-        position: { x: 960, y: 0 },
+        position: { x: 3 * STEP, y: 0 },
         data: { label: 'destinationActivities', varType: 'string', value: 'hiking, museums, local food' },
       },
       {
         id: 'stayType',
         type: 'variable',
-        position: { x: 960, y: 340 },
+        position: { x: 4 * STEP, y: 0 },
         data: { label: 'stayType', varType: 'string', value: 'hotel' },
       },
       {
@@ -160,7 +163,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         // of leaving the maps app to ask for the current location.
         id: 'startAddress',
         type: 'variable',
-        position: { x: 460, y: 680 },
+        position: { x: 5 * STEP, y: 0 },
         data: { label: 'startingAddress', varType: 'string', value: 'Home' },
       },
       {
@@ -168,13 +171,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
         // activity suggestion is rejected (no accepted stops to weave in yet).
         id: 'routeActivitiesSeed',
         type: 'variable',
-        position: { x: 960, y: 680 },
+        position: { x: 6 * STEP, y: 0 },
         data: { label: 'routeActivities', varType: 'string', value: '' },
       },
       {
         id: 'planInput',
         type: 'aiInput',
-        position: { x: 1460, y: 340 },
+        position: { x: 7 * STEP, y: 0 },
         data: {
           label: 'planInput',
           value:
@@ -184,7 +187,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 1900, y: 340 },
+        position: { x: 8 * STEP, y: 0 },
         data: {
           label: 'Vacation Planner Agent',
           prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, and accommodation preference.',
@@ -193,19 +196,19 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planModel',
         type: 'aiModel',
-        position: { x: 2040, y: 630 },
+        position: { x: 8 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
-        position: { x: 2340, y: 340 },
+        position: { x: 9 * STEP, y: 0 },
         data: { label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 2800, y: 340 },
+        position: { x: 10 * STEP, y: 0 },
         data: {
           label: 'Suggest Activities',
           activityContext: '{destinationCountry}',
@@ -216,7 +219,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 3260, y: 170 },
+        position: { x: 11 * STEP, y: 0 },
         data: {
           label: 'Google Maps Route',
           mapsProvider: 'google',
@@ -229,7 +232,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 3260, y: 510 },
+        position: { x: 12 * STEP, y: 0 },
         data: {
           label: 'Apple Maps Route',
           mapsProvider: 'apple',
@@ -242,22 +245,18 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ],
     edges: [
       { id: 'e-trigger-country', source: 'trigger', target: 'country' },
-      { id: 'e-trigger-transport', source: 'trigger', target: 'transport' },
-      { id: 'e-trigger-activities', source: 'trigger', target: 'activities' },
-      { id: 'e-trigger-stayType', source: 'trigger', target: 'stayType' },
-      { id: 'e-trigger-startAddress', source: 'trigger', target: 'startAddress' },
-      { id: 'e-trigger-routeActivitiesSeed', source: 'trigger', target: 'routeActivitiesSeed' },
-      { id: 'e-country-planInput', source: 'country', target: 'planInput' },
-      { id: 'e-transport-planInput', source: 'transport', target: 'planInput' },
-      { id: 'e-activities-planInput', source: 'activities', target: 'planInput' },
-      { id: 'e-stayType-planInput', source: 'stayType', target: 'planInput' },
-      { id: 'e-startAddress-planInput', source: 'startAddress', target: 'planInput' },
+      { id: 'e-country-transport', source: 'country', target: 'transport' },
+      { id: 'e-transport-activities', source: 'transport', target: 'activities' },
+      { id: 'e-activities-stayType', source: 'activities', target: 'stayType' },
+      { id: 'e-stayType-startAddress', source: 'stayType', target: 'startAddress' },
+      { id: 'e-startAddress-routeActivitiesSeed', source: 'startAddress', target: 'routeActivitiesSeed' },
+      { id: 'e-routeActivitiesSeed-planInput', source: 'routeActivitiesSeed', target: 'planInput' },
       { id: 'e-planInput-planAgent', source: 'planInput', target: 'planAgent' },
       { id: 'e-planModel-planAgent', source: 'planModel', target: 'planAgent', targetHandle: 'model' },
       { id: 'e-planAgent-vacationPlan', source: 'planAgent', target: 'vacationPlan' },
       { id: 'e-vacationPlan-suggestActivities', source: 'vacationPlan', target: 'suggestActivities' },
       { id: 'e-suggestActivities-googleRoute', source: 'suggestActivities', target: 'googleRoute' },
-      { id: 'e-suggestActivities-appleRoute', source: 'suggestActivities', target: 'appleRoute' },
+      { id: 'e-googleRoute-appleRoute', source: 'googleRoute', target: 'appleRoute' },
     ],
   },
 ]

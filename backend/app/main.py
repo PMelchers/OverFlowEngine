@@ -27,6 +27,7 @@ def on_startup():
         conn.execute(
             text("ALTER TABLE ai_credentials ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false")
         )
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR"))
         conn.commit()
 
 
@@ -69,6 +70,16 @@ class CredentialIn(BaseModel):
     api_key: str
 
 
+class UpdateProfileIn(BaseModel):
+    name: str | None = None
+    email: str | None = None
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class FlowIn(BaseModel):
     name: str
     nodes: list[dict]
@@ -76,7 +87,7 @@ class FlowIn(BaseModel):
 
 
 def _user_out(user: models.User) -> dict:
-    return {"id": user.id, "email": user.email}
+    return {"id": user.id, "email": user.email, "name": user.name}
 
 
 def _mask_key(key: str) -> str:
@@ -124,6 +135,42 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 @app.get("/auth/me")
 def me(current_user: models.User = Depends(auth.get_current_user)):
     return _user_out(current_user)
+
+
+@app.patch("/auth/me")
+def update_profile(
+    body: UpdateProfileIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    if body.name is not None:
+        current_user.name = body.name.strip() or None
+    if body.email is not None:
+        email = body.email.strip().lower()
+        if "@" not in email:
+            raise HTTPException(status_code=400, detail="Enter a valid email address")
+        existing = db.query(models.User).filter(models.User.email == email).first()
+        if existing and existing.id != current_user.id:
+            raise HTTPException(status_code=400, detail="An account with that email already exists")
+        current_user.email = email
+    db.commit()
+    db.refresh(current_user)
+    return _user_out(current_user)
+
+
+@app.post("/auth/change-password")
+def change_password(
+    body: ChangePasswordIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not auth.verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    current_user.password_hash = auth.hash_password(body.new_password)
+    db.commit()
+    return {"status": "ok"}
 
 
 @app.get("/credentials")

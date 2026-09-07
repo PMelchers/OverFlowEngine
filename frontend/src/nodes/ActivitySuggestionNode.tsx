@@ -1,3 +1,4 @@
+import { Lightbulb } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
@@ -34,7 +35,7 @@ export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-orange-500" />
-      <BlockHeader icon="💡" badgeClassName="bg-orange-600">
+      <BlockHeader icon={<Lightbulb className="h-3 w-3" />} badgeClassName="bg-orange-600">
         <input
           type="text"
           value={data.label}

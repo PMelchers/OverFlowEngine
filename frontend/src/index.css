@@ -43,7 +43,7 @@ html.dark body {
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke-width: 3.5px !important;
-  stroke: #ec4899 !important;
+  stroke: #dc2626 !important;
 }
 
 .react-flow__connection-path {

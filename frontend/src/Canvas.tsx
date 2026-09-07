@@ -1,3 +1,16 @@
+import {
+  Blocks,
+  ChevronDown,
+  FolderOpen,
+  Home,
+  Layers,
+  Package,
+  Pencil,
+  Save,
+  Trash2,
+  X,
+  Zap,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -19,7 +32,6 @@ import {
   useNodesState,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import AccountPanel from './AccountPanel'
 import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
 import AuthModal from './AuthModal'
@@ -88,7 +100,7 @@ function AlignmentGuideLines({ guides }: { guides: AlignmentGuides }) {
             top: 0,
             bottom: 0,
             width: 0,
-            borderLeft: '1px dashed #6366f1',
+            borderLeft: '1px dashed #2563eb',
             pointerEvents: 'none',
             zIndex: 20,
           }}
@@ -102,7 +114,7 @@ function AlignmentGuideLines({ guides }: { guides: AlignmentGuides }) {
             left: 0,
             right: 0,
             height: 0,
-            borderTop: '1px dashed #6366f1',
+            borderTop: '1px dashed #2563eb',
             pointerEvents: 'none',
             zIndex: 20,
           }}
@@ -242,7 +254,21 @@ function expandGraph(
   return { nodes: outNodes, edges: outEdges }
 }
 
-function CanvasInner() {
+interface CanvasProps {
+  /** Flow to load into a fresh canvas on mount, e.g. when opened from the dashboard's flow list. */
+  initialFlowId?: number | null
+  /** Template to drop onto a fresh canvas on mount, e.g. from one of the dashboard's quick-start chips. */
+  initialTemplateId?: string | null
+  onExitToDashboard?: () => void
+  onOpenSettings?: () => void
+}
+
+function CanvasInner({
+  initialFlowId = null,
+  initialTemplateId = null,
+  onExitToDashboard,
+  onOpenSettings,
+}: CanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<BlockNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [logs, setLogs] = useState<string[]>([])
@@ -254,7 +280,6 @@ function CanvasInner() {
   const [alignGuides, setAlignGuides] = useState<AlignmentGuides>({})
   const [editingBlock, setEditingBlock] = useState<CustomBlock | null>(null)
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const [accountPanelOpen, setAccountPanelOpen] = useState(false)
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [variablesOpen, setVariablesOpen] = useState(false)
@@ -268,7 +293,7 @@ function CanvasInner() {
   // Smooth, rounded connector lines with a matching arrowhead instead of React Flow's
   // thin default bezier - recomputed only when the theme flips so the color stays readable.
   const defaultEdgeOptions = useMemo<DefaultEdgeOptions>(() => {
-    const stroke = theme === 'dark' ? '#a5b4fc' : '#6366f1'
+    const stroke = theme === 'dark' ? '#93c5fd' : '#2563eb'
     return {
       type: 'smoothstep',
       pathOptions: { borderRadius: 16 },
@@ -955,43 +980,82 @@ function CanvasInner() {
     [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog],
   )
 
+  // Opened straight from a dashboard "Open" click - load that flow onto the (empty) canvas
+  // as soon as we mount. nodesRef.current is always empty at this point, so loadFlow's
+  // "replace the canvas?" confirm never fires here.
+  useEffect(() => {
+    if (initialFlowId == null) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authedFetch(`/flows/${initialFlowId}`)
+        if (!res.ok || cancelled) return
+        const body = await res.json()
+        if (!cancelled) loadFlow(body.nodes, body.edges)
+      } catch {
+        // Ignore - the user just starts from an empty canvas instead.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFlowId])
+
+  // Opened via one of the dashboard's quick-start template chips - drop that template onto
+  // the (empty) canvas as soon as we mount. Guarded by a ref (not just the effect body)
+  // because React 18 StrictMode deliberately runs mount effects twice in dev to surface
+  // exactly this kind of bug - without the guard, insertTemplate had no cleanup to undo
+  // the first run, so the whole template landed on the canvas twice, stacked on top of
+  // itself. The ref survives that mount/cleanup/remount cycle, so only the first run acts.
+  const insertedTemplateRef = useRef(false)
+  useEffect(() => {
+    if (!initialTemplateId || insertedTemplateRef.current) return
+    const template = TEMPLATES.find((t) => t.id === initialTemplateId)
+    if (template) {
+      insertedTemplateRef.current = true
+      insertTemplate(template)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTemplateId])
+
   const canGroup = selectedIds.size >= 2
 
   return (
     <div className="h-screen w-screen flex flex-col dark:bg-gray-900">
       {editingBlock ? (
-        <header className="flex items-center gap-4 border-b border-indigo-300/60 bg-gradient-to-r from-indigo-50 via-indigo-50 to-purple-50 px-5 py-2.5 shadow-sm dark:border-indigo-800/60 dark:from-indigo-950 dark:via-indigo-950 dark:to-purple-950">
+        <header className="flex items-center gap-4 border-b border-blue-300/60 bg-gradient-to-r from-blue-50 via-blue-50 to-red-50 px-5 py-2.5 shadow-sm dark:border-blue-800/60 dark:from-blue-950 dark:via-blue-950 dark:to-red-950">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
-              ✎
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+              <Pencil className="h-4 w-4" />
             </div>
-            <h1 className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">
+            <h1 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
               Editing <span className="font-bold">"{editingBlock.label}"</span>
             </h1>
           </div>
-          <span className="flex-1 truncate text-xs text-indigo-500 dark:text-indigo-300">
+          <span className="flex-1 truncate text-xs text-blue-500 dark:text-blue-300">
             Edit the chain below like any other workflow, then save your changes back to this saved block.
           </span>
           <button
             type="button"
             onClick={saveEditedBlock}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-indigo-700 hover:shadow active:scale-[0.97]"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-blue-700 hover:shadow active:scale-[0.97]"
           >
-            💾 Save Changes
+            <Save className="h-4 w-4" /> Save Changes
           </button>
           <button
             type="button"
             onClick={exitEditMode}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white/70 px-3.5 py-1.5 text-sm font-medium text-indigo-600 shadow-sm transition-all duration-150 hover:bg-white active:scale-[0.97] dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white/70 px-3.5 py-1.5 text-sm font-medium text-blue-600 shadow-sm transition-all duration-150 hover:bg-white active:scale-[0.97] dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900"
           >
-            ✕ Cancel
+            <X className="h-4 w-4" /> Cancel
           </button>
         </header>
       ) : (
         <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
           <div className="flex shrink-0 items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-base leading-none text-white shadow-sm">
-              ⚡
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
+              <Zap className="h-4 w-4" fill="currentColor" />
             </div>
             <div className="leading-tight">
               <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
@@ -1012,9 +1076,9 @@ function CanvasInner() {
                 ref={templatesButtonRef}
                 type="button"
                 onClick={() => setTemplatesOpen((o) => !o)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 shadow-sm transition-all duration-150 hover:border-purple-300 hover:bg-purple-100 hover:shadow active:scale-[0.97] dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300 dark:hover:bg-purple-900"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-all duration-150 hover:border-red-300 hover:bg-red-100 hover:shadow active:scale-[0.97] dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
               >
-                🧩 Templates
+                <Blocks className="h-4 w-4" /> Templates
               </button>
               {templatesOpen &&
                 (() => {
@@ -1052,7 +1116,7 @@ function CanvasInner() {
                               insertTemplate(t)
                               setTemplatesOpen(false)
                             }}
-                            className="cursor-pointer rounded-lg p-2 transition-colors duration-100 hover:bg-purple-50 dark:hover:bg-purple-950"
+                            className="cursor-pointer rounded-lg p-2 transition-colors duration-100 hover:bg-red-50 dark:hover:bg-red-950"
                           >
                             <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
@@ -1069,9 +1133,9 @@ function CanvasInner() {
               type="button"
               onClick={groupSelected}
               disabled={!canGroup}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 shadow-sm transition-all duration-150 hover:border-indigo-300 hover:bg-indigo-100 hover:shadow active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition-all duration-150 hover:border-blue-300 hover:bg-blue-100 hover:shadow active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
             >
-              ⧉ Group{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              <Layers className="h-4 w-4" /> Group{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
             </button>
 
             <button
@@ -1079,36 +1143,45 @@ function CanvasInner() {
               onClick={wipeData}
               className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition-all duration-150 hover:border-red-300 hover:bg-red-100 hover:shadow active:scale-[0.97] dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
             >
-              🗑 Wipe Data
+              <Trash2 className="h-4 w-4" /> Wipe Data
             </button>
 
             <div className="mx-0.5 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
 
+            {onExitToDashboard && (
+              <button
+                type="button"
+                onClick={onExitToDashboard}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <Home className="h-4 w-4" /> Dashboard
+              </button>
+            )}
             {user && (
               <button
                 type="button"
                 onClick={() => setFlowsPanelOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               >
-                💾 My Flows
+                <FolderOpen className="h-4 w-4" /> My Flows
               </button>
             )}
             {user ? (
               <button
                 type="button"
-                onClick={() => setAccountPanelOpen(true)}
+                onClick={() => onOpenSettings?.()}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 text-[9px] font-bold text-white">
-                  {user.email.charAt(0).toUpperCase()}
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-red-500 text-[9px] font-bold text-white">
+                  {(user.name || user.email).charAt(0).toUpperCase()}
                 </span>
-                {user.email}
+                {user.name || user.email}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setAuthModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-gray-700 hover:shadow active:scale-[0.97] dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-blue-700 hover:shadow active:scale-[0.97]"
               >
                 Sign in
               </button>
@@ -1117,7 +1190,6 @@ function CanvasInner() {
         </header>
       )}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
-      {accountPanelOpen && <AccountPanel onClose={() => setAccountPanelOpen(false)} />}
       {flowsPanelOpen && (
         <FlowsPanel onClose={() => setFlowsPanelOpen(false)} onLoad={loadFlow} onSaveCurrent={saveCurrentFlow} />
       )}
@@ -1162,9 +1234,9 @@ function CanvasInner() {
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-3 border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
           {pendingChoice && (
-            <div className="shrink-0 rounded-xl border border-teal-300 bg-gradient-to-br from-teal-50 to-cyan-50 p-3 shadow-sm dark:border-teal-700 dark:from-teal-950 dark:to-cyan-950">
-              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-teal-800 dark:text-teal-200">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] text-white">
+            <div className="shrink-0 rounded-xl border border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-3 shadow-sm dark:border-blue-700 dark:from-blue-950 dark:to-cyan-950">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-blue-800 dark:text-blue-200">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] text-white">
                   ?
                 </span>
                 <span className="truncate">{pendingChoice.label}</span>
@@ -1175,7 +1247,7 @@ function CanvasInner() {
                     key={opt}
                     type="button"
                     onClick={() => resolveChoice(opt)}
-                    className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-teal-700 hover:shadow active:scale-[0.97]"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-blue-700 hover:shadow active:scale-[0.97]"
                   >
                     {opt}
                   </button>
@@ -1191,16 +1263,14 @@ function CanvasInner() {
               className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               <span className="flex items-center gap-1.5">
-                📦 Saved Variables
+                <Package className="h-4 w-4" /> Saved Variables
                 <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
                   {Object.keys(variables).length}
                 </span>
               </span>
-              <span
-                className={`text-xs text-gray-400 transition-transform duration-200 ${variablesOpen ? 'rotate-180' : ''}`}
-              >
-                ▾
-              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${variablesOpen ? 'rotate-180' : ''}`}
+              />
             </button>
             {variablesOpen && (
               <div className="mt-1.5 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -1268,10 +1338,10 @@ function CanvasInner() {
   )
 }
 
-export default function Canvas() {
+export default function Canvas(props: CanvasProps) {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <CanvasInner {...props} />
     </ReactFlowProvider>
   )
 }

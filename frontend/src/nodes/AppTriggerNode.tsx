@@ -1,3 +1,4 @@
+import { Zap } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -14,7 +15,7 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
           : 'border-cyan-400 bg-cyan-50 dark:border-cyan-700 dark:bg-cyan-950'
       }`}
     >
-      <BlockHeader icon="⚡" badgeClassName="bg-cyan-600">
+      <BlockHeader icon={<Zap className="h-3 w-3" />} badgeClassName="bg-cyan-600">
         <input
           type="text"
           value={data.label}
@@ -72,9 +73,9 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
       <button
         type="button"
         onClick={data.onTrigger}
-        className="nodrag mt-2 w-full rounded bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-cyan-700 active:scale-95 active:bg-cyan-800"
+        className="nodrag mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-cyan-700 active:scale-95 active:bg-cyan-800"
       >
-        ⚡ Simulate incoming message
+        <Zap className="h-3.5 w-3.5" /> Simulate incoming message
       </button>
       <p className="mt-1 text-[10px] text-cyan-600 dark:text-cyan-400">
         Preview trigger - simulates a message arriving; a real Teams/Slack connection isn't wired up yet.

@@ -65,7 +65,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {busy ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
         </button>
@@ -78,7 +78,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
               setError(null)
               setMode(mode === 'login' ? 'register' : 'login')
             }}
-            className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            className="font-medium text-blue-600 hover:underline dark:text-blue-400"
           >
             {mode === 'login' ? 'Create one' : 'Sign in'}
           </button>

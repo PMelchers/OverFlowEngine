@@ -1,3 +1,4 @@
+import { GitFork } from 'lucide-react'
 import { useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
@@ -29,7 +30,7 @@ export default function ChoiceNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-teal-600" />
-      <BlockHeader icon="◇" badgeClassName="bg-teal-600">
+      <BlockHeader icon={<GitFork className="h-3 w-3" />} badgeClassName="bg-teal-600">
         <input
           type="text"
           value={data.label}

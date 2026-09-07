@@ -1,3 +1,4 @@
+import { MapPin } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
@@ -41,7 +42,7 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-lime-600" />
-      <BlockHeader icon="🗺" badgeClassName="bg-lime-600">
+      <BlockHeader icon={<MapPin className="h-3 w-3" />} badgeClassName="bg-lime-600">
         <input
           type="text"
           value={data.label}

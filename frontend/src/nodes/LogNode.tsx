@@ -1,3 +1,4 @@
+import { Terminal } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
@@ -34,7 +35,7 @@ export default function LogNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-slate-500" />
-      <BlockHeader icon="»" badgeClassName="bg-slate-600" />
+      <BlockHeader icon={<Terminal className="h-3 w-3" />} badgeClassName="bg-slate-600" />
       <input
         ref={inputRef}
         type="text"

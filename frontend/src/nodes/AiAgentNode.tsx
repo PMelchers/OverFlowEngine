@@ -1,3 +1,4 @@
+import { Bot } from 'lucide-react'
 import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -23,7 +24,7 @@ export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-fuchsia-500" />
-      <BlockHeader icon="◈" badgeClassName="bg-fuchsia-600">
+      <BlockHeader icon={<Bot className="h-3 w-3" />} badgeClassName="bg-fuchsia-600">
         <input
           type="text"
           value={data.label}

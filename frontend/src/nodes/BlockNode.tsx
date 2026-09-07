@@ -1,3 +1,4 @@
+import { Circle } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -15,7 +16,7 @@ export default function BlockNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-gray-400" />
-      <BlockHeader icon="●" badgeClassName="bg-gray-500">
+      <BlockHeader icon={<Circle className="h-3 w-3" />} badgeClassName="bg-gray-500">
         <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{data.label}</span>
       </BlockHeader>
       <Handle type="source" position={Position.Right} className="!bg-gray-400" />

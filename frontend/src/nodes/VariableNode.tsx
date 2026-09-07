@@ -1,3 +1,4 @@
+import { Variable } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -18,7 +19,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-sky-500" />
-      <BlockHeader icon="𝑥" badgeClassName="bg-sky-600" />
+      <BlockHeader icon={<Variable className="h-3 w-3" />} badgeClassName="bg-sky-600" />
 
       <input
         type="text"

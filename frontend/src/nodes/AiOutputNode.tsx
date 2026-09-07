@@ -1,3 +1,4 @@
+import { LogOut } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -15,7 +16,7 @@ export default function AiOutputNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-pink-500" />
-      <BlockHeader icon="OUT" badgeClassName="bg-pink-600" />
+      <BlockHeader icon={<LogOut className="h-3 w-3" />} badgeClassName="bg-pink-600" />
 
       <label className="mb-1 block text-[11px] font-medium text-pink-700 dark:text-pink-300">
         Save agent's reply as

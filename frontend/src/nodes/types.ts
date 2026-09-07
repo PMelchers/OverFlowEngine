@@ -1,3 +1,23 @@
+import {
+  Bot,
+  Circle,
+  Diamond,
+  GitFork,
+  Layers,
+  Lightbulb,
+  ListChecks,
+  LogIn,
+  LogOut,
+  type LucideIcon,
+  MapPin,
+  Play,
+  Reply,
+  Terminal,
+  Variable as VariableIcon,
+  Cpu,
+  Zap,
+} from 'lucide-react'
+
 export type BlockStatus = 'idle' | 'active'
 export type VariableType = 'string' | 'int' | 'boolean'
 
@@ -119,7 +139,7 @@ export interface PaletteItem {
   label: string
   description: string
   color: string
-  icon: string
+  icon: LucideIcon
   badgeClassName: string
   category: PaletteCategory
 }
@@ -127,19 +147,22 @@ export interface PaletteItem {
 export const APP_TRIGGER_SOURCES = ['Microsoft Teams', 'Slack', 'Email', 'Webhook']
 
 export const PALETTE_ITEMS: PaletteItem[] = [
-  { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400', icon: '▶', badgeClassName: 'bg-purple-600', category: 'core' },
-  { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
-  { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: '↩', badgeClassName: 'bg-emerald-600', category: 'core' },
-  { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500', icon: '🗺', badgeClassName: 'bg-lime-600', category: 'core' },
-  { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400', icon: '💡', badgeClassName: 'bg-orange-600', category: 'agentic' },
-  { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: '●', badgeClassName: 'bg-gray-500', category: 'core' },
-  { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: '◆', badgeClassName: 'bg-amber-600', category: 'core' },
-  { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: '☰', badgeClassName: 'bg-amber-600', category: 'core' },
-  { kind: 'variable', label: 'Variable Block', description: 'Declare & update a variable', color: 'bg-sky-100 border-sky-400', icon: '𝑥', badgeClassName: 'bg-sky-600', category: 'core' },
-  { kind: 'log', label: 'Log Block', description: 'Prints a message to the backend console', color: 'bg-slate-200 border-slate-500', icon: '»', badgeClassName: 'bg-slate-600', category: 'core' },
-  { kind: 'choice', label: 'Choice Block', description: 'Pauses and asks the user to pick a path', color: 'bg-teal-100 border-teal-500', icon: '◇', badgeClassName: 'bg-teal-600', category: 'core' },
-  { kind: 'aiInput', label: 'AI Input Block', description: 'Defines the text/data fed into an AI agent', color: 'bg-violet-100 border-violet-400', icon: 'IN', badgeClassName: 'bg-violet-600', category: 'agentic' },
-  { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model connected below it', color: 'bg-fuchsia-100 border-fuchsia-400', icon: '◈', badgeClassName: 'bg-fuchsia-600', category: 'agentic' },
-  { kind: 'aiOutput', label: 'AI Output Block', description: 'Captures what the agent responded with', color: 'bg-pink-100 border-pink-400', icon: 'OUT', badgeClassName: 'bg-pink-600', category: 'agentic' },
-  { kind: 'aiModel', label: 'AI Model', description: 'Unlock with a verified API key, then connect it under an AI Agent block', color: 'bg-fuchsia-50 border-fuchsia-300', icon: '◎', badgeClassName: 'bg-fuchsia-500', category: 'agentic' },
+  { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400', icon: Play, badgeClassName: 'bg-purple-600', category: 'core' },
+  { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: Zap, badgeClassName: 'bg-cyan-600', category: 'core' },
+  { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: Reply, badgeClassName: 'bg-emerald-600', category: 'core' },
+  { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500', icon: MapPin, badgeClassName: 'bg-lime-600', category: 'core' },
+  { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400', icon: Lightbulb, badgeClassName: 'bg-orange-600', category: 'agentic' },
+  { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: Circle, badgeClassName: 'bg-gray-500', category: 'core' },
+  { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: Diamond, badgeClassName: 'bg-amber-600', category: 'core' },
+  { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },
+  { kind: 'variable', label: 'Variable Block', description: 'Declare & update a variable', color: 'bg-sky-100 border-sky-400', icon: VariableIcon, badgeClassName: 'bg-sky-600', category: 'core' },
+  { kind: 'log', label: 'Log Block', description: 'Prints a message to the backend console', color: 'bg-slate-200 border-slate-500', icon: Terminal, badgeClassName: 'bg-slate-600', category: 'core' },
+  { kind: 'choice', label: 'Choice Block', description: 'Pauses and asks the user to pick a path', color: 'bg-teal-100 border-teal-500', icon: GitFork, badgeClassName: 'bg-teal-600', category: 'core' },
+  { kind: 'aiInput', label: 'AI Input Block', description: 'Defines the text/data fed into an AI agent', color: 'bg-violet-100 border-violet-400', icon: LogIn, badgeClassName: 'bg-violet-600', category: 'agentic' },
+  { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model connected below it', color: 'bg-fuchsia-100 border-fuchsia-400', icon: Bot, badgeClassName: 'bg-fuchsia-600', category: 'agentic' },
+  { kind: 'aiOutput', label: 'AI Output Block', description: 'Captures what the agent responded with', color: 'bg-pink-100 border-pink-400', icon: LogOut, badgeClassName: 'bg-pink-600', category: 'agentic' },
+  { kind: 'aiModel', label: 'AI Model', description: 'Unlock with a verified API key, then connect it under an AI Agent block', color: 'bg-fuchsia-50 border-fuchsia-300', icon: Cpu, badgeClassName: 'bg-fuchsia-500', category: 'agentic' },
 ]
+
+/** Icon for the Group block (created via "Group Selected", not dragged from the palette). */
+export const GROUP_ICON: LucideIcon = Layers

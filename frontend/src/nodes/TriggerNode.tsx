@@ -1,3 +1,4 @@
+import { Play } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import GridSnapBox from './GridSnapBox'
 import type { BlockNodeData } from './types'
@@ -17,9 +18,9 @@ export default function TriggerNode({ data }: NodeProps<BlockNodeData>) {
         <button
           type="button"
           onClick={data.onTrigger}
-          className="rounded bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-purple-700 active:scale-95 active:bg-purple-800"
+          className="flex items-center gap-1.5 rounded bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-purple-700 active:scale-95 active:bg-purple-800"
         >
-          ▶ {data.label}
+          <Play className="h-3.5 w-3.5" fill="currentColor" /> {data.label}
         </button>
       </div>
       <Handle type="source" position={Position.Right} className="!bg-purple-500" />

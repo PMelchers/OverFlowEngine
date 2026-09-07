@@ -1,3 +1,4 @@
+import { Reply } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
@@ -39,7 +40,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-emerald-500" />
-      <BlockHeader icon="↩" badgeClassName="bg-emerald-600">
+      <BlockHeader icon={<Reply className="h-3 w-3" />} badgeClassName="bg-emerald-600">
         <input
           type="text"
           value={data.label}

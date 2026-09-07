@@ -1,3 +1,4 @@
+import { Check, Lock, Unlock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { useAuth } from '../auth'
@@ -58,7 +59,7 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
         }`}
         title={locked ? 'Click to unlock with a verified API key' : `${data.provider}: ${data.model ?? 'no model chosen yet'}`}
       >
-        <span className="text-lg leading-none">{locked ? '🔒' : '🔓'}</span>
+        {locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
         <span className="mt-1 max-w-[4.5rem] truncate px-1 text-[10px] font-medium leading-tight">
           {displayText}
         </span>
@@ -85,9 +86,10 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
                       <button
                         type="button"
                         onClick={() => unlock(c)}
-                        className="w-full rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50 dark:text-gray-200 dark:hover:bg-fuchsia-950"
+                        className="flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs hover:bg-fuchsia-50 dark:text-gray-200 dark:hover:bg-fuchsia-950"
                       >
-                        ✓ {c.label} <span className="text-gray-400 dark:text-gray-500">({c.provider})</span>
+                        <Check className="h-3 w-3 shrink-0" /> {c.label}{' '}
+                        <span className="text-gray-400 dark:text-gray-500">({c.provider})</span>
                       </button>
                     </li>
                   ))}
@@ -123,9 +125,9 @@ export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
               <button
                 type="button"
                 onClick={relock}
-                className="mt-1 w-full rounded px-2 py-1 text-left text-xs text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                className="mt-1 flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
               >
-                🔒 Lock / change key
+                <Lock className="h-3 w-3" /> Lock / change key
               </button>
             </>
           )}

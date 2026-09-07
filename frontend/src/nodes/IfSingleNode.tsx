@@ -1,3 +1,4 @@
+import { Check, Diamond, X } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import ConditionRow, { emptyCondition } from './ConditionRow'
@@ -22,7 +23,7 @@ export default function IfSingleNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-amber-500" />
-      <BlockHeader icon="◆" badgeClassName="bg-amber-600">
+      <BlockHeader icon={<Diamond className="h-3 w-3" />} badgeClassName="bg-amber-600">
         <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">If this is true...</span>
       </BlockHeader>
       <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">
@@ -32,11 +33,11 @@ export default function IfSingleNode({ data }: NodeProps<BlockNodeData>) {
       <ConditionRow cond={cond} availableVariables={availableVariables} onUpdate={update} />
 
       <div className="mt-2 flex justify-between text-xs font-semibold">
-        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900 dark:text-green-300">
-          ✓ Yes
+        <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-700 dark:bg-green-900 dark:text-green-300">
+          <Check className="h-3 w-3" /> Yes
         </span>
-        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600 dark:bg-red-900 dark:text-red-300">
-          ✗ No
+        <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-600 dark:bg-red-900 dark:text-red-300">
+          <X className="h-3 w-3" /> No
         </span>
       </div>
       <Handle

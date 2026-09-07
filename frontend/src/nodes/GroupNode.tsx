@@ -1,3 +1,4 @@
+import { Layers } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -16,7 +17,7 @@ export default function GroupNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-indigo-500" />
-      <BlockHeader icon="⬡" badgeClassName="bg-indigo-600" />
+      <BlockHeader icon={<Layers className="h-3 w-3" />} badgeClassName="bg-indigo-600" />
       <input
         type="text"
         value={data.label}

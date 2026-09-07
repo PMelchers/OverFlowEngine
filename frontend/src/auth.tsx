@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 
 const API_BASE = 'http://localhost:8000'
 
-export type AuthUser = { id: number; email: string }
+export type AuthUser = { id: number; email: string; name: string | null }
 
 type AuthContextValue = {
   token: string | null
@@ -11,6 +11,8 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>
+  updateProfile: (patch: { name?: string; email?: string }) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -35,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('overflow.authToken', nextToken)
     localStorage.setItem('overflow.authUser', JSON.stringify(nextUser))
     setToken(nextToken)
+    setUser(nextUser)
+  }, [])
+
+  const persistUser = useCallback((nextUser: AuthUser) => {
+    localStorage.setItem('overflow.authUser', JSON.stringify(nextUser))
     setUser(nextUser)
   }, [])
 
@@ -82,9 +89,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [token],
   )
 
+  const updateProfile = useCallback(
+    async (patch: { name?: string; email?: string }) => {
+      const res = await authedFetch('/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error(await parseErrorMessage(res, 'Could not update your profile'))
+      persistUser(await res.json())
+    },
+    [authedFetch, persistUser],
+  )
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const res = await authedFetch('/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      })
+      if (!res.ok) throw new Error(await parseErrorMessage(res, 'Could not change your password'))
+    },
+    [authedFetch],
+  )
+
   const value = useMemo(
-    () => ({ token, user, register, login, logout, authedFetch }),
-    [token, user, register, login, logout, authedFetch],
+    () => ({ token, user, register, login, logout, authedFetch, updateProfile, changePassword }),
+    [token, user, register, login, logout, authedFetch, updateProfile, changePassword],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,3 +1,4 @@
+import { LogIn } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
@@ -15,7 +16,7 @@ export default function AiInputNode({ data }: NodeProps<BlockNodeData>) {
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-violet-500" />
-      <BlockHeader icon="IN" badgeClassName="bg-violet-600">
+      <BlockHeader icon={<LogIn className="h-3 w-3" />} badgeClassName="bg-violet-600">
         <input
           type="text"
           value={data.label}

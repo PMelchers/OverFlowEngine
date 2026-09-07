@@ -1,6 +1,7 @@
+import { Pencil, X } from 'lucide-react'
 import { useState } from 'react'
 import BlockHeader from './nodes/BlockHeader'
-import { PALETTE_ITEMS, type BlockKind, type PaletteCategory } from './nodes/types'
+import { GROUP_ICON, PALETTE_ITEMS, type BlockKind, type PaletteCategory } from './nodes/types'
 import type { CustomBlock } from './customBlocks'
 
 export const DRAG_DATA_FORMAT = 'application/overflowengine-block'
@@ -79,8 +80,8 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
             className={`flex-1 py-1 ${
               tab === t.key
                 ? t.key === 'agentic'
-                  ? 'bg-fuchsia-600 text-white'
-                  : 'bg-gray-700 text-white'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-blue-600 text-white'
                 : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
@@ -104,7 +105,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
             onDragStart={(e) => onDragStart(e, item.kind)}
             className={`cursor-grab rounded-lg border-2 px-3 py-2 text-sm shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${item.color}`}
           >
-            <BlockHeader icon={item.icon} badgeClassName={item.badgeClassName}>
+            <BlockHeader icon={<item.icon className="h-3 w-3" />} badgeClassName={item.badgeClassName}>
               <span className="font-medium text-gray-800">{item.label}</span>
             </BlockHeader>
             {showDescriptions && <div className="text-xs text-gray-500">{item.description}</div>}
@@ -128,7 +129,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
               onDragStart={(e) => onDragStartCustom(e, block.id)}
               className="group relative cursor-grab rounded-lg border-2 border-indigo-400 bg-indigo-50 px-3 py-2 text-sm shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing dark:border-indigo-700 dark:bg-indigo-950"
             >
-              <BlockHeader icon="⬡" badgeClassName="bg-indigo-600">
+              <BlockHeader icon={<GROUP_ICON className="h-3 w-3" />} badgeClassName="bg-indigo-600">
                 <span className="font-medium text-gray-800 dark:text-gray-100">{block.label}</span>
               </BlockHeader>
               {showDescriptions && (
@@ -144,9 +145,9 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
                     e.stopPropagation()
                     onEditCustomBlock(block)
                   }}
-                  className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-indigo-100 hover:text-indigo-600"
+                  className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-blue-100 hover:text-blue-600"
                 >
-                  ✎
+                  <Pencil className="h-3 w-3" />
                 </button>
                 <button
                   type="button"
@@ -157,7 +158,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
                   }}
                   className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-red-100 hover:text-red-600"
                 >
-                  ×
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             </div>

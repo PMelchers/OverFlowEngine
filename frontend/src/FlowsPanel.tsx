@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from './auth'
 import type { SubgraphEdge, SubgraphNode } from './nodes/types'
@@ -85,7 +86,7 @@ export default function FlowsPanel({
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
-            ✕
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -106,7 +107,7 @@ export default function FlowsPanel({
                     type="button"
                     onClick={() => handleLoad(f.id)}
                     disabled={loadingId === f.id}
-                    className="text-indigo-600 hover:text-indigo-800 disabled:opacity-50 dark:text-indigo-400 dark:hover:text-indigo-300"
+                    className="text-blue-600 hover:text-blue-800 disabled:opacity-50 dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     {loadingId === f.id ? 'Loading...' : 'Load'}
                   </button>
@@ -116,7 +117,7 @@ export default function FlowsPanel({
                     className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     title="Delete"
                   >
-                    ×
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </span>
               </li>
@@ -137,7 +138,7 @@ export default function FlowsPanel({
           <button
             type="submit"
             disabled={saving}
-            className="w-full rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save current canvas as new flow'}
           </button>
