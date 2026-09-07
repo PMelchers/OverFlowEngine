@@ -86,6 +86,12 @@ export interface BlockNodeData {
   destination?: string
   travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
   // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
+  // activity-suggestion block (AI suggests stops along a route; console-logged, added to the
+  // route only if accepted) - reuses `outputVariable` for the variable name the accepted
+  // suggestion is saved into, which a downstream Maps Route block can weave into its Destination
+  // with e.g. "{destinationCountry}, via {routeActivities}"
+  activityContext?: string
+  interests?: string
 }
 
 export type BlockKind =
@@ -104,6 +110,7 @@ export type BlockKind =
   | 'aiModel'
   | 'appAction'
   | 'mapsAction'
+  | 'activitySuggestion'
 
 export type PaletteCategory = 'core' | 'agentic'
 
@@ -124,6 +131,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow with input from another app (e.g. Teams, Outlook)', color: 'bg-cyan-100 border-cyan-400', icon: '⚡', badgeClassName: 'bg-cyan-600', category: 'core' },
   { kind: 'appAction', label: 'App Action', description: 'Sends a message back out to another app (e.g. reply by email)', color: 'bg-emerald-100 border-emerald-400', icon: '↩', badgeClassName: 'bg-emerald-600', category: 'core' },
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500', icon: '🗺', badgeClassName: 'bg-lime-600', category: 'core' },
+  { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400', icon: '💡', badgeClassName: 'bg-orange-600', category: 'agentic' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300', icon: '●', badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400', icon: '◆', badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: '☰', badgeClassName: 'bg-amber-600', category: 'core' },

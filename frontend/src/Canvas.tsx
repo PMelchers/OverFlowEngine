@@ -19,6 +19,7 @@ import {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import AccountPanel from './AccountPanel'
+import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
 import AuthModal from './AuthModal'
 import { useAuth } from './auth'
@@ -56,6 +57,7 @@ const nodeTypes = {
   appTrigger: AppTriggerNode,
   appAction: AppActionNode,
   mapsAction: MapsActionNode,
+  activitySuggestion: ActivitySuggestionNode,
   block: BlockNode,
   ifOne: IfSingleNode,
   if: IfNode,
@@ -176,6 +178,8 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
     case 'mapsAction':
       return { label, mapsProvider: 'google', origin: '', destination: '', travelMode: 'driving', outputVariable: '' }
+    case 'activitySuggestion':
+      return { label, activityContext: '', interests: '', outputVariable: '' }
     default:
       return { label }
   }
@@ -252,10 +256,12 @@ function CanvasInner() {
   const [accountPanelOpen, setAccountPanelOpen] = useState(false)
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [variablesOpen, setVariablesOpen] = useState(false)
   const { user, authedFetch } = useAuth()
   const { theme } = useTheme()
   const { screenToFlowPosition, fitView } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const consoleRef = useRef<HTMLDivElement>(null)
 
   // Smooth, rounded connector lines with a matching arrowhead instead of React Flow's
   // thin default bezier - recomputed only when the theme flips so the color stays readable.
@@ -320,7 +326,12 @@ function CanvasInner() {
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
+        n.type === 'if' ||
+        n.type === 'ifOne' ||
+        n.type === 'log' ||
+        n.type === 'appAction' ||
+        n.type === 'mapsAction' ||
+        n.type === 'activitySuggestion'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -330,6 +341,10 @@ function CanvasInner() {
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
   }, [])
+
+  useEffect(() => {
+    consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight })
+  }, [logs])
 
   const updateNodeData = useCallback(
     (id: string, patch: Partial<BlockNodeData>) => {
@@ -544,7 +559,12 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(id, patch),
           ...(TRIGGER_NODE_TYPES.has(kind) ? { onTrigger: runWorkflow } : {}),
-          ...(kind === 'if' || kind === 'ifOne' || kind === 'log' || kind === 'appAction' || kind === 'mapsAction'
+          ...(kind === 'if' ||
+          kind === 'ifOne' ||
+          kind === 'log' ||
+          kind === 'appAction' ||
+          kind === 'mapsAction' ||
+          kind === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -601,7 +621,12 @@ function CanvasInner() {
             status: 'idle',
             onChange: (patch) => updateNodeData(id, patch),
             ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
-            ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
+            ...(n.type === 'if' ||
+            n.type === 'ifOne' ||
+            n.type === 'log' ||
+            n.type === 'appAction' ||
+            n.type === 'mapsAction' ||
+            n.type === 'activitySuggestion'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
           },
@@ -754,7 +779,12 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(sn.id, patch),
           ...(TRIGGER_NODE_TYPES.has(sn.type) ? { onTrigger: runWorkflow } : {}),
-          ...(sn.type === 'if' || sn.type === 'ifOne' || sn.type === 'log' || sn.type === 'appAction' || sn.type === 'mapsAction'
+          ...(sn.type === 'if' ||
+          sn.type === 'ifOne' ||
+          sn.type === 'log' ||
+          sn.type === 'appAction' ||
+          sn.type === 'mapsAction' ||
+          sn.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -890,7 +920,12 @@ function CanvasInner() {
           status: 'idle',
           onChange: (patch) => updateNodeData(n.id, patch),
           ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
-          ...(n.type === 'if' || n.type === 'ifOne' || n.type === 'log' || n.type === 'appAction' || n.type === 'mapsAction'
+          ...(n.type === 'if' ||
+          n.type === 'ifOne' ||
+          n.type === 'log' ||
+          n.type === 'appAction' ||
+          n.type === 'mapsAction' ||
+          n.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
         },
@@ -916,110 +951,137 @@ function CanvasInner() {
   return (
     <div className="h-screen w-screen flex flex-col dark:bg-gray-900">
       {editingBlock ? (
-        <header className="flex items-center gap-4 border-b border-2 border-indigo-400 bg-indigo-50 px-4 py-2 dark:border-indigo-800 dark:bg-indigo-950">
-          <h1 className="text-lg font-semibold text-indigo-800 dark:text-indigo-200">
-            ✎ Editing "{editingBlock.label}"
-          </h1>
-          <span className="flex-1 text-sm text-indigo-600 dark:text-indigo-300">
+        <header className="flex items-center gap-4 border-b border-indigo-300/60 bg-gradient-to-r from-indigo-50 via-indigo-50 to-purple-50 px-5 py-2.5 shadow-sm dark:border-indigo-800/60 dark:from-indigo-950 dark:via-indigo-950 dark:to-purple-950">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+              ✎
+            </div>
+            <h1 className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">
+              Editing <span className="font-bold">"{editingBlock.label}"</span>
+            </h1>
+          </div>
+          <span className="flex-1 truncate text-xs text-indigo-500 dark:text-indigo-300">
             Edit the chain below like any other workflow, then save your changes back to this saved block.
           </span>
           <button
             type="button"
             onClick={saveEditedBlock}
-            className="rounded bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-indigo-700 hover:shadow active:scale-[0.97]"
           >
             💾 Save Changes
           </button>
           <button
             type="button"
             onClick={exitEditMode}
-            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white/70 px-3.5 py-1.5 text-sm font-medium text-indigo-600 shadow-sm transition-all duration-150 hover:bg-white active:scale-[0.97] dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900"
           >
             ✕ Cancel
           </button>
         </header>
       ) : (
-        <header className="flex items-center gap-4 border-b border-gray-200 px-4 py-2 dark:border-gray-700 dark:bg-gray-900">
-          <h1 className="text-lg font-semibold dark:text-gray-100">OverFlowEngine</h1>
-          <span className="flex-1 text-sm text-gray-500 dark:text-gray-400">
-            Drag blocks from the left onto the canvas. Ctrl/Shift-click or drag-select multiple blocks, then
-            group them into one reusable block. Click the Start button to run the workflow.
+        <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+          <div className="flex shrink-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-base leading-none text-white shadow-sm">
+              ⚡
+            </div>
+            <div className="leading-tight">
+              <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
+                OverFlowEngine
+              </h1>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">Visual agentic workflow builder</p>
+            </div>
+          </div>
+
+          <span className="hidden flex-1 truncate text-xs text-gray-400 dark:text-gray-500 xl:block">
+            Drag blocks from the left onto the canvas, Ctrl/Shift-click to select several, then group them into
+            one reusable block. Click Start to run the workflow.
           </span>
-          <div className="relative">
+
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setTemplatesOpen((o) => !o)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 shadow-sm transition-all duration-150 hover:border-purple-300 hover:bg-purple-100 hover:shadow active:scale-[0.97] dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300 dark:hover:bg-purple-900"
+              >
+                🧩 Templates
+              </button>
+              {templatesOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-800">
+                    <p className="mb-1 px-2 pt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                      Click to drop into the canvas, or drag it to place exactly where you want.
+                    </p>
+                    {TEMPLATES.map((t) => (
+                      <div
+                        key={t.id}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData(DRAG_DATA_FORMAT, TEMPLATE_DRAG_PREFIX + t.id)}
+                        onClick={() => {
+                          insertTemplate(t)
+                          setTemplatesOpen(false)
+                        }}
+                        className="cursor-grab rounded-lg p-2 transition-colors duration-100 hover:bg-purple-50 dark:hover:bg-purple-950"
+                      >
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => setTemplatesOpen((o) => !o)}
-              className="rounded border border-purple-300 px-3 py-1 text-sm font-medium text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950"
+              onClick={groupSelected}
+              disabled={!canGroup}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 shadow-sm transition-all duration-150 hover:border-indigo-300 hover:bg-indigo-100 hover:shadow active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900"
             >
-              🧩 Templates
+              ⧉ Group{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
             </button>
-            {templatesOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
-                <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                  <p className="mb-1 px-1 text-[11px] text-gray-400 dark:text-gray-500">
-                    Click to drop into the canvas, or drag it to place exactly where you want.
-                  </p>
-                  {TEMPLATES.map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData(DRAG_DATA_FORMAT, TEMPLATE_DRAG_PREFIX + t.id)}
-                      onClick={() => {
-                        insertTemplate(t)
-                        setTemplatesOpen(false)
-                      }}
-                      className="cursor-grab rounded p-2 hover:bg-purple-50 dark:hover:bg-purple-950"
-                    >
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{t.label}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
+
+            <button
+              type="button"
+              onClick={wipeData}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm transition-all duration-150 hover:border-red-300 hover:bg-red-100 hover:shadow active:scale-[0.97] dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+            >
+              🗑 Wipe Data
+            </button>
+
+            <div className="mx-0.5 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700" />
+
+            {user && (
+              <button
+                type="button"
+                onClick={() => setFlowsPanelOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                💾 My Flows
+              </button>
+            )}
+            {user ? (
+              <button
+                type="button"
+                onClick={() => setAccountPanelOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500 text-[9px] font-bold text-white">
+                  {user.email.charAt(0).toUpperCase()}
+                </span>
+                {user.email}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAuthModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-gray-700 hover:shadow active:scale-[0.97] dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+              >
+                Sign in
+              </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={groupSelected}
-            disabled={!canGroup}
-            className="rounded border border-indigo-300 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-950"
-          >
-            Group Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
-          </button>
-          <button
-            type="button"
-            onClick={wipeData}
-            className="rounded border border-red-300 px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-          >
-            Wipe Saved Data
-          </button>
-          {user && (
-            <button
-              type="button"
-              onClick={() => setFlowsPanelOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              💾 My Flows
-            </button>
-          )}
-          {user ? (
-            <button
-              type="button"
-              onClick={() => setAccountPanelOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              👤 {user.email}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAuthModalOpen(true)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              Sign in
-            </button>
-          )}
         </header>
       )}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
@@ -1065,11 +1127,14 @@ function CanvasInner() {
             ))}
           </datalist>
         </div>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+        <aside className="flex w-80 shrink-0 flex-col gap-3 border-l border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
           {pendingChoice && (
-            <div className="mb-4 rounded-lg border-2 border-teal-500 bg-teal-50 p-3 dark:border-teal-700 dark:bg-teal-950">
-              <p className="mb-2 text-sm font-semibold text-teal-800 dark:text-teal-200">
-                Choose a path: {pendingChoice.label}
+            <div className="shrink-0 rounded-xl border border-teal-300 bg-gradient-to-br from-teal-50 to-cyan-50 p-3 shadow-sm dark:border-teal-700 dark:from-teal-950 dark:to-cyan-950">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-teal-800 dark:text-teal-200">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] text-white">
+                  ?
+                </span>
+                <span className="truncate">{pendingChoice.label}</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {pendingChoice.options.map((opt) => (
@@ -1077,7 +1142,7 @@ function CanvasInner() {
                     key={opt}
                     type="button"
                     onClick={() => resolveChoice(opt)}
-                    className="rounded bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700 active:bg-teal-800"
+                    className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-teal-700 hover:shadow active:scale-[0.97]"
                   >
                     {opt}
                   </button>
@@ -1086,37 +1151,84 @@ function CanvasInner() {
             </div>
           )}
 
-          <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Saved Variables</h2>
-          {Object.keys(variables).length === 0 && (
-            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">Nothing saved yet.</p>
-          )}
-          <ul className="mb-4 space-y-1">
-            {Object.entries(variables).map(([name, v]) => (
-              <li key={name} className="font-mono text-xs text-gray-600 dark:text-gray-400">
-                {name} = {v.value} <span className="text-gray-400 dark:text-gray-500">({v.type})</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Activation Log</h2>
+          <div className="shrink-0">
             <button
               type="button"
-              onClick={() => setLogs([])}
-              disabled={logs.length === 0}
-              className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              onClick={() => setVariablesOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
             >
-              Clear Log
+              <span className="flex items-center gap-1.5">
+                📦 Saved Variables
+                <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+                  {Object.keys(variables).length}
+                </span>
+              </span>
+              <span
+                className={`text-xs text-gray-400 transition-transform duration-200 ${variablesOpen ? 'rotate-180' : ''}`}
+              >
+                ▾
+              </span>
             </button>
+            {variablesOpen && (
+              <div className="mt-1.5 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                {Object.keys(variables).length === 0 ? (
+                  <p className="p-3 text-sm text-gray-400 dark:text-gray-500">Nothing saved yet.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {Object.entries(variables).map(([name, v]) => (
+                      <li key={name} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span
+                          className="shrink-0 truncate font-mono text-xs font-medium text-gray-700 dark:text-gray-200"
+                          title={name}
+                        >
+                          {name}
+                        </span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="truncate font-mono text-xs text-gray-500 dark:text-gray-400"
+                            title={v.value}
+                          >
+                            {v.value}
+                          </span>
+                          <span className="shrink-0 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:bg-gray-700 dark:text-gray-400">
+                            {v.type}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
-          {logs.length === 0 && <p className="text-sm text-gray-400 dark:text-gray-500">No activity yet.</p>}
-          <ul className="space-y-1">
-            {logs.map((entry, i) => (
-              <li key={i} className="font-mono text-xs text-gray-600 dark:text-gray-400">
-                {entry}
-              </li>
-            ))}
-          </ul>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-sm">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-3 py-2">
+              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_2px_rgba(16,185,129,0.5)]" />
+                Console
+              </span>
+              <button
+                type="button"
+                onClick={() => setLogs([])}
+                disabled={logs.length === 0}
+                className="rounded-md border border-gray-700 px-2 py-0.5 text-[11px] font-medium text-gray-400 transition-colors duration-150 hover:border-gray-600 hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                Clear
+              </button>
+            </div>
+            <div ref={consoleRef} className="console-scroll flex-1 overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed">
+              {logs.length === 0 ? (
+                <p className="text-gray-600">No activity yet - run the workflow to see it here.</p>
+              ) : (
+                logs.map((entry, i) => (
+                  <p key={i} className="whitespace-pre-wrap break-words text-gray-300">
+                    <span className="text-emerald-500">›</span> {entry}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
         </aside>
       </div>
     </div>

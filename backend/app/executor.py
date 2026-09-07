@@ -218,6 +218,42 @@ def _advance(db: Session, state: dict) -> dict:
             )
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
+        elif ntype == "activitySuggestion":
+            context = _render_message(data.get("activityContext", ""), eval_vars)
+            interests = _render_message(data.get("interests", ""), eval_vars)
+            # Simulated AI "thinking" about the route, in the same style as the AI Agent
+            # block until real model calls are wired up - a plausible-looking suggestion
+            # built from the route context rather than a live model response.
+            # Kept as a short, comma-separated stop list (not a full sentence) so it can be
+            # dropped straight into a Maps Route block's Destination if accepted.
+            if interests:
+                stops = f"a scenic viewpoint, a spot known for {interests}, and a notable landmark"
+            else:
+                stops = "a scenic viewpoint, a well-reviewed local café, and a notable landmark"
+            suggestion_message = f"Along the way to {context or 'your destination'}, consider: {stops}."
+            logger.info(f"[SUGGESTION] {suggestion_message}")
+            print(f"[OverFlowEngine][SUGGESTION] {suggestion_message}")
+            output_var = (data.get("outputVariable") or "").strip()
+            steps.append(
+                {
+                    "node_id": node_id,
+                    "type": ntype,
+                    "label": label,
+                    "message": f'"{label}" suggests: {suggestion_message}',
+                    "options": ["Accept", "Reject"],
+                }
+            )
+            state["awaiting_node"] = node_id
+            state["awaiting_suggestion"] = {"text": stops, "output_var": output_var}
+            return {
+                "status": "awaiting_choice",
+                "node_id": node_id,
+                "label": label,
+                "options": ["Accept", "Reject"],
+                "steps": flush_new_steps(),
+                "variables": _variables_snapshot(db),
+            }
+
         elif ntype == "mapsAction":
             provider = (data.get("mapsProvider") or "google").strip().lower()
             origin = _render_message(data.get("origin", ""), eval_vars)
@@ -293,14 +329,33 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
         return {"status": "error", "message": "this run is not waiting on a choice", "steps": [], "variables": {}}
 
     node = state["node_by_id"].get(node_id, {})
+    ntype = node.get("type", "choice")
     label = (node.get("data") or {}).get("label", node_id)
 
-    matching = [e for e in state["adjacency"].get(node_id, []) if (e.get("sourceHandle") or "") == choice]
-    state["steps"].append(
-        {"node_id": node_id, "type": "choice", "label": label, "message": f'Choice made at "{label}": "{choice}"'}
-    )
-    for e in matching:
-        state["queue"].append(e["target"])
+    if ntype == "activitySuggestion":
+        pending = state.pop("awaiting_suggestion", None)
+        accepted = choice.strip().lower() == "accept"
+        if accepted and pending and pending.get("output_var"):
+            _upsert_variable(db, pending["output_var"], "string", pending["text"])
+            state["eval_vars"][pending["output_var"]] = pending["text"]
+            message = f'Accepted the suggestion at "{label}" - saved to "{pending["output_var"]}" for the route to pick up'
+        elif accepted:
+            message = f'Accepted the suggestion at "{label}", but it has no output variable configured to save into'
+        else:
+            message = f'Declined the suggestion at "{label}" - route left unchanged'
+        state["steps"].append({"node_id": node_id, "type": ntype, "label": label, "message": message})
+        # Suggestions don't branch the flow - accept/reject only decides whether the
+        # variable gets populated, so every outgoing edge continues either way.
+        for e in state["adjacency"].get(node_id, []):
+            state["queue"].append(e["target"])
+    else:
+        state.pop("awaiting_suggestion", None)
+        matching = [e for e in state["adjacency"].get(node_id, []) if (e.get("sourceHandle") or "") == choice]
+        state["steps"].append(
+            {"node_id": node_id, "type": "choice", "label": label, "message": f'Choice made at "{label}": "{choice}"'}
+        )
+        for e in matching:
+            state["queue"].append(e["target"])
     state.pop("awaiting_node", None)
 
     result = _advance(db, state)
