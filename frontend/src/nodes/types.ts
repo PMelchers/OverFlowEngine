@@ -6,6 +6,7 @@ import {
   Layers,
   Lightbulb,
   ListChecks,
+  ListTodo,
   LogIn,
   LogOut,
   type LucideIcon,
@@ -71,6 +72,8 @@ export interface BlockNodeData {
   value?: string
   // log-block
   message?: string
+  // task-block (adds a small to-do item to the signed-in user's dashboard when it runs)
+  title?: string
   // choice-block
   options?: string[]
   // group-block
@@ -122,6 +125,7 @@ export type BlockKind =
   | 'if'
   | 'variable'
   | 'log'
+  | 'task'
   | 'choice'
   | 'group'
   | 'aiAgent'
@@ -157,6 +161,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'variable', label: 'Variable Block', description: 'Declare & update a variable', color: 'bg-sky-100 border-sky-400', icon: VariableIcon, badgeClassName: 'bg-sky-600', category: 'core' },
   { kind: 'log', label: 'Log Block', description: 'Prints a message to the backend console', color: 'bg-slate-200 border-slate-500', icon: Terminal, badgeClassName: 'bg-slate-600', category: 'core' },
+  { kind: 'task', label: 'Task Block', description: 'Adds a small task to your dashboard when it runs (only while signed in)', color: 'bg-rose-100 border-rose-400', icon: ListTodo, badgeClassName: 'bg-rose-600', category: 'core' },
   { kind: 'choice', label: 'Choice Block', description: 'Pauses and asks the user to pick a path', color: 'bg-teal-100 border-teal-500', icon: GitFork, badgeClassName: 'bg-teal-600', category: 'core' },
   { kind: 'aiInput', label: 'AI Input Block', description: 'Defines the text/data fed into an AI agent', color: 'bg-violet-100 border-violet-400', icon: LogIn, badgeClassName: 'bg-violet-600', category: 'agentic' },
   { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model connected below it', color: 'bg-fuchsia-100 border-fuchsia-400', icon: Bot, badgeClassName: 'bg-fuchsia-600', category: 'agentic' },

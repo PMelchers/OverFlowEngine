@@ -141,6 +141,22 @@ def _advance(db: Session, state: dict) -> dict:
             print(f"[OverFlowEngine] {rendered}")
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": f"[LOG] {rendered}"})
 
+        elif ntype == "task":
+            title = _render_message(data.get("title", ""), eval_vars).strip()
+            user_id = state.get("user_id")
+            if not title:
+                message = f'"{label}" has no task title configured, skipping'
+            elif user_id is None:
+                message = (
+                    f'"{label}" would add the task "{title}", but this run is anonymous - '
+                    "sign in before running the workflow so it lands on your dashboard"
+                )
+            else:
+                db.add(models.Task(user_id=user_id, title=title))
+                db.commit()
+                message = f'"{label}" added a task to your dashboard: "{title}"'
+            steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
+
         elif ntype == "aiInput":
             rendered = _render_message(data.get("value", ""), eval_vars)
             ai_io["input"] = rendered
@@ -289,7 +305,7 @@ def _advance(db: Session, state: dict) -> dict:
     return {"status": "completed", "run_id": run.id, "steps": flush_new_steps(), "variables": variables_snapshot}
 
 
-def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
+def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int | None = None) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
     incoming: dict[str, list[dict]] = {}
@@ -309,6 +325,9 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict]) -> dict:
         "visited": set(),
         "steps": [{"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow triggered"}],
         "ai_io": {"input": None},
+        # Only set when the run was made while signed in - lets a Task block save
+        # tasks to that user's dashboard. Anonymous runs still work, tasks just aren't saved.
+        "user_id": user_id,
     }
 
     result = _advance(db, state)

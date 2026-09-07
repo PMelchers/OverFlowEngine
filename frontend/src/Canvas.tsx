@@ -7,6 +7,7 @@ import {
   Package,
   Pencil,
   Save,
+  Store,
   Trash2,
   X,
   Zap,
@@ -58,6 +59,7 @@ import IfNode from './nodes/IfNode'
 import IfSingleNode from './nodes/IfSingleNode'
 import LogNode from './nodes/LogNode'
 import MapsActionNode from './nodes/MapsActionNode'
+import TaskNode from './nodes/TaskNode'
 import TriggerNode from './nodes/TriggerNode'
 import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
 import VariableNode from './nodes/VariableNode'
@@ -76,6 +78,7 @@ const nodeTypes = {
   if: IfNode,
   variable: VariableNode,
   log: LogNode,
+  task: TaskNode,
   choice: ChoiceNode,
   group: GroupNode,
   aiAgent: AiAgentNode,
@@ -175,6 +178,8 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { label: 'myVar', varType: 'string', value: '' }
     case 'log':
       return { label, message: '' }
+    case 'task':
+      return { label, title: '' }
     case 'choice':
       return { label, options: [] }
     case 'aiAgent':
@@ -261,6 +266,7 @@ interface CanvasProps {
   initialTemplateId?: string | null
   onExitToDashboard?: () => void
   onOpenSettings?: () => void
+  onOpenMarketplace?: () => void
 }
 
 function CanvasInner({
@@ -268,6 +274,7 @@ function CanvasInner({
   initialTemplateId = null,
   onExitToDashboard,
   onOpenSettings,
+  onOpenMarketplace,
 }: CanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<BlockNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -356,6 +363,7 @@ function CanvasInner({
         n.type === 'if' ||
         n.type === 'ifOne' ||
         n.type === 'log' ||
+        n.type === 'task' ||
         n.type === 'appAction' ||
         n.type === 'mapsAction' ||
         n.type === 'activitySuggestion'
@@ -468,7 +476,9 @@ function CanvasInner({
 
     let result: RunResult
     try {
-      const res = await fetch(`${API_BASE}/workflows/run`, {
+      // authedFetch, not plain fetch - so a Task block can attribute the tasks it
+      // creates to the signed-in user. Anonymous runs still work fine (no header sent).
+      const res = await authedFetch('/workflows/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -485,7 +495,7 @@ function CanvasInner({
     }
 
     await playResult(result)
-  }, [running, addLog, playResult])
+  }, [running, addLog, playResult, authedFetch])
 
   const resolveChoice = useCallback(
     async (option: string) => {
@@ -495,7 +505,7 @@ function CanvasInner({
 
       let result: RunResult
       try {
-        const res = await fetch(`${API_BASE}/workflows/continue`, {
+        const res = await authedFetch('/workflows/continue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ run_id: runId, choice: option }),
@@ -510,7 +520,7 @@ function CanvasInner({
 
       await playResult(result)
     },
-    [pendingChoice, addLog, playResult],
+    [pendingChoice, addLog, playResult, authedFetch],
   )
 
   const wipeData = useCallback(async () => {
@@ -589,6 +599,7 @@ function CanvasInner({
           ...(kind === 'if' ||
           kind === 'ifOne' ||
           kind === 'log' ||
+          kind === 'task' ||
           kind === 'appAction' ||
           kind === 'mapsAction' ||
           kind === 'activitySuggestion'
@@ -651,6 +662,7 @@ function CanvasInner({
             ...(n.type === 'if' ||
             n.type === 'ifOne' ||
             n.type === 'log' ||
+            n.type === 'task' ||
             n.type === 'appAction' ||
             n.type === 'mapsAction' ||
             n.type === 'activitySuggestion'
@@ -816,6 +828,7 @@ function CanvasInner({
           ...(sn.type === 'if' ||
           sn.type === 'ifOne' ||
           sn.type === 'log' ||
+          sn.type === 'task' ||
           sn.type === 'appAction' ||
           sn.type === 'mapsAction' ||
           sn.type === 'activitySuggestion'
@@ -957,6 +970,7 @@ function CanvasInner({
           ...(n.type === 'if' ||
           n.type === 'ifOne' ||
           n.type === 'log' ||
+          n.type === 'task' ||
           n.type === 'appAction' ||
           n.type === 'mapsAction' ||
           n.type === 'activitySuggestion'
@@ -1164,6 +1178,15 @@ function CanvasInner({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               >
                 <FolderOpen className="h-4 w-4" /> My Flows
+              </button>
+            )}
+            {onOpenMarketplace && (
+              <button
+                type="button"
+                onClick={onOpenMarketplace}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 hover:shadow active:scale-[0.97] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <Store className="h-4 w-4" /> Marketplace
               </button>
             )}
             {user ? (

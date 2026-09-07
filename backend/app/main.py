@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -5,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from . import auth, executor, models, providers
-from .db import Base, engine, get_db
+from .db import Base, SessionLocal, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
 
@@ -28,7 +30,106 @@ def on_startup():
             text("ALTER TABLE ai_credentials ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false")
         )
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR"))
+        conn.execute(
+            text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false")
+        )
+        conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS description VARCHAR"))
         conn.commit()
+    _seed_demo_marketplace_flow()
+
+
+def _seed_demo_marketplace_flow() -> None:
+    """Seed one example published flow - an AI agent that pitches a million-dollar
+    business idea - so the Marketplace isn't empty on a fresh install. Owned by a
+    dedicated demo account (never logged into) and idempotent: skipped once it exists."""
+    DEMO_EMAIL = "demo@overflowengine.local"
+    FLOW_NAME = "Million-Dollar Business Idea Generator"
+
+    db = SessionLocal()
+    try:
+        demo_user = db.query(models.User).filter(models.User.email == DEMO_EMAIL).first()
+        if demo_user is None:
+            demo_user = models.User(
+                email=DEMO_EMAIL,
+                name="OverFlowEngine Demo",
+                password_hash=auth.hash_password(os.urandom(24).hex()),
+            )
+            db.add(demo_user)
+            db.commit()
+            db.refresh(demo_user)
+
+        already_seeded = (
+            db.query(models.SavedFlow)
+            .filter(models.SavedFlow.user_id == demo_user.id, models.SavedFlow.name == FLOW_NAME)
+            .first()
+        )
+        if already_seeded is not None:
+            return
+
+        nodes = [
+            {"id": "trigger", "type": "trigger", "position": {"x": 0, "y": 0}, "data": {"label": "Generate Idea"}},
+            {
+                "id": "ideaInput",
+                "type": "aiInput",
+                "position": {"x": 380, "y": 0},
+                "data": {
+                    "label": "ideaInput",
+                    "value": (
+                        "Generate one realistic, specific business idea that could plausibly reach "
+                        "$1,000,000 in annual revenue within a few years. Include: a business name, the "
+                        "target customer, the core product or service, how it makes money, and the single "
+                        "biggest reason it could work right now."
+                    ),
+                },
+            },
+            {
+                "id": "ideaAgent",
+                "type": "aiAgent",
+                "position": {"x": 760, "y": 0},
+                "data": {
+                    "label": "Business Idea Generator",
+                    "prompt": (
+                        "You are a sharp startup advisor. Pitch one concrete, realistic million-dollar "
+                        "business idea - no vague platitudes, no disclaimers, just the idea and why it works."
+                    ),
+                },
+            },
+            {
+                "id": "ideaModel",
+                "type": "aiModel",
+                "position": {"x": 880, "y": 280},
+                "data": {"label": "Model", "credentialId": None},
+            },
+            {
+                "id": "businessIdea",
+                "type": "aiOutput",
+                "position": {"x": 1140, "y": 0},
+                "data": {"label": "businessIdea"},
+            },
+        ]
+        edges = [
+            {"id": "e-trigger-ideaInput", "source": "trigger", "target": "ideaInput"},
+            {"id": "e-ideaInput-ideaAgent", "source": "ideaInput", "target": "ideaAgent"},
+            {"id": "e-ideaModel-ideaAgent", "source": "ideaModel", "target": "ideaAgent", "targetHandle": "model"},
+            {"id": "e-ideaAgent-businessIdea", "source": "ideaAgent", "target": "businessIdea"},
+        ]
+
+        db.add(
+            models.SavedFlow(
+                user_id=demo_user.id,
+                name=FLOW_NAME,
+                description=(
+                    "No setup needed - just press Start and AI generates a realistic business idea "
+                    "that could make a million dollars."
+                ),
+                nodes=nodes,
+                edges=edges,
+                is_public=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 class NodeIn(BaseModel):
@@ -84,6 +185,34 @@ class FlowIn(BaseModel):
     name: str
     nodes: list[dict]
     edges: list[dict]
+
+
+class FlowPatchIn(BaseModel):
+    is_public: bool | None = None
+    description: str | None = None
+
+
+class MarketplaceCopyIn(BaseModel):
+    name: str
+
+
+class TaskIn(BaseModel):
+    title: str
+
+
+class TaskPatchIn(BaseModel):
+    title: str | None = None
+    done: bool | None = None
+
+
+class AssignmentIn(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class AssignmentPatchIn(BaseModel):
+    name: str | None = None
+    description: str | None = None
 
 
 def _user_out(user: models.User) -> dict:
@@ -247,7 +376,39 @@ def delete_credential(
 
 
 def _flow_summary(flow: models.SavedFlow) -> dict:
-    return {"id": flow.id, "name": flow.name, "created_at": flow.created_at}
+    return {
+        "id": flow.id,
+        "name": flow.name,
+        "description": flow.description,
+        "is_public": flow.is_public,
+        "created_at": flow.created_at,
+    }
+
+
+def _marketplace_out(flow: models.SavedFlow, author: models.User) -> dict:
+    return {
+        "id": flow.id,
+        "name": flow.name,
+        "description": flow.description,
+        "author": author.name or author.email,
+        "created_at": flow.created_at,
+    }
+
+
+def _strip_shared_credentials(nodes: list[dict]) -> list[dict]:
+    """Marketplace copies must never carry over another user's AI Model credential
+    reference - reset those blocks to locked so the copier has to link their own key."""
+    cleaned = []
+    for n in nodes:
+        n = dict(n)
+        if n.get("type") == "aiModel":
+            data = dict(n.get("data") or {})
+            data["credentialId"] = None
+            data.pop("provider", None)
+            data.pop("model", None)
+            n["data"] = data
+        cleaned.append(n)
+    return cleaned
 
 
 @app.get("/flows")
@@ -290,6 +451,68 @@ def create_flow(
     return _flow_summary(flow)
 
 
+@app.patch("/flows/{flow_id}")
+def update_flow(
+    flow_id: int,
+    body: FlowPatchIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    flow = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.user_id == current_user.id)
+        .first()
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    if body.is_public is not None:
+        flow.is_public = body.is_public
+    if body.description is not None:
+        flow.description = body.description.strip() or None
+    db.commit()
+    db.refresh(flow)
+    return _flow_summary(flow)
+
+
+@app.get("/marketplace")
+def list_marketplace(db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.SavedFlow, models.User)
+        .join(models.User, models.SavedFlow.user_id == models.User.id)
+        .filter(models.SavedFlow.is_public.is_(True))
+        .order_by(models.SavedFlow.created_at.desc())
+        .all()
+    )
+    return [_marketplace_out(flow, author) for flow, author in rows]
+
+
+@app.post("/marketplace/{flow_id}/copy", status_code=status.HTTP_201_CREATED)
+def copy_marketplace_flow(
+    flow_id: int,
+    body: MarketplaceCopyIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    source = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.is_public.is_(True))
+        .first()
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Marketplace flow not found")
+    name = body.name.strip() or f"{source.name} (copy)"
+    copy = models.SavedFlow(
+        user_id=current_user.id,
+        name=name,
+        nodes=_strip_shared_credentials(source.nodes),
+        edges=source.edges,
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return _flow_summary(copy)
+
+
 @app.delete("/flows/{flow_id}")
 def delete_flow(
     flow_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
@@ -301,7 +524,224 @@ def delete_flow(
     )
     if flow is None:
         raise HTTPException(status_code=404, detail="Flow not found")
+    db.query(models.AssignmentFlow).filter(models.AssignmentFlow.flow_id == flow_id).delete()
     db.delete(flow)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.post("/flows/{flow_id}/assignments/{assignment_id}", status_code=status.HTTP_201_CREATED)
+def bind_flow_to_assignment(
+    flow_id: int,
+    assignment_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Labels a flow as bound to one big assignment. A flow can be bound to more than
+    one assignment - call this once per assignment. Idempotent."""
+    flow = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.user_id == current_user.id)
+        .first()
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    assignment = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.id == assignment_id, models.Assignment.user_id == current_user.id)
+        .first()
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    existing = (
+        db.query(models.AssignmentFlow)
+        .filter(
+            models.AssignmentFlow.flow_id == flow_id, models.AssignmentFlow.assignment_id == assignment_id
+        )
+        .first()
+    )
+    if existing is None:
+        db.add(models.AssignmentFlow(assignment_id=assignment_id, flow_id=flow_id))
+        db.commit()
+    return {"status": "bound"}
+
+
+@app.delete("/flows/{flow_id}/assignments/{assignment_id}")
+def unbind_flow_from_assignment(
+    flow_id: int,
+    assignment_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    flow = (
+        db.query(models.SavedFlow)
+        .filter(models.SavedFlow.id == flow_id, models.SavedFlow.user_id == current_user.id)
+        .first()
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    db.query(models.AssignmentFlow).filter(
+        models.AssignmentFlow.flow_id == flow_id, models.AssignmentFlow.assignment_id == assignment_id
+    ).delete()
+    db.commit()
+    return {"status": "unbound"}
+
+
+def _task_out(task: models.Task) -> dict:
+    return {"id": task.id, "title": task.title, "done": task.done, "created_at": task.created_at}
+
+
+@app.get("/tasks")
+def list_tasks(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    tasks = (
+        db.query(models.Task)
+        .filter(models.Task.user_id == current_user.id)
+        .order_by(models.Task.created_at.desc())
+        .all()
+    )
+    return [_task_out(t) for t in tasks]
+
+
+@app.post("/tasks", status_code=status.HTTP_201_CREATED)
+def create_task(
+    body: TaskIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="A task title is required")
+    task = models.Task(user_id=current_user.id, title=body.title.strip())
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return _task_out(task)
+
+
+@app.patch("/tasks/{task_id}")
+def update_task(
+    task_id: int,
+    body: TaskPatchIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    task = (
+        db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first()
+    )
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if body.title is not None:
+        task.title = body.title.strip() or task.title
+    if body.done is not None:
+        task.done = body.done
+    db.commit()
+    db.refresh(task)
+    return _task_out(task)
+
+
+@app.delete("/tasks/{task_id}")
+def delete_task(
+    task_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    task = (
+        db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first()
+    )
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    return {"status": "deleted"}
+
+
+def _assignment_out(assignment: models.Assignment, flows: list[models.SavedFlow]) -> dict:
+    return {
+        "id": assignment.id,
+        "name": assignment.name,
+        "description": assignment.description,
+        "created_at": assignment.created_at,
+        "flows": [{"id": f.id, "name": f.name} for f in flows],
+    }
+
+
+@app.get("/assignments")
+def list_assignments(
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    assignments = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.user_id == current_user.id)
+        .order_by(models.Assignment.created_at.desc())
+        .all()
+    )
+    out = []
+    for a in assignments:
+        flows = (
+            db.query(models.SavedFlow)
+            .join(models.AssignmentFlow, models.AssignmentFlow.flow_id == models.SavedFlow.id)
+            .filter(models.AssignmentFlow.assignment_id == a.id)
+            .all()
+        )
+        out.append(_assignment_out(a, flows))
+    return out
+
+
+@app.post("/assignments", status_code=status.HTTP_201_CREATED)
+def create_assignment(
+    body: AssignmentIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="An assignment name is required")
+    assignment = models.Assignment(
+        user_id=current_user.id, name=body.name.strip(), description=(body.description or "").strip() or None
+    )
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+    return _assignment_out(assignment, [])
+
+
+@app.patch("/assignments/{assignment_id}")
+def update_assignment(
+    assignment_id: int,
+    body: AssignmentPatchIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    assignment = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.id == assignment_id, models.Assignment.user_id == current_user.id)
+        .first()
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if body.name is not None:
+        assignment.name = body.name.strip() or assignment.name
+    if body.description is not None:
+        assignment.description = body.description.strip() or None
+    db.commit()
+    db.refresh(assignment)
+    flows = (
+        db.query(models.SavedFlow)
+        .join(models.AssignmentFlow, models.AssignmentFlow.flow_id == models.SavedFlow.id)
+        .filter(models.AssignmentFlow.assignment_id == assignment.id)
+        .all()
+    )
+    return _assignment_out(assignment, flows)
+
+
+@app.delete("/assignments/{assignment_id}")
+def delete_assignment(
+    assignment_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    assignment = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.id == assignment_id, models.Assignment.user_id == current_user.id)
+        .first()
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.query(models.AssignmentFlow).filter(models.AssignmentFlow.assignment_id == assignment_id).delete()
+    db.delete(assignment)
     db.commit()
     return {"status": "deleted"}
 
@@ -312,10 +752,14 @@ def health():
 
 
 @app.post("/workflows/run")
-def run_workflow(workflow: Workflow, db: Session = Depends(get_db)):
+def run_workflow(
+    workflow: Workflow,
+    current_user: models.User | None = Depends(auth.get_current_user_optional),
+    db: Session = Depends(get_db),
+):
     nodes = [n.model_dump() for n in workflow.nodes]
     edges = [e.model_dump() for e in workflow.edges]
-    return executor.run_workflow(db, nodes, edges)
+    return executor.run_workflow(db, nodes, edges, user_id=current_user.id if current_user else None)
 
 
 @app.post("/workflows/continue")

@@ -33,7 +33,47 @@ class SavedFlow(Base):
     name = Column(String, nullable=False)
     nodes = Column(JSON, nullable=False)
     edges = Column(JSON, nullable=False)
+    # Marketplace: a flow the owner has chosen to publish, visible to every user.
+    is_public = Column(Boolean, nullable=False, default=False)
+    description = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Task(Base):
+    """A small to-do item - added manually from the dashboard, or automatically by a
+    Task block while a workflow runs (only when the run is made while signed in)."""
+
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    done = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Assignment(Base):
+    """A big-picture piece of work that one or more saved flows can be labeled as
+    belonging to, so related flows can be found and tracked together on the dashboard."""
+
+    __tablename__ = "assignments"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AssignmentFlow(Base):
+    """Many-to-many link: a flow can be bound to more than one assignment, and an
+    assignment can have more than one flow bound to it."""
+
+    __tablename__ = "assignment_flows"
+
+    id = Column(Integer, primary_key=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
+    flow_id = Column(Integer, ForeignKey("saved_flows.id"), nullable=False, index=True)
 
 
 class Variable(Base):

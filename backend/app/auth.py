@@ -76,3 +76,20 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.User | None:
+    """Like get_current_user, but returns None instead of raising when signed out -
+    for endpoints (like running a workflow) that work anonymously but behave a little
+    differently when a user happens to be signed in (e.g. Task blocks can save to
+    their dashboard)."""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+    except HTTPException:
+        return None
+    return db.query(models.User).filter(models.User.id == payload["user_id"]).first()
