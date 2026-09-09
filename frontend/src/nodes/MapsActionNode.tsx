@@ -160,6 +160,22 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
         </select>
       )}
 
+      <label className="nodrag mb-2 flex items-center gap-2 text-[11px] font-medium text-lime-800 dark:text-lime-300">
+        <input
+          type="checkbox"
+          checked={data.useLastWaypointAsDestination ?? false}
+          onChange={(e) => data.onChange?.({ useLastWaypointAsDestination: e.target.checked })}
+          className="nodrag"
+        />
+        Use last waypoint as the destination
+      </label>
+      <p className="mb-2 text-[10px] text-lime-700 dark:text-lime-400">
+        When on and waypoints are present, the route ends at the last waypoint (e.g. an accepted
+        AI-suggested stop) instead of the Destination field above - useful so a broad typed
+        destination like "Italy" doesn't stay the literal endpoint once a specific place is
+        suggested.
+      </p>
+
       <label className="mb-1 block text-[11px] font-medium text-lime-800 dark:text-lime-300">Travel mode</label>
       <select
         value={data.travelMode ?? 'driving'}

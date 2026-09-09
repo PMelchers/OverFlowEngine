@@ -325,6 +325,11 @@ def _advance(db: Session, state: dict) -> dict:
             mode = data.get("travelMode", "driving")
             waypoints_raw = _render_message(data.get("waypoints", ""), eval_vars)
             waypoints = [w.strip() for w in waypoints_raw.split("|") if w.strip()]
+            if data.get("useLastWaypointAsDestination") and waypoints:
+                # An accepted AI-suggested stop should be able to replace a broad literal
+                # destination (e.g. "Italy") with the specific place suggested, instead of only
+                # ever showing up as a stop passed through on the way to it.
+                destination = waypoints.pop()
             url = build_maps_url(provider, origin, destination, mode, waypoints)
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:

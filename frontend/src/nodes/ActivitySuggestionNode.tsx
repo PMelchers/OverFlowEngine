@@ -116,8 +116,9 @@ export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData
       <p className="mt-1 text-[10px] text-orange-700 dark:text-orange-400">
         Pauses the run with the suggested stops. Accepting saves them to the variable above as a
         "|"-separated list - reference it from a Maps Route block's Waypoints field (e.g.{' '}
-        {'{routeActivities}'}) to add them as real stops on the route. Rejecting leaves the route
-        unchanged.
+        {'{routeActivities}'}) to add them as real stops on the route. Turn on that block's "Use
+        last waypoint as the destination" so the last accepted stop becomes the actual route
+        endpoint instead of a broad typed destination. Rejecting leaves the route unchanged.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-orange-500" />

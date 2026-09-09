@@ -88,6 +88,11 @@ export interface BlockNodeData {
   /** extra stops between origin and destination - "|"-separated (not comma, so a stop name
    *  can itself contain a comma), e.g. "{routeActivities}" or "Eiffel Tower|Louvre" */
   waypoints?: string
+  /** when on and waypoints are present, the LAST waypoint becomes the actual route destination
+   *  (earlier ones stay as pass-through stops) instead of the literal Destination field - lets an
+   *  accepted AI-suggested stop replace a broad typed destination like "Italy" with the specific
+   *  place suggested, rather than only appearing as a stop along the way to it */
+  useLastWaypointAsDestination?: boolean
   // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
   // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
   // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
