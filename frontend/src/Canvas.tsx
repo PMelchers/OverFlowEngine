@@ -60,6 +60,8 @@ import IfNode from './nodes/IfNode'
 import IfSingleNode from './nodes/IfSingleNode'
 import LogNode from './nodes/LogNode'
 import MapsActionNode from './nodes/MapsActionNode'
+import QuickAddButton from './nodes/QuickAddButton'
+import { QuickAddContext } from './nodes/QuickAddContext'
 import TaskNode from './nodes/TaskNode'
 import TriggerNode from './nodes/TriggerNode'
 import {
@@ -75,24 +77,43 @@ import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from './templates'
 import { useTheme } from './theme'
+import type { NodeProps } from 'reactflow'
+
+/** Adds the green "+" quick-add button next to a node's single, unambiguous output -
+ *  skipped for branching blocks (If/Choice, where "the next block" is ambiguous) and
+ *  AI Model (whose only handle feeds *up* into an Agent, not "the next step"). Applied
+ *  once at module scope, not per-render, so `nodeTypes` below stays referentially
+ *  stable (React Flow remounts every node whenever that object's identity changes). */
+function withQuickAdd(NodeComponent: React.ComponentType<NodeProps<BlockNodeData>>) {
+  function Wrapped(props: NodeProps<BlockNodeData>) {
+    return (
+      <div className="relative">
+        <NodeComponent {...props} />
+        <QuickAddButton />
+      </div>
+    )
+  }
+  Wrapped.displayName = `withQuickAdd(${NodeComponent.displayName ?? NodeComponent.name ?? 'Node'})`
+  return Wrapped
+}
 
 const nodeTypes = {
-  trigger: TriggerNode,
-  appTrigger: AppTriggerNode,
-  appAction: AppActionNode,
-  mapsAction: MapsActionNode,
-  activitySuggestion: ActivitySuggestionNode,
-  block: BlockNode,
+  trigger: withQuickAdd(TriggerNode),
+  appTrigger: withQuickAdd(AppTriggerNode),
+  appAction: withQuickAdd(AppActionNode),
+  mapsAction: withQuickAdd(MapsActionNode),
+  activitySuggestion: withQuickAdd(ActivitySuggestionNode),
+  block: withQuickAdd(BlockNode),
   ifOne: IfSingleNode,
   if: IfNode,
-  variable: VariableNode,
-  log: LogNode,
-  task: TaskNode,
+  variable: withQuickAdd(VariableNode),
+  log: withQuickAdd(LogNode),
+  task: withQuickAdd(TaskNode),
   choice: ChoiceNode,
-  group: GroupNode,
-  aiAgent: AiAgentNode,
-  aiInput: AiInputNode,
-  aiOutput: AiOutputNode,
+  group: withQuickAdd(GroupNode),
+  aiAgent: withQuickAdd(AiAgentNode),
+  aiInput: withQuickAdd(AiInputNode),
+  aiOutput: withQuickAdd(AiOutputNode),
   aiModel: AiModelNode,
 }
 
@@ -635,7 +656,7 @@ function CanvasInner({
   }, [])
 
   const createNodeFromKind = useCallback(
-    (kind: BlockKind, position: { x: number; y: number }) => {
+    (kind: BlockKind, position: { x: number; y: number }, connectFrom?: string) => {
       idCount += 1
       const id = `${kind}-${idCount}`
       const label = ({
@@ -674,8 +695,30 @@ function CanvasInner({
         },
       }
       setNodes((nds) => [...nds, newNode])
+      if (connectFrom) {
+        setEdges((eds) => [...eds, { id: `e-quickadd-${connectFrom}-${id}`, source: connectFrom, target: id }])
+      }
     },
-    [setNodes, updateNodeData, runWorkflow, openConnectedApps, refreshAppConnections],
+    [setNodes, setEdges, updateNodeData, runWorkflow, openConnectedApps, refreshAppConnections],
+  )
+
+  // The green "+" next to a block's output handle (QuickAddButton) - places the new
+  // block one step to the right of its source and wires them up in one click, instead
+  // of dragging in a palette block and then dragging a connection to it by hand. Stable
+  // identity (no deps beyond createNodeFromKind, itself stable) so it's handed to every
+  // node once via QuickAddContext rather than threaded through each node's own data.
+  const quickAddBlock = useCallback(
+    (sourceId: string, kind: BlockKind) => {
+      const source = nodesRef.current.find((n) => n.id === sourceId)
+      let position = source ? { x: source.position.x + 380, y: source.position.y } : { x: 0, y: 0 }
+      while (
+        nodesRef.current.some((n) => Math.abs(n.position.x - position.x) < 40 && Math.abs(n.position.y - position.y) < 40)
+      ) {
+        position = { x: position.x, y: position.y + 140 }
+      }
+      createNodeFromKind(kind, position, sourceId)
+    },
+    [createNodeFromKind],
   )
 
   const createNodeFromCustomBlock = useCallback(
@@ -1364,31 +1407,33 @@ function CanvasInner({
           editingBlockId={editingBlock?.id}
         />
         <div className="flex-1 dark:bg-gray-900" ref={wrapperRef} onDragOver={onDragOver} onDrop={onDrop}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={onSelectionChange}
-            onNodeDrag={onNodeDrag}
-            onNodeDragStop={onNodeDragStop}
-            deleteKeyCode={['Backspace', 'Delete']}
-            multiSelectionKeyCode={['Meta', 'Control']}
-            selectionKeyCode={['Shift']}
-            edgesFocusable
-            elementsSelectable
-            snapToGrid
-            snapGrid={[10, 10]}
-            defaultEdgeOptions={defaultEdgeOptions}
-            proOptions={{ hideAttribution: true }}
-            fitView
-          >
-            <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
-            <Controls />
-            <AlignmentGuideLines guides={alignGuides} />
-          </ReactFlow>
+          <QuickAddContext.Provider value={quickAddBlock}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onSelectionChange={onSelectionChange}
+              onNodeDrag={onNodeDrag}
+              onNodeDragStop={onNodeDragStop}
+              deleteKeyCode={['Backspace', 'Delete']}
+              multiSelectionKeyCode={['Meta', 'Control']}
+              selectionKeyCode={['Shift']}
+              edgesFocusable
+              elementsSelectable
+              snapToGrid
+              snapGrid={[10, 10]}
+              defaultEdgeOptions={defaultEdgeOptions}
+              proOptions={{ hideAttribution: true }}
+              fitView
+            >
+              <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
+              <Controls />
+              <AlignmentGuideLines guides={alignGuides} />
+            </ReactFlow>
+          </QuickAddContext.Provider>
           <datalist id="overflowengine-variable-names">
             {availableVariables.map((v) => (
               <option key={v.name} value={v.name} />
@@ -1468,9 +1513,9 @@ function CanvasInner({
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-sm">
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-3 py-2">
-              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_2px_rgba(16,185,129,0.5)]" />
                 Console
               </span>
@@ -1478,18 +1523,18 @@ function CanvasInner({
                 type="button"
                 onClick={() => setLogs([])}
                 disabled={logs.length === 0}
-                className="rounded-md border border-gray-700 px-2 py-0.5 text-[11px] font-medium text-gray-400 transition-colors duration-150 hover:border-gray-600 hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-md border border-gray-300 px-2 py-0.5 text-[11px] font-medium text-gray-500 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               >
                 Clear
               </button>
             </div>
             <div ref={consoleRef} className="console-scroll flex-1 overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed">
               {logs.length === 0 ? (
-                <p className="text-gray-600">No activity yet - run the workflow to see it here.</p>
+                <p className="text-gray-400 dark:text-gray-600">No activity yet - run the workflow to see it here.</p>
               ) : (
                 logs.map((entry, i) => (
-                  <p key={i} className="whitespace-pre-wrap break-words text-gray-300">
-                    <span className="text-emerald-500">›</span> {entry}
+                  <p key={i} className="whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300">
+                    <span className="text-emerald-600 dark:text-emerald-500">›</span> {entry}
                   </p>
                 ))
               )}
