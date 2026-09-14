@@ -13,6 +13,9 @@ type AuthContextValue = {
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>
   updateProfile: (patch: { name?: string; email?: string }) => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
+  /** Step-up check for sensitive settings pages - confirms the current password
+   *  without touching the long-lived login session. Throws on a wrong password. */
+  reauth: (password: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -114,9 +117,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [authedFetch],
   )
 
+  const reauth = useCallback(
+    async (password: string) => {
+      const res = await authedFetch('/auth/reauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!res.ok) throw new Error(await parseErrorMessage(res, 'Incorrect password'))
+    },
+    [authedFetch],
+  )
+
   const value = useMemo(
-    () => ({ token, user, register, login, logout, authedFetch, updateProfile, changePassword }),
-    [token, user, register, login, logout, authedFetch, updateProfile, changePassword],
+    () => ({ token, user, register, login, logout, authedFetch, updateProfile, changePassword, reauth }),
+    [token, user, register, login, logout, authedFetch, updateProfile, changePassword, reauth],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

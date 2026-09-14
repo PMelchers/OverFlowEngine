@@ -76,6 +76,27 @@ class AssignmentFlow(Base):
     flow_id = Column(Integer, ForeignKey("saved_flows.id"), nullable=False, index=True)
 
 
+class CalendarConnection(Base):
+    """One user's own OAuth app registration + resulting link to a real Google or
+    Microsoft calendar. There is no shared/server-wide OAuth app - each user brings
+    their own client id/secret (registered by them with Google/Microsoft), so
+    client_id/client_secret are set first, then access/refresh_token once they've
+    actually completed the consent flow."""
+
+    __tablename__ = "calendar_connections"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    provider = Column(String, nullable=False)  # "google" | "microsoft"
+    client_id = Column(String, nullable=True)
+    client_secret = Column(String, nullable=True)
+    account_email = Column(String, nullable=True)
+    access_token = Column(String, nullable=True)
+    refresh_token = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Variable(Base):
     __tablename__ = "variables"
 

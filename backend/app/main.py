@@ -1,12 +1,14 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from . import auth, executor, models, providers
+from . import auth, calendar_providers, executor, models, providers
 from .db import Base, SessionLocal, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
@@ -34,6 +36,14 @@ def on_startup():
             text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false")
         )
         conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS description VARCHAR"))
+        # calendar_connections started out with a shared server-wide OAuth app in mind
+        # (access/refresh_token required); now every user brings their own app, so the
+        # tokens aren't known until they finish connecting, and each row also needs its
+        # own client id/secret.
+        conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS client_id VARCHAR"))
+        conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS client_secret VARCHAR"))
+        conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN access_token DROP NOT NULL"))
+        conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN refresh_token DROP NOT NULL"))
         conn.commit()
     _seed_demo_marketplace_flow()
 
@@ -181,6 +191,10 @@ class ChangePasswordIn(BaseModel):
     new_password: str
 
 
+class ReauthIn(BaseModel):
+    password: str
+
+
 class FlowIn(BaseModel):
     name: str
     nodes: list[dict]
@@ -213,6 +227,11 @@ class AssignmentIn(BaseModel):
 class AssignmentPatchIn(BaseModel):
     name: str | None = None
     description: str | None = None
+
+
+class CalendarAppIn(BaseModel):
+    client_id: str
+    client_secret: str
 
 
 def _user_out(user: models.User) -> dict:
@@ -299,6 +318,19 @@ def change_password(
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
     current_user.password_hash = auth.hash_password(body.new_password)
     db.commit()
+    return {"status": "ok"}
+
+
+@app.post("/auth/reauth")
+def reauth(
+    body: ReauthIn,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Step-up check for sensitive settings (API keys, connected apps, security) -
+    confirms the current password without changing anything. The frontend gates
+    those pages behind this, separate from the long-lived login session."""
+    if not auth.verify_password(body.password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
     return {"status": "ok"}
 
 
@@ -744,6 +776,145 @@ def delete_assignment(
     db.delete(assignment)
     db.commit()
     return {"status": "deleted"}
+
+
+def _require_calendar_provider(provider: str) -> str:
+    provider = provider.strip().lower()
+    if provider not in calendar_providers.PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown calendar provider '{provider}'")
+    return provider
+
+
+def _calendar_connection_out(connection: models.CalendarConnection | None, provider: str) -> dict:
+    if connection is None:
+        return {"provider": provider, "has_app": False, "client_id": None, "connected": False, "account_email": None}
+    return {
+        "provider": provider,
+        "has_app": bool(connection.client_id and connection.client_secret),
+        "client_id": connection.client_id,
+        "connected": bool(connection.access_token),
+        "account_email": connection.account_email,
+    }
+
+
+@app.put("/calendar/{provider}/app")
+def save_calendar_app(
+    provider: str,
+    body: CalendarAppIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Saves the user's own OAuth app (client id/secret) for this provider - no
+    server-wide OAuth app exists, everyone registers and brings their own."""
+    provider = _require_calendar_provider(provider)
+    if not body.client_id.strip() or not body.client_secret.strip():
+        raise HTTPException(status_code=400, detail="Both client ID and client secret are required")
+
+    connection = (
+        db.query(models.CalendarConnection)
+        .filter(models.CalendarConnection.user_id == current_user.id, models.CalendarConnection.provider == provider)
+        .first()
+    )
+    if connection is None:
+        connection = models.CalendarConnection(user_id=current_user.id, provider=provider)
+        db.add(connection)
+    connection.client_id = body.client_id.strip()
+    connection.client_secret = body.client_secret.strip()
+    db.commit()
+    db.refresh(connection)
+    return _calendar_connection_out(connection, provider)
+
+
+@app.get("/calendar/{provider}/connect")
+def calendar_connect(
+    provider: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns the provider's consent-screen URL - the frontend navigates the
+    browser there itself (a fetch response can't carry the redirect)."""
+    provider = _require_calendar_provider(provider)
+    connection = (
+        db.query(models.CalendarConnection)
+        .filter(models.CalendarConnection.user_id == current_user.id, models.CalendarConnection.provider == provider)
+        .first()
+    )
+    if connection is None or not connection.client_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Save your {provider.capitalize()} OAuth app's client ID and secret first.",
+        )
+    # Reuses the login-token signer as short-lived, tamper-proof OAuth state - it
+    # already round-trips a user id through decode_token, no need for a second scheme.
+    state = auth.create_token(current_user.id, current_user.email)
+    return {"url": calendar_providers.authorization_url(provider, connection.client_id, state)}
+
+
+@app.get("/calendar/{provider}/callback")
+def calendar_callback(provider: str, code: str, state: str, db: Session = Depends(get_db)):
+    """Hit directly by Google/Microsoft's redirect after the user grants consent -
+    a plain browser navigation, so it can't carry our Bearer token; the signed
+    `state` round-trip is what ties this back to the right user."""
+    provider = _require_calendar_provider(provider)
+    try:
+        payload = auth.decode_token(state)
+    except HTTPException:
+        raise HTTPException(status_code=400, detail="This connection link expired - try connecting again")
+    user_id = payload["user_id"]
+
+    connection = (
+        db.query(models.CalendarConnection)
+        .filter(models.CalendarConnection.user_id == user_id, models.CalendarConnection.provider == provider)
+        .first()
+    )
+    if connection is None or not connection.client_id or not connection.client_secret:
+        raise HTTPException(status_code=400, detail="No OAuth app saved for this provider - start over from Settings")
+
+    tokens = calendar_providers.exchange_code(provider, connection.client_id, connection.client_secret, code)
+    account_email = calendar_providers.fetch_account_email(provider, tokens["access_token"])
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=tokens.get("expires_in", 3600))
+
+    connection.access_token = tokens["access_token"]
+    if tokens.get("refresh_token"):
+        connection.refresh_token = tokens["refresh_token"]
+    connection.expires_at = expires_at
+    connection.account_email = account_email
+    db.commit()
+
+    # ?calendar_connected=<provider> lets the frontend recognize this landing as the
+    # tail end of the OAuth popup (see ConnectAppModal/OAuthPopupBridge) instead of
+    # just loading the app fresh - it posts back to the tab that opened it and closes.
+    return RedirectResponse(f"{calendar_providers.FRONTEND_BASE_URL}/?calendar_connected={provider}")
+
+
+@app.get("/calendar/connections")
+def list_calendar_connections(
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    connections = {
+        c.provider: c
+        for c in db.query(models.CalendarConnection)
+        .filter(models.CalendarConnection.user_id == current_user.id)
+        .all()
+    }
+    return [_calendar_connection_out(connections.get(p), p) for p in calendar_providers.PROVIDERS]
+
+
+@app.delete("/calendar/{provider}")
+def remove_calendar(
+    provider: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Fully removes this provider's saved OAuth app credentials and any tokens -
+    matches the add/delete-only pattern used for AI API keys (never edit a saved
+    secret in place; delete and re-add instead)."""
+    provider = _require_calendar_provider(provider)
+    db.query(models.CalendarConnection).filter(
+        models.CalendarConnection.user_id == current_user.id, models.CalendarConnection.provider == provider
+    ).delete()
+    db.commit()
+    return {"status": "removed"}
 
 
 @app.get("/health")

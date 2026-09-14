@@ -34,8 +34,10 @@ import {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
+import AboutDropdown from './AboutDropdown'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
 import AuthModal from './AuthModal'
+import GroupNameModal from './GroupNameModal'
 import { useAuth } from './auth'
 import {
   deleteCustomBlock,
@@ -59,31 +61,60 @@ import IfNode from './nodes/IfNode'
 import IfSingleNode from './nodes/IfSingleNode'
 import LogNode from './nodes/LogNode'
 import MapsActionNode from './nodes/MapsActionNode'
+import QuickAddButton from './nodes/QuickAddButton'
+import { QuickAddContext } from './nodes/QuickAddContext'
 import TaskNode from './nodes/TaskNode'
 import TriggerNode from './nodes/TriggerNode'
-import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
+import {
+  CALENDAR_PROVIDER_TO_APP,
+  type BlockKind,
+  type BlockNodeData,
+  type Subgraph,
+  type SubgraphEdge,
+  type SubgraphNode,
+  type VariableType,
+} from './nodes/types'
 import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from './templates'
 import { useTheme } from './theme'
+import type { NodeProps } from 'reactflow'
+
+/** Adds the green "+" quick-add button next to a node's single, unambiguous output -
+ *  skipped for branching blocks (If/Choice, where "the next block" is ambiguous) and
+ *  AI Model (whose only handle feeds *up* into an Agent, not "the next step"). Applied
+ *  once at module scope, not per-render, so `nodeTypes` below stays referentially
+ *  stable (React Flow remounts every node whenever that object's identity changes). */
+function withQuickAdd(NodeComponent: React.ComponentType<NodeProps<BlockNodeData>>) {
+  function Wrapped(props: NodeProps<BlockNodeData>) {
+    return (
+      <div className="relative">
+        <NodeComponent {...props} />
+        <QuickAddButton />
+      </div>
+    )
+  }
+  Wrapped.displayName = `withQuickAdd(${NodeComponent.displayName ?? NodeComponent.name ?? 'Node'})`
+  return Wrapped
+}
 
 const nodeTypes = {
-  trigger: TriggerNode,
-  appTrigger: AppTriggerNode,
-  appAction: AppActionNode,
-  mapsAction: MapsActionNode,
-  activitySuggestion: ActivitySuggestionNode,
-  block: BlockNode,
+  trigger: withQuickAdd(TriggerNode),
+  appTrigger: withQuickAdd(AppTriggerNode),
+  appAction: withQuickAdd(AppActionNode),
+  mapsAction: withQuickAdd(MapsActionNode),
+  activitySuggestion: withQuickAdd(ActivitySuggestionNode),
+  block: withQuickAdd(BlockNode),
   ifOne: IfSingleNode,
   if: IfNode,
-  variable: VariableNode,
-  log: LogNode,
-  task: TaskNode,
+  variable: withQuickAdd(VariableNode),
+  log: withQuickAdd(LogNode),
+  task: withQuickAdd(TaskNode),
   choice: ChoiceNode,
-  group: GroupNode,
-  aiAgent: AiAgentNode,
-  aiInput: AiInputNode,
-  aiOutput: AiOutputNode,
+  group: withQuickAdd(GroupNode),
+  aiAgent: withQuickAdd(AiAgentNode),
+  aiInput: withQuickAdd(AiInputNode),
+  aiOutput: withQuickAdd(AiOutputNode),
   aiModel: AiModelNode,
 }
 
@@ -169,6 +200,13 @@ interface PendingChoice {
   options: string[]
 }
 
+/** Selection snapshot awaiting a name from GroupNameModal before groupSelected commits it. */
+interface PendingGroup {
+  selected: Node<BlockNodeData>[]
+  defaultLabel: string
+  groupIdCount: number
+}
+
 function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
   switch (kind) {
     case 'ifOne':
@@ -191,9 +229,9 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
     case 'aiModel':
       return { label: 'Model', credentialId: null }
     case 'appTrigger':
-      return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage', fromAddress: '' }
+      return { label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
     case 'appAction':
-      return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
+      return { label, to: '', subject: '', body: '' }
     case 'mapsAction':
       return { label, mapsProvider: 'google', origin: '', destination: '', travelMode: 'driving', outputVariable: '' }
     case 'activitySuggestion':
@@ -265,7 +303,7 @@ interface CanvasProps {
   /** Template to drop onto a fresh canvas on mount, e.g. from one of the dashboard's quick-start chips. */
   initialTemplateId?: string | null
   onExitToDashboard?: () => void
-  onOpenSettings?: () => void
+  onOpenSettings?: (subPage?: 'connected-apps') => void
   onOpenMarketplace?: () => void
 }
 
@@ -286,10 +324,14 @@ function CanvasInner({
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>([])
   const [alignGuides, setAlignGuides] = useState<AlignmentGuides>({})
   const [editingBlock, setEditingBlock] = useState<CustomBlock | null>(null)
+  const [pendingGroup, setPendingGroup] = useState<PendingGroup | null>(null)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [variablesOpen, setVariablesOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [appConnections, setAppConnections] = useState<Record<string, boolean>>({})
+  const logoRef = useRef<HTMLButtonElement>(null)
   const { user, authedFetch } = useAuth()
   const { theme } = useTheme()
   const { screenToFlowPosition, fitView } = useReactFlow()
@@ -372,6 +414,53 @@ function CanvasInner({
       ),
     )
   }, [availableVariables, setNodes])
+
+  // Which real apps are actually connected (right now, only Google/Microsoft Calendar
+  // have an OAuth flow - everything else in APP_TRIGGER_SOURCES stays unconnected until
+  // it gets one). Missing keys just read as "not connected" wherever this is consumed.
+  // Also handed to nodes (as onAppConnected) so the in-canvas connect modal can ask for
+  // a refresh the moment its popup finishes, instead of waiting for the next canvas visit.
+  const refreshAppConnections = useCallback(() => {
+    authedFetch('/calendar/connections')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: { provider: string; connected: boolean }[]) => {
+        const map: Record<string, boolean> = {}
+        for (const c of list) {
+          const app = CALENDAR_PROVIDER_TO_APP[c.provider]
+          if (app) map[app] = c.connected
+        }
+        setAppConnections(map)
+      })
+      .catch(() => {})
+  }, [authedFetch])
+
+  useEffect(() => {
+    refreshAppConnections()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const appConnectionsRef = useRef(appConnections)
+  useEffect(() => {
+    appConnectionsRef.current = appConnections
+  }, [appConnections])
+
+  // Stable identity (unlike onOpenSettings itself, which App.tsx recreates every render)
+  // so it's safe to hand straight to nodes without churning their data on every render.
+  const onOpenSettingsRef = useRef(onOpenSettings)
+  useEffect(() => {
+    onOpenSettingsRef.current = onOpenSettings
+  }, [onOpenSettings])
+  const openConnectedApps = useCallback(() => onOpenSettingsRef.current?.('connected-apps'), [])
+
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.type === 'appTrigger' || n.type === 'appAction'
+          ? { ...n, data: { ...n.data, appConnections, onOpenSettings: openConnectedApps, onAppConnected: refreshAppConnections } }
+          : n,
+      ),
+    )
+  }, [appConnections, openConnectedApps, refreshAppConnections, setNodes])
 
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
@@ -576,7 +665,7 @@ function CanvasInner({
   }, [])
 
   const createNodeFromKind = useCallback(
-    (kind: BlockKind, position: { x: number; y: number }) => {
+    (kind: BlockKind, position: { x: number; y: number }, connectFrom?: string) => {
       idCount += 1
       const id = `${kind}-${idCount}`
       const label = ({
@@ -605,11 +694,40 @@ function CanvasInner({
           kind === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(kind === 'appTrigger' || kind === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }
       setNodes((nds) => [...nds, newNode])
+      if (connectFrom) {
+        setEdges((eds) => [...eds, { id: `e-quickadd-${connectFrom}-${id}`, source: connectFrom, target: id }])
+      }
     },
-    [setNodes, updateNodeData, runWorkflow],
+    [setNodes, setEdges, updateNodeData, runWorkflow, openConnectedApps, refreshAppConnections],
+  )
+
+  // The green "+" next to a block's output handle (QuickAddButton) - places the new
+  // block one step to the right of its source and wires them up in one click, instead
+  // of dragging in a palette block and then dragging a connection to it by hand. Stable
+  // identity (no deps beyond createNodeFromKind, itself stable) so it's handed to every
+  // node once via QuickAddContext rather than threaded through each node's own data.
+  const quickAddBlock = useCallback(
+    (sourceId: string, kind: BlockKind) => {
+      const source = nodesRef.current.find((n) => n.id === sourceId)
+      let position = source ? { x: source.position.x + 380, y: source.position.y } : { x: 0, y: 0 }
+      while (
+        nodesRef.current.some((n) => Math.abs(n.position.x - position.x) < 40 && Math.abs(n.position.y - position.y) < 40)
+      ) {
+        position = { x: position.x, y: position.y + 140 }
+      }
+      createNodeFromKind(kind, position, sourceId)
+    },
+    [createNodeFromKind],
   )
 
   const createNodeFromCustomBlock = useCallback(
@@ -668,6 +786,13 @@ function CanvasInner({
             n.type === 'activitySuggestion'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
+            ...(n.type === 'appTrigger' || n.type === 'appAction'
+              ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+              : {}),
           },
         }
       })
@@ -690,7 +815,7 @@ function CanvasInner({
         fitView({ padding: 0.3, nodes: newNodes.map((n) => ({ id: n.id })), duration: 300 }),
       )
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, addLog, fitView],
+    [setNodes, setEdges, updateNodeData, runWorkflow, addLog, fitView, openConnectedApps, refreshAppConnections],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -727,7 +852,6 @@ function CanvasInner({
 
   const groupSelected = useCallback(() => {
     const currentNodes = nodesRef.current
-    const currentEdges = edgesRef.current
     const selected = currentNodes.filter((n) => selectedIds.has(n.id))
 
     if (selected.length < 2) return
@@ -736,77 +860,86 @@ function CanvasInner({
       return
     }
 
-    const selIds = new Set(selected.map((n) => n.id))
-    const internalEdges = currentEdges.filter((e) => selIds.has(e.source) && selIds.has(e.target))
-    const hasIncoming = new Set(internalEdges.map((e) => e.target))
-    const hasOutgoing = new Set(internalEdges.map((e) => e.source))
-    const entry = selected.filter((n) => !hasIncoming.has(n.id)).map((n) => n.id)
-    const exit = selected.filter((n) => !hasOutgoing.has(n.id)).map((n) => n.id)
-
-    const centroid = {
-      x: selected.reduce((s, n) => s + n.position.x, 0) / selected.length,
-      y: selected.reduce((s, n) => s + n.position.y, 0) / selected.length,
-    }
-
     idCount += 1
-    const groupId = `group-${idCount}`
-    const defaultLabel = `Group ${idCount}`
-    const label = window.prompt('Name this saved block:', defaultLabel)?.trim() || defaultLabel
+    setPendingGroup({ selected, defaultLabel: `Group ${idCount}`, groupIdCount: idCount })
+  }, [selectedIds])
 
-    const subgraph: Subgraph = {
-      nodes: selected.map((n) => ({
-        id: n.id,
-        type: n.type ?? 'block',
-        data: sanitizeData(n.data),
-        position: { x: n.position.x - centroid.x, y: n.position.y - centroid.y },
-      })),
-      edges: internalEdges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle ?? null,
-        targetHandle: e.targetHandle ?? null,
-      })),
-      entry,
-      exit,
-    }
+  const confirmGroupSelected = useCallback(
+    (label: string) => {
+      if (!pendingGroup) return
+      const { selected, groupIdCount } = pendingGroup
+      const currentEdges = edgesRef.current
+      const selIds = new Set(selected.map((n) => n.id))
+      const internalEdges = currentEdges.filter((e) => selIds.has(e.source) && selIds.has(e.target))
+      const hasIncoming = new Set(internalEdges.map((e) => e.target))
+      const hasOutgoing = new Set(internalEdges.map((e) => e.source))
+      const entry = selected.filter((n) => !hasIncoming.has(n.id)).map((n) => n.id)
+      const exit = selected.filter((n) => !hasOutgoing.has(n.id)).map((n) => n.id)
 
-    const groupNode: Node<BlockNodeData> = {
-      id: groupId,
-      type: 'group',
-      position: centroid,
-      data: {
-        label,
-        subgraph,
-        sourceBlockId: `custom-${groupId}`,
-        status: 'idle',
-        onChange: (patch) => updateNodeData(groupId, patch),
-      },
-    }
-
-    setNodes((nds) => [...nds.filter((n) => !selIds.has(n.id)), groupNode])
-
-    setEdges((eds) => {
-      const rewired: Edge[] = []
-      for (const e of eds) {
-        const srcSel = selIds.has(e.source)
-        const tgtSel = selIds.has(e.target)
-        if (srcSel && tgtSel) continue
-        if (srcSel && !tgtSel) {
-          rewired.push({ ...e, id: `${e.id}-${groupId}`, source: groupId, sourceHandle: undefined })
-        } else if (!srcSel && tgtSel) {
-          rewired.push({ ...e, id: `${e.id}-${groupId}`, target: groupId, targetHandle: undefined })
-        } else {
-          rewired.push(e)
-        }
+      const centroid = {
+        x: selected.reduce((s, n) => s + n.position.x, 0) / selected.length,
+        y: selected.reduce((s, n) => s + n.position.y, 0) / selected.length,
       }
-      return rewired
-    })
 
-    const saved: CustomBlock = { id: `custom-${groupId}`, label, subgraph }
-    setCustomBlocks(saveCustomBlock(saved))
-    addLog(`Saved "${label}" (${selected.length} blocks) as a reusable block`)
-  }, [selectedIds, setNodes, setEdges, updateNodeData, addLog])
+      const groupId = `group-${groupIdCount}`
+
+      const subgraph: Subgraph = {
+        nodes: selected.map((n) => ({
+          id: n.id,
+          type: n.type ?? 'block',
+          data: sanitizeData(n.data),
+          position: { x: n.position.x - centroid.x, y: n.position.y - centroid.y },
+        })),
+        edges: internalEdges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
+        })),
+        entry,
+        exit,
+      }
+
+      const groupNode: Node<BlockNodeData> = {
+        id: groupId,
+        type: 'group',
+        position: centroid,
+        data: {
+          label,
+          subgraph,
+          sourceBlockId: `custom-${groupId}`,
+          status: 'idle',
+          onChange: (patch) => updateNodeData(groupId, patch),
+        },
+      }
+
+      setNodes((nds) => [...nds.filter((n) => !selIds.has(n.id)), groupNode])
+
+      setEdges((eds) => {
+        const rewired: Edge[] = []
+        for (const e of eds) {
+          const srcSel = selIds.has(e.source)
+          const tgtSel = selIds.has(e.target)
+          if (srcSel && tgtSel) continue
+          if (srcSel && !tgtSel) {
+            rewired.push({ ...e, id: `${e.id}-${groupId}`, source: groupId, sourceHandle: undefined })
+          } else if (!srcSel && tgtSel) {
+            rewired.push({ ...e, id: `${e.id}-${groupId}`, target: groupId, targetHandle: undefined })
+          } else {
+            rewired.push(e)
+          }
+        }
+        return rewired
+      })
+
+      const saved: CustomBlock = { id: `custom-${groupId}`, label, subgraph }
+      setCustomBlocks(saveCustomBlock(saved))
+      addLog(`Saved "${label}" (${selected.length} blocks) as a reusable block`)
+      setPendingGroup(null)
+    },
+    [pendingGroup, setNodes, setEdges, updateNodeData, addLog],
+  )
 
   const removeCustomBlock = useCallback((id: string) => {
     setCustomBlocks(deleteCustomBlock(id))
@@ -834,6 +967,13 @@ function CanvasInner({
           sn.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(sn.type === 'appTrigger' || sn.type === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }))
       const loadedEdges: Edge[] = block.subgraph.edges.map((se) => ({
@@ -850,7 +990,7 @@ function CanvasInner({
       setEditingBlock(block)
       requestAnimationFrame(() => fitView({ padding: 0.3 }))
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, fitView],
+    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, openConnectedApps, refreshAppConnections],
   )
 
   const exitEditMode = useCallback(() => {
@@ -976,6 +1116,13 @@ function CanvasInner({
           n.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(n.type === 'appTrigger' || n.type === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }))
       const loadedEdges: Edge[] = flowEdges.map((e) => ({
@@ -991,7 +1138,7 @@ function CanvasInner({
       addLog('Loaded flow')
       requestAnimationFrame(() => fitView({ padding: 0.3 }))
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog],
+    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog, openConnectedApps, refreshAppConnections],
   )
 
   // Opened straight from a dashboard "Open" click - load that flow onto the (empty) canvas
@@ -1033,6 +1180,53 @@ function CanvasInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTemplateId])
 
+  // A brand-new blank workflow (not opened from a saved flow or a template) starts
+  // with an App Trigger already wired to an App Action, instead of an empty canvas -
+  // a starting point to edit rather than a blank slate. Guarded by a ref (not just
+  // the initialFlowId/initialTemplateId check) for the same StrictMode double-mount
+  // reason as the template effect above.
+  const insertedStarterRef = useRef(false)
+  useEffect(() => {
+    if (initialFlowId != null || initialTemplateId || insertedStarterRef.current) return
+    insertedStarterRef.current = true
+
+    idCount += 1
+    const triggerId = `starter-trigger-${idCount}`
+    const actionId = `starter-action-${idCount}`
+    const triggerNode: Node<BlockNodeData> = {
+      id: triggerId,
+      type: 'appTrigger',
+      position: { x: 0, y: 0 },
+      data: {
+        ...defaultDataFor('appTrigger', 'App Trigger'),
+        status: 'idle',
+        onChange: (patch) => updateNodeData(triggerId, patch),
+        onTrigger: runWorkflow,
+        appConnections: appConnectionsRef.current,
+        onOpenSettings: openConnectedApps,
+        onAppConnected: refreshAppConnections,
+      },
+    }
+    const actionNode: Node<BlockNodeData> = {
+      id: actionId,
+      type: 'appAction',
+      position: { x: 380, y: 0 },
+      data: {
+        ...defaultDataFor('appAction', 'App Action'),
+        status: 'idle',
+        onChange: (patch) => updateNodeData(actionId, patch),
+        availableVariables: availableVariablesRef.current,
+        appConnections: appConnectionsRef.current,
+        onOpenSettings: openConnectedApps,
+        onAppConnected: refreshAppConnections,
+      },
+    }
+    setNodes([triggerNode, actionNode])
+    setEdges([{ id: `starter-edge-${idCount}`, source: triggerId, target: actionId }])
+    requestAnimationFrame(() => fitView({ padding: 0.3 }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const canGroup = selectedIds.size >= 2
 
   return (
@@ -1067,22 +1261,20 @@ function CanvasInner({
         </header>
       ) : (
         <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
-          <div className="flex shrink-0 items-center gap-2.5">
+          <button
+            ref={logoRef}
+            type="button"
+            onClick={() => setAboutOpen((o) => !o)}
+            className="flex shrink-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
               <Zap className="h-4 w-4" fill="currentColor" />
             </div>
-            <div className="leading-tight">
-              <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
-                OverFlowEngine
-              </h1>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">Visual agentic workflow builder</p>
-            </div>
-          </div>
-
-          <span className="hidden flex-1 truncate text-xs text-gray-400 dark:text-gray-500 xl:block">
-            Drag blocks from the left onto the canvas, Ctrl/Shift-click to select several, then group them into
-            one reusable block. Click Start to run the workflow.
-          </span>
+            <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              OverFlowEngine
+            </h1>
+          </button>
+          {aboutOpen && <AboutDropdown anchorRef={logoRef} onClose={() => setAboutOpen(false)} />}
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="relative">
@@ -1213,6 +1405,14 @@ function CanvasInner({
         </header>
       )}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {pendingGroup && (
+        <GroupNameModal
+          defaultLabel={pendingGroup.defaultLabel}
+          blockCount={pendingGroup.selected.length}
+          onConfirm={confirmGroupSelected}
+          onCancel={() => setPendingGroup(null)}
+        />
+      )}
       {flowsPanelOpen && (
         <FlowsPanel onClose={() => setFlowsPanelOpen(false)} onLoad={loadFlow} onSaveCurrent={saveCurrentFlow} />
       )}
@@ -1224,31 +1424,33 @@ function CanvasInner({
           editingBlockId={editingBlock?.id}
         />
         <div className="flex-1 dark:bg-gray-900" ref={wrapperRef} onDragOver={onDragOver} onDrop={onDrop}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={onSelectionChange}
-            onNodeDrag={onNodeDrag}
-            onNodeDragStop={onNodeDragStop}
-            deleteKeyCode={['Backspace', 'Delete']}
-            multiSelectionKeyCode={['Meta', 'Control']}
-            selectionKeyCode={['Shift']}
-            edgesFocusable
-            elementsSelectable
-            snapToGrid
-            snapGrid={[10, 10]}
-            defaultEdgeOptions={defaultEdgeOptions}
-            proOptions={{ hideAttribution: true }}
-            fitView
-          >
-            <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
-            <Controls />
-            <AlignmentGuideLines guides={alignGuides} />
-          </ReactFlow>
+          <QuickAddContext.Provider value={quickAddBlock}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onSelectionChange={onSelectionChange}
+              onNodeDrag={onNodeDrag}
+              onNodeDragStop={onNodeDragStop}
+              deleteKeyCode={['Backspace', 'Delete']}
+              multiSelectionKeyCode={['Meta', 'Control']}
+              selectionKeyCode={['Shift']}
+              edgesFocusable
+              elementsSelectable
+              snapToGrid
+              snapGrid={[10, 10]}
+              defaultEdgeOptions={defaultEdgeOptions}
+              proOptions={{ hideAttribution: true }}
+              fitView
+            >
+              <Background gap={10} color={theme === 'dark' ? '#374151' : undefined} />
+              <Controls />
+              <AlignmentGuideLines guides={alignGuides} />
+            </ReactFlow>
+          </QuickAddContext.Provider>
           <datalist id="overflowengine-variable-names">
             {availableVariables.map((v) => (
               <option key={v.name} value={v.name} />
@@ -1328,9 +1530,9 @@ function CanvasInner({
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-800 bg-gray-950 shadow-sm">
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-3 py-2">
-              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_2px_rgba(16,185,129,0.5)]" />
                 Console
               </span>
@@ -1338,18 +1540,18 @@ function CanvasInner({
                 type="button"
                 onClick={() => setLogs([])}
                 disabled={logs.length === 0}
-                className="rounded-md border border-gray-700 px-2 py-0.5 text-[11px] font-medium text-gray-400 transition-colors duration-150 hover:border-gray-600 hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-md border border-gray-300 px-2 py-0.5 text-[11px] font-medium text-gray-500 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               >
                 Clear
               </button>
             </div>
             <div ref={consoleRef} className="console-scroll flex-1 overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed">
               {logs.length === 0 ? (
-                <p className="text-gray-600">No activity yet - run the workflow to see it here.</p>
+                <p className="text-gray-400 dark:text-gray-600">No activity yet - run the workflow to see it here.</p>
               ) : (
                 logs.map((entry, i) => (
-                  <p key={i} className="whitespace-pre-wrap break-words text-gray-300">
-                    <span className="text-emerald-500">›</span> {entry}
+                  <p key={i} className="whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300">
+                    <span className="text-emerald-600 dark:text-emerald-500">›</span> {entry}
                   </p>
                 ))
               )}

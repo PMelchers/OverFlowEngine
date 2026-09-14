@@ -57,6 +57,52 @@ cd ../frontend
 npm install
 ```
 
+## Connecting Google / Microsoft Calendar (optional, per user)
+
+The App Trigger and App Action blocks' Google/Microsoft Calendar options (fetch, create, delete
+events) talk to real Calendar accounts over OAuth2. **There is no shared, server-wide OAuth app
+and nothing to add to `backend/.env`** - every user registers their own OAuth app and connects
+it themselves. The app works fine without this - those actions just report that no app is set
+up yet until you do it.
+
+You can connect an account two ways:
+- **From the canvas** - on an App Trigger/Action block, click the app chip, pick Google or
+  Microsoft Calendar, and a "Connect [App]" panel opens right there with the same steps below
+  built in (including the exact redirect URI to register) and a "Save & connect" button. The
+  provider's consent screen opens in a small popup so your canvas never navigates away.
+- **From Settings** - **Settings → Connected Apps** (behind a password re-check) has the same
+  form, useful for connecting ahead of time or disconnecting later.
+
+**Google Calendar:**
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) → create (or pick) a project.
+2. **APIs & Services → Library** → enable the **Google Calendar API**.
+3. **APIs & Services → OAuth consent screen** → set it up (External is fine for personal use;
+   add yourself as a test user while the app is in "Testing" mode).
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → Application type
+   **Web application**.
+5. Under **Authorized redirect URIs**, add exactly: `http://localhost:8000/calendar/google/callback`
+   (this is fixed - both connect flows show you the exact value to use).
+6. Copy the generated **Client ID** and **Client secret** and paste them into the Connect
+   Google Calendar step (from the canvas or from Settings → Connected Apps).
+
+**Microsoft Calendar:**
+1. Go to the [Microsoft Entra admin center](https://entra.microsoft.com/) →
+   **Identity → Applications → App registrations → New registration**.
+2. Any name is fine. Supported account types: "Accounts in any organizational directory and
+   personal Microsoft accounts" is the most permissive and easiest for personal use.
+3. Under **Redirect URI**, pick **Web** and enter exactly: `http://localhost:8000/calendar/microsoft/callback`
+4. After creating it, go to **Certificates & secrets → New client secret** and copy the
+   secret **value** (not the ID) immediately - it's only shown once.
+5. Under **API permissions**, add the Microsoft Graph delegated permissions **Calendars.ReadWrite**
+   and **offline_access**.
+6. Copy the **Application (client) ID** from the Overview page and paste both it and the secret
+   into the Connect Microsoft Calendar step.
+
+After saving your app credentials, click **Connect** - it takes you through Google/Microsoft's
+normal consent screen (in a popup, from the canvas path) and links your account. Every user
+does this for their own account; nobody's client secret or tokens are ever shared with anyone
+else.
+
 ## Every-day startup
 
 Run each of these in its own terminal, from the project root.
