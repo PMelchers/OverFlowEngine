@@ -1253,19 +1253,11 @@ function CanvasInner({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
               <Zap className="h-4 w-4" fill="currentColor" />
             </div>
-            <div className="text-left leading-tight">
-              <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
-                OverFlowEngine
-              </h1>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">Visual agentic workflow builder</p>
-            </div>
+            <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              OverFlowEngine
+            </h1>
           </button>
           {aboutOpen && <AboutDropdown anchorRef={logoRef} onClose={() => setAboutOpen(false)} />}
-
-          <span className="hidden flex-1 truncate text-xs text-gray-400 dark:text-gray-500 xl:block">
-            Drag blocks from the left onto the canvas, Ctrl/Shift-click to select several, then group them into
-            one reusable block. Click Start to run the workflow.
-          </span>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="relative">
