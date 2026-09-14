@@ -37,6 +37,7 @@ import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
 import AboutDropdown from './AboutDropdown'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
 import AuthModal from './AuthModal'
+import GroupNameModal from './GroupNameModal'
 import { useAuth } from './auth'
 import {
   deleteCustomBlock,
@@ -199,6 +200,13 @@ interface PendingChoice {
   options: string[]
 }
 
+/** Selection snapshot awaiting a name from GroupNameModal before groupSelected commits it. */
+interface PendingGroup {
+  selected: Node<BlockNodeData>[]
+  defaultLabel: string
+  groupIdCount: number
+}
+
 function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
   switch (kind) {
     case 'ifOne':
@@ -316,6 +324,7 @@ function CanvasInner({
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>([])
   const [alignGuides, setAlignGuides] = useState<AlignmentGuides>({})
   const [editingBlock, setEditingBlock] = useState<CustomBlock | null>(null)
+  const [pendingGroup, setPendingGroup] = useState<PendingGroup | null>(null)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
@@ -843,7 +852,6 @@ function CanvasInner({
 
   const groupSelected = useCallback(() => {
     const currentNodes = nodesRef.current
-    const currentEdges = edgesRef.current
     const selected = currentNodes.filter((n) => selectedIds.has(n.id))
 
     if (selected.length < 2) return
@@ -852,77 +860,86 @@ function CanvasInner({
       return
     }
 
-    const selIds = new Set(selected.map((n) => n.id))
-    const internalEdges = currentEdges.filter((e) => selIds.has(e.source) && selIds.has(e.target))
-    const hasIncoming = new Set(internalEdges.map((e) => e.target))
-    const hasOutgoing = new Set(internalEdges.map((e) => e.source))
-    const entry = selected.filter((n) => !hasIncoming.has(n.id)).map((n) => n.id)
-    const exit = selected.filter((n) => !hasOutgoing.has(n.id)).map((n) => n.id)
-
-    const centroid = {
-      x: selected.reduce((s, n) => s + n.position.x, 0) / selected.length,
-      y: selected.reduce((s, n) => s + n.position.y, 0) / selected.length,
-    }
-
     idCount += 1
-    const groupId = `group-${idCount}`
-    const defaultLabel = `Group ${idCount}`
-    const label = window.prompt('Name this saved block:', defaultLabel)?.trim() || defaultLabel
+    setPendingGroup({ selected, defaultLabel: `Group ${idCount}`, groupIdCount: idCount })
+  }, [selectedIds])
 
-    const subgraph: Subgraph = {
-      nodes: selected.map((n) => ({
-        id: n.id,
-        type: n.type ?? 'block',
-        data: sanitizeData(n.data),
-        position: { x: n.position.x - centroid.x, y: n.position.y - centroid.y },
-      })),
-      edges: internalEdges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle ?? null,
-        targetHandle: e.targetHandle ?? null,
-      })),
-      entry,
-      exit,
-    }
+  const confirmGroupSelected = useCallback(
+    (label: string) => {
+      if (!pendingGroup) return
+      const { selected, groupIdCount } = pendingGroup
+      const currentEdges = edgesRef.current
+      const selIds = new Set(selected.map((n) => n.id))
+      const internalEdges = currentEdges.filter((e) => selIds.has(e.source) && selIds.has(e.target))
+      const hasIncoming = new Set(internalEdges.map((e) => e.target))
+      const hasOutgoing = new Set(internalEdges.map((e) => e.source))
+      const entry = selected.filter((n) => !hasIncoming.has(n.id)).map((n) => n.id)
+      const exit = selected.filter((n) => !hasOutgoing.has(n.id)).map((n) => n.id)
 
-    const groupNode: Node<BlockNodeData> = {
-      id: groupId,
-      type: 'group',
-      position: centroid,
-      data: {
-        label,
-        subgraph,
-        sourceBlockId: `custom-${groupId}`,
-        status: 'idle',
-        onChange: (patch) => updateNodeData(groupId, patch),
-      },
-    }
-
-    setNodes((nds) => [...nds.filter((n) => !selIds.has(n.id)), groupNode])
-
-    setEdges((eds) => {
-      const rewired: Edge[] = []
-      for (const e of eds) {
-        const srcSel = selIds.has(e.source)
-        const tgtSel = selIds.has(e.target)
-        if (srcSel && tgtSel) continue
-        if (srcSel && !tgtSel) {
-          rewired.push({ ...e, id: `${e.id}-${groupId}`, source: groupId, sourceHandle: undefined })
-        } else if (!srcSel && tgtSel) {
-          rewired.push({ ...e, id: `${e.id}-${groupId}`, target: groupId, targetHandle: undefined })
-        } else {
-          rewired.push(e)
-        }
+      const centroid = {
+        x: selected.reduce((s, n) => s + n.position.x, 0) / selected.length,
+        y: selected.reduce((s, n) => s + n.position.y, 0) / selected.length,
       }
-      return rewired
-    })
 
-    const saved: CustomBlock = { id: `custom-${groupId}`, label, subgraph }
-    setCustomBlocks(saveCustomBlock(saved))
-    addLog(`Saved "${label}" (${selected.length} blocks) as a reusable block`)
-  }, [selectedIds, setNodes, setEdges, updateNodeData, addLog])
+      const groupId = `group-${groupIdCount}`
+
+      const subgraph: Subgraph = {
+        nodes: selected.map((n) => ({
+          id: n.id,
+          type: n.type ?? 'block',
+          data: sanitizeData(n.data),
+          position: { x: n.position.x - centroid.x, y: n.position.y - centroid.y },
+        })),
+        edges: internalEdges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
+        })),
+        entry,
+        exit,
+      }
+
+      const groupNode: Node<BlockNodeData> = {
+        id: groupId,
+        type: 'group',
+        position: centroid,
+        data: {
+          label,
+          subgraph,
+          sourceBlockId: `custom-${groupId}`,
+          status: 'idle',
+          onChange: (patch) => updateNodeData(groupId, patch),
+        },
+      }
+
+      setNodes((nds) => [...nds.filter((n) => !selIds.has(n.id)), groupNode])
+
+      setEdges((eds) => {
+        const rewired: Edge[] = []
+        for (const e of eds) {
+          const srcSel = selIds.has(e.source)
+          const tgtSel = selIds.has(e.target)
+          if (srcSel && tgtSel) continue
+          if (srcSel && !tgtSel) {
+            rewired.push({ ...e, id: `${e.id}-${groupId}`, source: groupId, sourceHandle: undefined })
+          } else if (!srcSel && tgtSel) {
+            rewired.push({ ...e, id: `${e.id}-${groupId}`, target: groupId, targetHandle: undefined })
+          } else {
+            rewired.push(e)
+          }
+        }
+        return rewired
+      })
+
+      const saved: CustomBlock = { id: `custom-${groupId}`, label, subgraph }
+      setCustomBlocks(saveCustomBlock(saved))
+      addLog(`Saved "${label}" (${selected.length} blocks) as a reusable block`)
+      setPendingGroup(null)
+    },
+    [pendingGroup, setNodes, setEdges, updateNodeData, addLog],
+  )
 
   const removeCustomBlock = useCallback((id: string) => {
     setCustomBlocks(deleteCustomBlock(id))
@@ -1388,6 +1405,14 @@ function CanvasInner({
         </header>
       )}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {pendingGroup && (
+        <GroupNameModal
+          defaultLabel={pendingGroup.defaultLabel}
+          blockCount={pendingGroup.selected.length}
+          onConfirm={confirmGroupSelected}
+          onCancel={() => setPendingGroup(null)}
+        />
+      )}
       {flowsPanelOpen && (
         <FlowsPanel onClose={() => setFlowsPanelOpen(false)} onLoad={loadFlow} onSaveCurrent={saveCurrentFlow} />
       )}

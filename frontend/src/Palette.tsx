@@ -95,7 +95,7 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
   }
 
   return (
-    <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+    <aside className="palette-scroll w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Blocks</h2>
         <div className="flex items-center gap-1">
@@ -153,9 +153,11 @@ export default function Palette({ customBlocks, onDeleteCustomBlock, onEditCusto
             className={`cursor-grab rounded-lg border-2 px-3 py-2 text-sm shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${item.color}`}
           >
             <BlockHeader icon={<item.icon className="h-3 w-3" />} badgeClassName={item.badgeClassName}>
-              <span className="font-medium text-gray-800">{item.label}</span>
+              <span className="font-medium text-gray-800 dark:text-gray-100">{item.label}</span>
             </BlockHeader>
-            {showDescriptions && <div className="text-xs text-gray-500">{item.description}</div>}
+            {showDescriptions && (
+              <div className="text-xs text-gray-500 dark:text-gray-400">{item.description}</div>
+            )}
           </div>
         ))}
       </div>
