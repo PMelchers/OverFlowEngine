@@ -34,6 +34,7 @@ import {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
+import AboutDropdown from './AboutDropdown'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
 import AuthModal from './AuthModal'
 import { useAuth } from './auth'
@@ -61,7 +62,15 @@ import LogNode from './nodes/LogNode'
 import MapsActionNode from './nodes/MapsActionNode'
 import TaskNode from './nodes/TaskNode'
 import TriggerNode from './nodes/TriggerNode'
-import { APP_TRIGGER_SOURCES, type BlockKind, type BlockNodeData, type Subgraph, type SubgraphEdge, type SubgraphNode, type VariableType } from './nodes/types'
+import {
+  CALENDAR_PROVIDER_TO_APP,
+  type BlockKind,
+  type BlockNodeData,
+  type Subgraph,
+  type SubgraphEdge,
+  type SubgraphNode,
+  type VariableType,
+} from './nodes/types'
 import VariableNode from './nodes/VariableNode'
 import Palette, { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from './templates'
@@ -191,9 +200,9 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
     case 'aiModel':
       return { label: 'Model', credentialId: null }
     case 'appTrigger':
-      return { label, sourceApp: APP_TRIGGER_SOURCES[0], value: '', outputVariable: 'incomingMessage', fromAddress: '' }
+      return { label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
     case 'appAction':
-      return { label, targetApp: APP_TRIGGER_SOURCES[0], to: '', subject: '', body: '' }
+      return { label, to: '', subject: '', body: '' }
     case 'mapsAction':
       return { label, mapsProvider: 'google', origin: '', destination: '', travelMode: 'driving', outputVariable: '' }
     case 'activitySuggestion':
@@ -265,7 +274,7 @@ interface CanvasProps {
   /** Template to drop onto a fresh canvas on mount, e.g. from one of the dashboard's quick-start chips. */
   initialTemplateId?: string | null
   onExitToDashboard?: () => void
-  onOpenSettings?: () => void
+  onOpenSettings?: (subPage?: 'connected-apps') => void
   onOpenMarketplace?: () => void
 }
 
@@ -290,6 +299,9 @@ function CanvasInner({
   const [flowsPanelOpen, setFlowsPanelOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [variablesOpen, setVariablesOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [appConnections, setAppConnections] = useState<Record<string, boolean>>({})
+  const logoRef = useRef<HTMLButtonElement>(null)
   const { user, authedFetch } = useAuth()
   const { theme } = useTheme()
   const { screenToFlowPosition, fitView } = useReactFlow()
@@ -372,6 +384,53 @@ function CanvasInner({
       ),
     )
   }, [availableVariables, setNodes])
+
+  // Which real apps are actually connected (right now, only Google/Microsoft Calendar
+  // have an OAuth flow - everything else in APP_TRIGGER_SOURCES stays unconnected until
+  // it gets one). Missing keys just read as "not connected" wherever this is consumed.
+  // Also handed to nodes (as onAppConnected) so the in-canvas connect modal can ask for
+  // a refresh the moment its popup finishes, instead of waiting for the next canvas visit.
+  const refreshAppConnections = useCallback(() => {
+    authedFetch('/calendar/connections')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: { provider: string; connected: boolean }[]) => {
+        const map: Record<string, boolean> = {}
+        for (const c of list) {
+          const app = CALENDAR_PROVIDER_TO_APP[c.provider]
+          if (app) map[app] = c.connected
+        }
+        setAppConnections(map)
+      })
+      .catch(() => {})
+  }, [authedFetch])
+
+  useEffect(() => {
+    refreshAppConnections()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const appConnectionsRef = useRef(appConnections)
+  useEffect(() => {
+    appConnectionsRef.current = appConnections
+  }, [appConnections])
+
+  // Stable identity (unlike onOpenSettings itself, which App.tsx recreates every render)
+  // so it's safe to hand straight to nodes without churning their data on every render.
+  const onOpenSettingsRef = useRef(onOpenSettings)
+  useEffect(() => {
+    onOpenSettingsRef.current = onOpenSettings
+  }, [onOpenSettings])
+  const openConnectedApps = useCallback(() => onOpenSettingsRef.current?.('connected-apps'), [])
+
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.type === 'appTrigger' || n.type === 'appAction'
+          ? { ...n, data: { ...n.data, appConnections, onOpenSettings: openConnectedApps, onAppConnected: refreshAppConnections } }
+          : n,
+      ),
+    )
+  }, [appConnections, openConnectedApps, refreshAppConnections, setNodes])
 
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
@@ -605,11 +664,18 @@ function CanvasInner({
           kind === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(kind === 'appTrigger' || kind === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }
       setNodes((nds) => [...nds, newNode])
     },
-    [setNodes, updateNodeData, runWorkflow],
+    [setNodes, updateNodeData, runWorkflow, openConnectedApps, refreshAppConnections],
   )
 
   const createNodeFromCustomBlock = useCallback(
@@ -668,6 +734,13 @@ function CanvasInner({
             n.type === 'activitySuggestion'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
+            ...(n.type === 'appTrigger' || n.type === 'appAction'
+              ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+              : {}),
           },
         }
       })
@@ -690,7 +763,7 @@ function CanvasInner({
         fitView({ padding: 0.3, nodes: newNodes.map((n) => ({ id: n.id })), duration: 300 }),
       )
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, addLog, fitView],
+    [setNodes, setEdges, updateNodeData, runWorkflow, addLog, fitView, openConnectedApps, refreshAppConnections],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -834,6 +907,13 @@ function CanvasInner({
           sn.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(sn.type === 'appTrigger' || sn.type === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }))
       const loadedEdges: Edge[] = block.subgraph.edges.map((se) => ({
@@ -850,7 +930,7 @@ function CanvasInner({
       setEditingBlock(block)
       requestAnimationFrame(() => fitView({ padding: 0.3 }))
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, fitView],
+    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, openConnectedApps, refreshAppConnections],
   )
 
   const exitEditMode = useCallback(() => {
@@ -976,6 +1056,13 @@ function CanvasInner({
           n.type === 'activitySuggestion'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
+          ...(n.type === 'appTrigger' || n.type === 'appAction'
+            ? {
+                appConnections: appConnectionsRef.current,
+                onOpenSettings: openConnectedApps,
+                onAppConnected: refreshAppConnections,
+              }
+            : {}),
         },
       }))
       const loadedEdges: Edge[] = flowEdges.map((e) => ({
@@ -991,7 +1078,7 @@ function CanvasInner({
       addLog('Loaded flow')
       requestAnimationFrame(() => fitView({ padding: 0.3 }))
     },
-    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog],
+    [setNodes, setEdges, updateNodeData, runWorkflow, fitView, addLog, openConnectedApps, refreshAppConnections],
   )
 
   // Opened straight from a dashboard "Open" click - load that flow onto the (empty) canvas
@@ -1033,6 +1120,53 @@ function CanvasInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTemplateId])
 
+  // A brand-new blank workflow (not opened from a saved flow or a template) starts
+  // with an App Trigger already wired to an App Action, instead of an empty canvas -
+  // a starting point to edit rather than a blank slate. Guarded by a ref (not just
+  // the initialFlowId/initialTemplateId check) for the same StrictMode double-mount
+  // reason as the template effect above.
+  const insertedStarterRef = useRef(false)
+  useEffect(() => {
+    if (initialFlowId != null || initialTemplateId || insertedStarterRef.current) return
+    insertedStarterRef.current = true
+
+    idCount += 1
+    const triggerId = `starter-trigger-${idCount}`
+    const actionId = `starter-action-${idCount}`
+    const triggerNode: Node<BlockNodeData> = {
+      id: triggerId,
+      type: 'appTrigger',
+      position: { x: 0, y: 0 },
+      data: {
+        ...defaultDataFor('appTrigger', 'App Trigger'),
+        status: 'idle',
+        onChange: (patch) => updateNodeData(triggerId, patch),
+        onTrigger: runWorkflow,
+        appConnections: appConnectionsRef.current,
+        onOpenSettings: openConnectedApps,
+        onAppConnected: refreshAppConnections,
+      },
+    }
+    const actionNode: Node<BlockNodeData> = {
+      id: actionId,
+      type: 'appAction',
+      position: { x: 380, y: 0 },
+      data: {
+        ...defaultDataFor('appAction', 'App Action'),
+        status: 'idle',
+        onChange: (patch) => updateNodeData(actionId, patch),
+        availableVariables: availableVariablesRef.current,
+        appConnections: appConnectionsRef.current,
+        onOpenSettings: openConnectedApps,
+        onAppConnected: refreshAppConnections,
+      },
+    }
+    setNodes([triggerNode, actionNode])
+    setEdges([{ id: `starter-edge-${idCount}`, source: triggerId, target: actionId }])
+    requestAnimationFrame(() => fitView({ padding: 0.3 }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const canGroup = selectedIds.size >= 2
 
   return (
@@ -1067,17 +1201,23 @@ function CanvasInner({
         </header>
       ) : (
         <header className="flex items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
-          <div className="flex shrink-0 items-center gap-2.5">
+          <button
+            ref={logoRef}
+            type="button"
+            onClick={() => setAboutOpen((o) => !o)}
+            className="flex shrink-0 items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
               <Zap className="h-4 w-4" fill="currentColor" />
             </div>
-            <div className="leading-tight">
+            <div className="text-left leading-tight">
               <h1 className="text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
                 OverFlowEngine
               </h1>
               <p className="text-[11px] text-gray-400 dark:text-gray-500">Visual agentic workflow builder</p>
             </div>
-          </div>
+          </button>
+          {aboutOpen && <AboutDropdown anchorRef={logoRef} onClose={() => setAboutOpen(false)} />}
 
           <span className="hidden flex-1 truncate text-xs text-gray-400 dark:text-gray-500 xl:block">
             Drag blocks from the left onto the canvas, Ctrl/Shift-click to select several, then group them into

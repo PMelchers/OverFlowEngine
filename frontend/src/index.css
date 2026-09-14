@@ -30,6 +30,21 @@ html.dark body {
   animation: node-flash 0.7s ease-out;
 }
 
+@keyframes slide-in-right {
+  from {
+    transform: translate(24px, -50%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(0, -50%);
+    opacity: 1;
+  }
+}
+
+.slide-in-right {
+  animation: slide-in-right 0.2s ease-out forwards;
+}
+
 /* Nicer connector lines: rounded caps, a soft shadow, and a highlight on hover/selection. */
 .react-flow__edge-path {
   stroke-linecap: round;

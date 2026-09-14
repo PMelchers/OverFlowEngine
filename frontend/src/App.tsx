@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Canvas from './Canvas'
 import Dashboard from './Dashboard'
 import Marketplace from './Marketplace'
+import OAuthPopupBridge from './OAuthPopupBridge'
 import Settings from './Settings'
 import { AuthProvider } from './auth'
 import { ThemeProvider } from './theme'
@@ -9,14 +10,25 @@ import { ThemeProvider } from './theme'
 type View =
   | { kind: 'dashboard' }
   | { kind: 'editor'; flowId: number | null; templateId?: string | null }
-  | { kind: 'settings'; from: View }
+  | { kind: 'settings'; from: View; initialSubPage?: 'connected-apps' }
   | { kind: 'marketplace'; from: View }
 
 function AppShell() {
   const [view, setView] = useState<View>({ kind: 'dashboard' })
 
+  // This tab is the small OAuth consent popup ConnectAppModal opened, landing back
+  // here after the provider redirects it - not the app itself. window.opener is only
+  // set when a script (our own window.open) opened this tab, so a normal visit to
+  // this URL never gets caught here even if the query param is somehow present.
+  const [oauthPopupProvider] = useState(() =>
+    window.opener ? new URLSearchParams(window.location.search).get('calendar_connected') : null,
+  )
+  if (oauthPopupProvider) {
+    return <OAuthPopupBridge provider={oauthPopupProvider} />
+  }
+
   if (view.kind === 'settings') {
-    return <Settings onBack={() => setView(view.from)} />
+    return <Settings onBack={() => setView(view.from)} initialSubPage={view.initialSubPage} />
   }
 
   if (view.kind === 'marketplace') {
@@ -29,7 +41,7 @@ function AppShell() {
         initialFlowId={view.flowId}
         initialTemplateId={view.templateId ?? null}
         onExitToDashboard={() => setView({ kind: 'dashboard' })}
-        onOpenSettings={() => setView({ kind: 'settings', from: view })}
+        onOpenSettings={(subPage) => setView({ kind: 'settings', from: view, initialSubPage: subPage })}
         onOpenMarketplace={() => setView({ kind: 'marketplace', from: view })}
       />
     )

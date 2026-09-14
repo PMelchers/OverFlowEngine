@@ -1,16 +1,23 @@
 import logging
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy.orm import Session
 
-from . import models
+from . import calendar_providers, models
 from .conditions import evaluate_conditions
 from .maps import build_maps_url
 
 logger = logging.getLogger("overflowengine.workflow")
 
 _VAR_PATTERN = re.compile(r"\{(\w+)\}")
+
+# App Action's targetApp values that are real calendar accounts (as opposed to a
+# plain "send a message" app like Email/Slack/Teams) - maps the human-readable app
+# name shown in the block to the provider key calendar_providers.py expects.
+CALENDAR_APP_PROVIDERS = {"Google Calendar": "google", "Microsoft Calendar": "microsoft"}
 
 # Runs paused on a Choice block, keyed by run_id. Holds only plain data (no
 # SQLAlchemy objects) so it survives across the separate HTTP requests /
@@ -51,6 +58,22 @@ def _upsert_variable(db: Session, name: str, var_type: str, value: str):
     else:
         db.add(models.Variable(name=name, var_type=var_type, value=value))
     db.commit()
+
+
+def _get_calendar_connection(db: Session, user_id: int | None, provider: str):
+    """Returns (connection, error_message) - exactly one is non-None."""
+    if user_id is None:
+        return None, "you're not signed in, so there's no calendar to use"
+    connection = (
+        db.query(models.CalendarConnection)
+        .filter(models.CalendarConnection.user_id == user_id, models.CalendarConnection.provider == provider)
+        .first()
+    )
+    if connection is None or not connection.client_id:
+        return None, f"no {provider} calendar app set up yet - add one in Settings"
+    if not connection.access_token or not connection.refresh_token:
+        return None, f"{provider} calendar app saved, but not connected yet - click Connect in Settings"
+    return connection, None
 
 
 def _advance(db: Session, state: dict) -> dict:
@@ -224,14 +247,105 @@ def _advance(db: Session, state: dict) -> dict:
 
         elif ntype == "appAction":
             target_app = data.get("targetApp", "an app")
-            to = _render_message(data.get("to", ""), eval_vars)
-            subject = _render_message(data.get("subject", ""), eval_vars)
-            body = _render_message(data.get("body", ""), eval_vars)
-            subject_part = f' "{subject}"' if subject else ""
-            message = (
-                f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
-                "(simulated - real send not wired up yet)"
-            )
+            calendar_provider = CALENDAR_APP_PROVIDERS.get(target_app)
+
+            if target_app == "AI":
+                # No external account - calls the model connected on this node's "model"
+                # handle, same idea as an AI Agent block. Real model calls aren't wired
+                # up anywhere yet, so this stays a simulated reply for consistency.
+                model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
+                model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
+                model_data = (model_node.get("data") or {}) if model_node else {}
+                model = model_data.get("model") or "no model connected"
+                prompt = _render_message(data.get("prompt", ""), eval_vars)
+                output_var = (data.get("outputVariable") or "").strip()
+                if not prompt.strip():
+                    message = f'"{label}" has no prompt configured for its AI call'
+                else:
+                    simulated_output = f'[preview reply from {model}] responding to: "{prompt}"'
+                    if output_var:
+                        _upsert_variable(db, output_var, "string", simulated_output)
+                        eval_vars[output_var] = simulated_output
+                        message = (
+                            f'"{label}" ran an AI call with {model}, saved as "{output_var}" '
+                            "(simulated - real model calls not wired up yet)"
+                        )
+                    else:
+                        message = f'"{label}" ran an AI call with {model} (simulated - real model calls not wired up yet)'
+            elif calendar_provider is None:
+                # Plain "send a message" apps (Email/Slack/Teams/Webhook) - still simulated,
+                # no real send wired up yet.
+                to = _render_message(data.get("to", ""), eval_vars)
+                subject = _render_message(data.get("subject", ""), eval_vars)
+                body = _render_message(data.get("body", ""), eval_vars)
+                subject_part = f' "{subject}"' if subject else ""
+                message = (
+                    f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
+                    "(simulated - real send not wired up yet)"
+                )
+            else:
+                # Real calendar accounts - which action runs depends on targetAction,
+                # not on the node type, so adding a new app/action never needs a new
+                # block type or a new executor branch, just a new case here.
+                action = data.get("targetAction") or "fetchEvents"
+                output_var = (data.get("outputVariable") or "").strip()
+                connection, error = _get_calendar_connection(db, state.get("user_id"), calendar_provider)
+                if error:
+                    message = f'"{label}" - {error}'
+                elif action == "fetchEvents":
+                    try:
+                        days_ahead_raw = _render_message(data.get("daysAhead") or "7", eval_vars)
+                        days_ahead = int(days_ahead_raw) if days_ahead_raw.strip() else 7
+                        now = datetime.now(timezone.utc)
+                        access_token = calendar_providers.get_valid_access_token(db, connection)
+                        events = calendar_providers.list_events(
+                            calendar_provider,
+                            access_token,
+                            now.isoformat(),
+                            (now + timedelta(days=days_ahead)).isoformat(),
+                        )
+                        summary = "; ".join(f'{e["title"]} ({e["start"]})' for e in events) or "No events found"
+                        if output_var:
+                            _upsert_variable(db, output_var, "string", summary)
+                            eval_vars[output_var] = summary
+                        message = f'"{label}" fetched {len(events)} event(s) from {target_app}'
+                    except (httpx.HTTPError, ValueError, KeyError) as exc:
+                        message = f'"{label}" could not reach {target_app}: {exc}'
+                elif action == "createEvent":
+                    title = _render_message(data.get("eventTitle", ""), eval_vars)
+                    start = _render_message(data.get("startTime", ""), eval_vars)
+                    end = _render_message(data.get("endTime", ""), eval_vars)
+                    description = _render_message(data.get("eventDescription", ""), eval_vars)
+                    if not title.strip() or not start.strip() or not end.strip():
+                        message = f'"{label}" needs a title, start time, and end time to create an event'
+                    else:
+                        try:
+                            access_token = calendar_providers.get_valid_access_token(db, connection)
+                            event_id = calendar_providers.create_event(
+                                calendar_provider, access_token, title, start, end, description
+                            )
+                            if output_var:
+                                _upsert_variable(db, output_var, "string", event_id)
+                                eval_vars[output_var] = event_id
+                            message = f'"{label}" created "{title}" on {target_app} ({start} - {end})'
+                        except httpx.HTTPError as exc:
+                            message = f'"{label}" could not create the event on {target_app}: {exc}'
+                elif action == "deleteEvent":
+                    event_id = _render_message(data.get("eventId", ""), eval_vars).strip()
+                    if not event_id:
+                        message = (
+                            f'"{label}" has no event ID to delete - connect it to an output from '
+                            "a Create/Fetch block"
+                        )
+                    else:
+                        try:
+                            access_token = calendar_providers.get_valid_access_token(db, connection)
+                            calendar_providers.delete_event(calendar_provider, access_token, event_id)
+                            message = f'"{label}" deleted event "{event_id}" from {target_app}'
+                        except httpx.HTTPError as exc:
+                            message = f'"{label}" could not delete that event on {target_app}: {exc}'
+                else:
+                    message = f'"{label}" has an unrecognized action "{action}"'
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "activitySuggestion":
