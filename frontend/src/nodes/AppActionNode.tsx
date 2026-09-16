@@ -1,6 +1,7 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
+import { useAuth } from '../auth'
 import AiCallFields from './AiCallFields'
 import AppPicker from './AppPicker'
 import BlockHeader from './BlockHeader'
@@ -15,11 +16,25 @@ const CALENDAR_ACTIONS: { value: NonNullable<BlockNodeData['targetAction']>; lab
   { value: 'deleteEvent', label: 'Delete Event' },
 ]
 
+type AppCredential = { id: number; target_app: string; label: string; verified: boolean }
+
 export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
+  const { authedFetch } = useAuth()
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const toRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const isDiscord = data.targetApp === 'Discord'
+
+  const [discordCredentials, setDiscordCredentials] = useState<AppCredential[]>([])
+
+  useEffect(() => {
+    if (!isDiscord) return
+    authedFetch('/app-credentials?target_app=Discord')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setDiscordCredentials)
+      .catch(() => setDiscordCredentials([]))
+  }, [isDiscord, authedFetch])
   const titleRef = useRef<HTMLInputElement>(null)
   const eventIdRef = useRef<HTMLInputElement>(null)
   const appAnchorRef = useRef<HTMLButtonElement>(null)
@@ -108,7 +123,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           selectedApp={targetApp}
           onSelectApp={(app) => {
             data.onChange?.({ targetApp: app, targetAction: undefined })
-            if (!(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
+            if (app !== 'Discord' && !(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
           }}
           aiActions={{
             selectedMode: data.aiCallMode,
@@ -148,7 +163,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           {connected ? 'Connected' : 'Not connected - click to connect it'}
         </p>
       )}
-      {targetApp && !isCalendar && !isAi && (
+      {targetApp && !isCalendar && !isAi && !isDiscord && (
         <p className="mb-2 flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-gray-500">
           <CircleDashed className="h-3 w-3" /> Preview only - no real connection for {targetApp} yet
         </p>
@@ -183,12 +198,39 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
 
       {targetApp && !isCalendar && !isAi && (
         <>
-          <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">To</label>
+          {isDiscord && (
+            <>
+              <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                Discord bot
+              </label>
+              <select
+                value={data.credentialId ?? ''}
+                onChange={(e) => data.onChange?.({ credentialId: e.target.value ? Number(e.target.value) : null })}
+                className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <option value="">Server default bot (set in mcp-servers/discord/.env)</option>
+                {discordCredentials.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label} {c.verified ? '' : '(unverified)'}
+                  </option>
+                ))}
+              </select>
+              {discordCredentials.length === 0 && (
+                <p className="mb-2 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  No Discord bot linked yet - add one from Settings, or leave this on the server default.
+                </p>
+              )}
+            </>
+          )}
+
+          <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+            {isDiscord ? 'Channel ID' : 'To'}
+          </label>
           <input
             ref={toRef}
             type="text"
             value={data.to ?? ''}
-            placeholder="e.g. {incomingMessageFrom}"
+            placeholder={isDiscord ? 'e.g. 1234567890123456' : 'e.g. {incomingMessageFrom}'}
             onChange={(e) => data.onChange?.({ to: e.target.value })}
             className="nodrag mb-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
           />
@@ -251,7 +293,9 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           )}
 
           <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-            Preview action - logs what would be sent; a real {targetApp} connection isn't wired up yet.
+            {isDiscord
+              ? 'Sends a real message to this Discord channel via the bot.'
+              : `Preview action - logs what would be sent; a real ${targetApp} connection isn't wired up yet.`}
           </p>
         </>
       )}

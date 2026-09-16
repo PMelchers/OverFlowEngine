@@ -19,6 +19,7 @@ import {
   type LucideIcon,
   Mail,
   MapPin,
+  MessageSquare,
   PenLine,
   Play,
   Reply,
@@ -204,6 +205,7 @@ export interface PaletteItem {
 export const APP_TRIGGER_SOURCES = [
   'Microsoft Teams',
   'Slack',
+  'Discord',
   'Email',
   'Webhook',
   'Google Calendar',
@@ -228,6 +230,7 @@ export const APP_TO_CALENDAR_PROVIDER: Record<string, 'google' | 'microsoft'> = 
 export const APP_ICONS: Record<string, LucideIcon> = {
   'Microsoft Teams': Users,
   Slack: Hash,
+  Discord: MessageSquare,
   Email: Mail,
   Webhook: Webhook,
   'Google Calendar': Calendar,
