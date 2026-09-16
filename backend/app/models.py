@@ -25,6 +25,22 @@ class AiCredential(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class AppCredential(Base):
+    """A secret needed to actually reach a target app from an App Action block (e.g. a
+    Discord bot token) - kept separate from AiCredential since these aren't LLM providers
+    and have no associated "model" concept."""
+
+    __tablename__ = "app_credentials"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_app = Column(String, nullable=False)
+    label = Column(String, nullable=False)
+    token = Column(String, nullable=False)
+    verified = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class SavedFlow(Base):
     __tablename__ = "saved_flows"
 

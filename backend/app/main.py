@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from . import auth, calendar_providers, executor, models, providers
+from . import auth, calendar_providers, discord_mcp_client, executor, models, providers
 from .db import Base, SessionLocal, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
@@ -179,6 +179,12 @@ class LoginIn(BaseModel):
 class CredentialIn(BaseModel):
     label: str
     api_key: str
+
+
+class AppCredentialIn(BaseModel):
+    target_app: str
+    label: str
+    token: str
 
 
 class UpdateProfileIn(BaseModel):
@@ -398,6 +404,80 @@ def delete_credential(
     cred = (
         db.query(models.AiCredential)
         .filter(models.AiCredential.id == credential_id, models.AiCredential.user_id == current_user.id)
+        .first()
+    )
+    if cred is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    db.delete(cred)
+    db.commit()
+    return {"status": "deleted"}
+
+
+def _app_credential_out(cred: models.AppCredential) -> dict:
+    return {
+        "id": cred.id,
+        "target_app": cred.target_app,
+        "label": cred.label,
+        "token_masked": _mask_key(cred.token),
+        "verified": cred.verified,
+        "created_at": cred.created_at,
+    }
+
+
+@app.get("/app-credentials")
+def list_app_credentials(
+    target_app: str | None = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AppCredential).filter(models.AppCredential.user_id == current_user.id)
+    if target_app:
+        query = query.filter(models.AppCredential.target_app == target_app)
+    creds = query.order_by(models.AppCredential.created_at.desc()).all()
+    return [_app_credential_out(c) for c in creds]
+
+
+@app.post("/app-credentials", status_code=status.HTTP_201_CREATED)
+def create_app_credential(
+    body: AppCredentialIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    target_app = body.target_app.strip()
+    token = body.token.strip()
+    if not target_app or not body.label.strip() or not token:
+        raise HTTPException(status_code=400, detail="Target app, label and token are all required")
+
+    verified: bool | None = None
+    if target_app == "Discord":
+        verified, detail = discord_mcp_client.verify_discord_bot_token(token)
+        if verified is False:
+            raise HTTPException(status_code=400, detail=f"Discord rejected this bot token: {detail}")
+        # verified is None when the MCP server itself couldn't be reached - still save
+        # the token unverified rather than blocking on an infra hiccup.
+
+    cred = models.AppCredential(
+        user_id=current_user.id,
+        target_app=target_app,
+        label=body.label.strip(),
+        token=token,
+        verified=bool(verified),
+    )
+    db.add(cred)
+    db.commit()
+    db.refresh(cred)
+    return _app_credential_out(cred)
+
+
+@app.delete("/app-credentials/{credential_id}")
+def delete_app_credential(
+    credential_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    cred = (
+        db.query(models.AppCredential)
+        .filter(models.AppCredential.id == credential_id, models.AppCredential.user_id == current_user.id)
         .first()
     )
     if cred is None:

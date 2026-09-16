@@ -4,6 +4,10 @@ backend/.env
 __pycache__/
 *.pyc
 
+# MCP servers
+mcp-servers/*/.env
+mcp-servers/*/.venv/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
