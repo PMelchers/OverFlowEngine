@@ -253,9 +253,30 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
         outputVariable: '',
       }
     case 'activitySuggestion':
-      return { label, activityContext: '', interests: '', outputVariable: '' }
+      return {
+        label,
+        origin: '',
+        activityContext: '',
+        interests: '',
+        outputVariable: '',
+        destinationOutputVariable: '',
+      }
     case 'costEstimate':
-      return { label, waypoints: '', activityContext: '', budget: '', outputVariable: '' }
+      return {
+        label,
+        waypoints: '',
+        destinationStops: '',
+        origin: '',
+        activityContext: '',
+        stayType: '',
+        transportMode: '',
+        checkInDate: '',
+        checkOutDate: '',
+        adults: '',
+        children: '',
+        budget: '',
+        outputVariable: '',
+      }
     default:
       return { label }
   }

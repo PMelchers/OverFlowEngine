@@ -160,16 +160,35 @@ export interface BlockNodeData {
   // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
   // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
   // a simulated one if no AI Model block is connected. Reuses `outputVariable` for the variable
-  // name the accepted stops are saved into as a "|"-separated list, meant to be referenced from a
-  // downstream Maps Route block's Waypoints field, e.g. "{routeActivities}"
+  // name the accepted ROUTE stops are saved into as a "|"-separated list, meant to be referenced
+  // from a downstream Maps Route block's Waypoints field, e.g. "{routeActivities}" - these are
+  // things passed on the way, not things to do once already at the destination
   activityContext?: string
   interests?: string
+  /** variable name the accepted DESTINATION activities are saved into (also "|"-separated) -
+   *  things to actually do once arrived, not waypoints on the way there */
+  destinationOutputVariable?: string
   // cost-estimate block (AI looks up real prices via web search and totals them against a
-  // budget) - reuses `waypoints` for the "|"-separated stops to price (e.g. "{routeActivities}"),
-  // `activityContext` for the destination context, `credentialId`/`model` via the "model" handle
-  // exactly like the AI Agent block, and `outputVariable` for the variable name the JSON
-  // breakdown is saved into
+  // budget) - reuses `waypoints` for the "|"-separated ROUTE stops to price (e.g.
+  // "{routeActivities}", priced as category "route_activity"), `activityContext` for the
+  // destination context, `origin` for the starting point (transport line), `credentialId`/
+  // `model` via the "model" handle exactly like the AI Agent block, and `outputVariable` for
+  // the variable name the JSON breakdown is saved into
   budget?: string
+  /** "|"-separated things to do ONCE AT the destination (e.g. "{destinationStops}") - priced
+   *  separately from `waypoints` as category "destination_activity", since they aren't stops
+   *  on the way there */
+  destinationStops?: string
+  /** accommodation/transport lines are only priced once these resolve to a real value -
+   *  left blank (or an unresolved "{var}") to skip that line entirely */
+  stayType?: string
+  transportMode?: string
+  checkInDate?: string
+  checkOutDate?: string
+  /** defaults to "{tripAdults}"/"{tripChildren}" in the template - every cost line is the
+   *  TOTAL for this many travelers, not a per-person price */
+  adults?: string
+  children?: string
   // app-action block, targetApp = "Google Calendar" | "Microsoft Calendar" (real OAuth
   // account, connected from Settings - the provider is just targetApp, lowercased)
   /** targetAction "fetchEvents": how many days ahead of now to fetch, e.g. "7" */
@@ -192,6 +211,7 @@ export interface BlockNodeData {
  *  (not on node data) so the console/summary card can render a real table instead of text. */
 export interface CostBreakdownItem {
   name: string
+  category: 'route_activity' | 'destination_activity' | 'accommodation' | 'transport'
   estimated_cost: number
   currency: string
   note: string

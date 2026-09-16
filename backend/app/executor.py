@@ -34,20 +34,68 @@ def _render_message(template: str, variables: dict) -> str:
     return _VAR_PATTERN.sub(replace, template or "")
 
 
-def _parse_cost_items(reply: str, stops: list[str]) -> list[dict]:
+def _parse_route_destination(reply: str) -> tuple[list[str], list[str]]:
+    """Parses a Suggest Activities reply expected to contain a "ROUTE: a|b|c" line and a
+    "DESTINATION: x|y|z" line. If the model ignored that format entirely, treats the whole
+    reply as route stops (the old single-list behavior) rather than losing everything."""
+
+    def _split_line(match: re.Match | None) -> list[str]:
+        if not match:
+            return []
+        line = match.group(1).split("\n", 1)[0]
+        return [s.strip(" .\t-") for s in line.split("|") if s.strip(" .\t-")]
+
+    route = _split_line(re.search(r"ROUTE:\s*(.+)", reply, re.IGNORECASE))
+    destination = _split_line(re.search(r"DESTINATION:\s*(.+)", reply, re.IGNORECASE))
+    if not route and not destination:
+        route = [s.strip(" .\t-") for s in reply.split("|") if s.strip(" .\t-")]
+    return route, destination
+
+
+_COST_CATEGORIES = ("route_activity", "destination_activity", "accommodation", "transport")
+
+
+def _parse_cost_items(
+    reply: str,
+    route_stops: list[str],
+    destination_stops: list[str],
+    has_accommodation: bool,
+    has_transport: bool,
+) -> list[dict]:
     """Parses a Cost Estimate model reply, expected to be a bare JSON array of
-    {name, estimated_cost, currency, note}. Falls back to a zeroed-out entry per
-    stop (never silently drops one) if the model didn't return valid JSON."""
+    {name, category, estimated_cost, currency, note}. Falls back to one zeroed-out
+    entry per requested line (never silently drops one) if the model didn't return
+    valid JSON."""
     text = reply.strip()
     if text.startswith("```"):
         text = text.strip("`")
         if "\n" in text:
             first_line, rest = text.split("\n", 1)
             text = rest if first_line.strip().lower() in ("json", "") else text
-    try:
-        parsed = json.loads(text)
+
+    # Web-search-enabled replies often narrate ("Let me look that up... Based on my
+    # search: [...]") despite the "ONLY JSON" instruction - parsing the raw text fails
+    # on that surrounding prose, so fall back to the substring between the first "["
+    # and the last "]" before giving up entirely.
+    candidates = [text]
+    start, end = text.find("["), text.rfind("]")
+    if start != -1 and end > start:
+        candidates.append(text[start : end + 1])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
         if not isinstance(parsed, list) or not parsed:
-            raise ValueError("not a non-empty list")
+            continue
+        break
+    else:
+        parsed = None
+
+    try:
+        if parsed is None:
+            raise ValueError("no valid JSON array found")
         items = []
         for entry in parsed:
             if not isinstance(entry, dict):
@@ -56,9 +104,11 @@ def _parse_cost_items(reply: str, stops: list[str]) -> list[dict]:
                 cost = float(entry.get("estimated_cost", 0) or 0)
             except (TypeError, ValueError):
                 cost = 0.0
+            category = str(entry.get("category") or "route_activity").strip().lower()
             items.append(
                 {
-                    "name": str(entry.get("name") or "Unnamed stop").strip(),
+                    "name": str(entry.get("name") or "Unnamed item").strip(),
+                    "category": category if category in _COST_CATEGORIES else "route_activity",
                     "estimated_cost": cost,
                     "currency": str(entry.get("currency") or "EUR").strip() or "EUR",
                     "note": str(entry.get("note") or "").strip(),
@@ -68,10 +118,46 @@ def _parse_cost_items(reply: str, stops: list[str]) -> list[dict]:
             raise ValueError("no usable entries")
         return items
     except (ValueError, TypeError, json.JSONDecodeError):
-        return [
-            {"name": s, "estimated_cost": 0.0, "currency": "EUR", "note": "could not parse the AI's price estimate"}
-            for s in stops
+        fallback = [
+            {
+                "name": s,
+                "category": "route_activity",
+                "estimated_cost": 0.0,
+                "currency": "EUR",
+                "note": "could not parse the AI's price estimate",
+            }
+            for s in route_stops
+        ] + [
+            {
+                "name": s,
+                "category": "destination_activity",
+                "estimated_cost": 0.0,
+                "currency": "EUR",
+                "note": "could not parse the AI's price estimate",
+            }
+            for s in destination_stops
         ]
+        if has_accommodation:
+            fallback.append(
+                {
+                    "name": "Accommodation",
+                    "category": "accommodation",
+                    "estimated_cost": 0.0,
+                    "currency": "EUR",
+                    "note": "could not parse the AI's price estimate",
+                }
+            )
+        if has_transport:
+            fallback.append(
+                {
+                    "name": "Transport",
+                    "category": "transport",
+                    "estimated_cost": 0.0,
+                    "currency": "EUR",
+                    "note": "could not parse the AI's price estimate",
+                }
+            )
+        return fallback
 
 
 def _parse_number(raw: str) -> float | None:
@@ -439,9 +525,11 @@ def _advance(db: Session, state: dict) -> dict:
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "activitySuggestion":
+            origin = _render_message(data.get("origin", ""), eval_vars)
             context = _render_message(data.get("activityContext", ""), eval_vars)
             interests = _render_message(data.get("interests", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
+            destination_output_var = (data.get("destinationOutputVariable") or "").strip()
 
             # Same "model" handle/lookup pattern as the AI Agent block - connecting an AI
             # Model block below makes this a real, live suggestion instead of a simulated one.
@@ -451,7 +539,8 @@ def _advance(db: Session, state: dict) -> dict:
             model = model_data.get("model")
             credential_id = model_data.get("credentialId")
 
-            stops: list[str] = []
+            route_stops: list[str] = []
+            destination_stops: list[str] = []
             ai_backed = False
             call_error: str | None = None
 
@@ -465,31 +554,36 @@ def _advance(db: Session, state: dict) -> dict:
                     call_error = "could not use its linked API key - log in as the account that added it"
                 else:
                     system_prompt = (
-                        "You suggest interesting points of interest to stop at along a travel route. "
-                        "Reply with ONLY a short list of 3-5 concrete stop names separated by '|', "
-                        "nothing else - no numbering, no explanation, no full sentences."
+                        "You suggest interesting points of interest for a road trip. Reply with "
+                        "EXACTLY two lines and nothing else (no numbering, no explanation):\n"
+                        "ROUTE: 3-5 concrete stop names separated by '|' - real places worth a "
+                        "detour ALONG THE ACTUAL ROAD ROUTE between the starting point and the "
+                        "destination. Spread them across the WHOLE route (e.g. one soon after "
+                        "departure, some in the middle, one near the end) - do NOT cluster them all "
+                        "near the destination, and do NOT suggest anything at the destination itself.\n"
+                        "DESTINATION: 3-4 concrete activity/place names separated by '|' - things to "
+                        "actually DO once already AT the destination"
                     )
-                    user_message = f"Route to: {context or 'the destination'}."
+                    user_message = f"Road trip from {origin or 'an unspecified starting point'} to {context or 'the destination'}."
                     if interests:
                         user_message += f" Traveler interests: {interests}."
                     try:
                         reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
-                        stops = [s.strip(" .\t-") for s in reply.split("|")]
-                        stops = [s for s in stops if s]
+                        route_stops, destination_stops = _parse_route_destination(reply)
                         ai_backed = True
                     except providers.ModelCallError as exc:
                         call_error = str(exc)
 
-            if not stops:
+            if not route_stops and not destination_stops:
                 # No AI Model block connected (or the call failed) - fall back to a
                 # plausible-looking suggestion built from the route context, in the same
                 # style the AI Agent block uses before a real model call is wired up.
-                if interests:
-                    stops = ["a scenic viewpoint", f"a spot known for {interests}", "a notable landmark"]
-                else:
-                    stops = ["a scenic viewpoint", "a well-reviewed local spot", "a notable landmark"]
+                route_stops = ["a scenic viewpoint", "a well-reviewed local spot"]
+                destination_stops = [f"exploring {interests}"] if interests else ["a notable landmark"]
 
-            suggestion_message = f"Along the way to {context or 'your destination'}, consider: {', '.join(stops)}."
+            route_part = f"On the way: {', '.join(route_stops)}" if route_stops else "No route stops suggested"
+            dest_part = f"At the destination: {', '.join(destination_stops)}" if destination_stops else "No destination activities suggested"
+            suggestion_message = f"For {context or 'your trip'} - {route_part}. {dest_part}."
             logger.info(f"[SUGGESTION] {suggestion_message}")
             print(f"[OverFlowEngine][SUGGESTION] {suggestion_message}")
 
@@ -508,7 +602,12 @@ def _advance(db: Session, state: dict) -> dict:
                 }
             )
             state["awaiting_node"] = node_id
-            state["awaiting_suggestion"] = {"stops": stops, "output_var": output_var}
+            state["awaiting_suggestion"] = {
+                "stops": route_stops,
+                "output_var": output_var,
+                "destination_stops": destination_stops,
+                "destination_output_var": destination_output_var,
+            }
             return {
                 "status": "awaiting_choice",
                 "node_id": node_id,
@@ -520,10 +619,49 @@ def _advance(db: Session, state: dict) -> dict:
 
         elif ntype == "costEstimate":
             stops_raw = _render_message(data.get("waypoints", ""), eval_vars)
+            dest_stops_raw = _render_message(data.get("destinationStops", ""), eval_vars)
             destination = _render_message(data.get("activityContext", ""), eval_vars)
             budget_raw = _render_message(data.get("budget", ""), eval_vars)
+            origin = _render_message(data.get("origin", ""), eval_vars)
+            stay_type = _render_message(data.get("stayType", ""), eval_vars)
+            transport_mode = _render_message(data.get("transportMode", ""), eval_vars)
+            check_in_raw = _render_message(data.get("checkInDate", ""), eval_vars)
+            check_out_raw = _render_message(data.get("checkOutDate", ""), eval_vars)
+            adults_raw = _render_message(data.get("adults", ""), eval_vars)
+            children_raw = _render_message(data.get("children", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
             stops = [s.strip() for s in stops_raw.split("|") if s.strip()]
+            dest_stops = [s.strip() for s in dest_stops_raw.split("|") if s.strip()]
+
+            def resolved(s: str) -> str:
+                # A template field whose variable was never defined renders back with the
+                # literal "{name}" still in it - treat that the same as blank/not set.
+                return "" if not s or _VAR_PATTERN.search(s) else s.strip()
+
+            def to_int(s: str, default: int) -> int:
+                match = re.search(r"\d+", s or "")
+                return int(match.group(0)) if match else default
+
+            adults = to_int(resolved(adults_raw), 1)
+            children = to_int(resolved(children_raw), 0)
+            travelers = max(adults + children, 1)
+
+            nights = None
+            check_in, check_out = resolved(check_in_raw), resolved(check_out_raw)
+            if check_in and check_out:
+                try:
+                    d1 = datetime.strptime(check_in, "%Y-%m-%d")
+                    d2 = datetime.strptime(check_out, "%Y-%m-%d")
+                    nights = (d2 - d1).days
+                    if nights <= 0:
+                        nights = None
+                except ValueError:
+                    nights = None
+
+            stay_type = resolved(stay_type)
+            transport_mode = resolved(transport_mode)
+            origin = resolved(origin)
+            destination = resolved(destination) or destination  # keep even if literally unresolved, for the message
 
             # Same "model" handle/lookup pattern as the AI Agent and Suggest Activities blocks.
             model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
@@ -535,9 +673,10 @@ def _advance(db: Session, state: dict) -> dict:
             items: list[dict] = []
             searched = False
             error: str | None = None
+            skipped_notes: list[str] = []
 
-            if not stops:
-                error = "no stops to price"
+            if not stops and not dest_stops and not stay_type and not transport_mode:
+                error = "nothing to price - no stops, accommodation, or transport configured"
             elif not credential_id or not model:
                 error = "no AI Model block connected/unlocked"
             else:
@@ -549,22 +688,48 @@ def _advance(db: Session, state: dict) -> dict:
                 if cred is None:
                     error = "could not use its linked API key - log in as the account that added it"
                 else:
+                    lines: list[str] = []
+                    for stop in stops:
+                        lines.append(f'one "route_activity" line for a stop ALONG THE WAY: {stop}')
+                    for stop in dest_stops:
+                        lines.append(f'one "destination_activity" line for something done AT the destination: {stop}')
+                    if stay_type and nights:
+                        lines.append(
+                            f'one "accommodation" line: {nights} night(s) of {stay_type} accommodation '
+                            f"in {destination or 'the destination'} for the whole group"
+                        )
+                    elif stay_type:
+                        skipped_notes.append("accommodation not estimated - check-in/check-out dates not set")
+                    if transport_mode and (origin or destination):
+                        lines.append(
+                            f'one "transport" line: round trip by {transport_mode} from '
+                            f"{origin or 'the starting point'} to {destination or 'the destination'} "
+                            "and back, for the whole group"
+                        )
+                    elif transport_mode:
+                        skipped_notes.append("transport not estimated - origin/destination not set")
+
                     system_prompt = (
                         "You are a travel budgeting assistant. Use web search to find realistic, "
-                        "current approximate prices (entrance fees / typical costs) for each given "
-                        "activity or stop, in the given destination. Reply with ONLY a JSON array, "
-                        "no markdown fences and no other text, one object per activity in the same "
-                        'order: [{"name": "...", "estimated_cost": <number>, "currency": "EUR", '
-                        '"note": "..."}]. Never omit an activity - use your best real-world estimate '
-                        "if search doesn't turn up an exact price, and say so in \"note\"."
+                        f"current prices. There are {travelers} traveler(s) ({adults} adult(s), "
+                        f"{children} child(ren)) - every price must be the TOTAL for the whole group, "
+                        "not a per-person price. Reply with ONLY a JSON array, no markdown fences and "
+                        "no other text, one object per requested line, in the order requested: "
+                        '[{"name": "...", "category": "route_activity"|"destination_activity"|'
+                        '"accommodation"|"transport", "estimated_cost": <number>, "currency": "EUR", '
+                        '"note": "..."}]. Use exactly the category given for each requested line below. '
+                        "Never omit a requested line - use your best real-world estimate if search "
+                        'doesn\'t turn up an exact price, and say so in "note".'
                     )
-                    user_message = f"Destination: {destination or 'unspecified'}. Activities: {'; '.join(stops)}."
+                    user_message = "Destination: " + (destination or "unspecified") + ". Price " + "; ".join(lines) + "."
                     try:
                         reply = providers.call_model(
                             cred.provider, cred.api_key, model, system_prompt, user_message, web_search=True
                         )
                         searched = True
-                        items = _parse_cost_items(reply, stops)
+                        items = _parse_cost_items(
+                            reply, stops, dest_stops, bool(stay_type and nights), bool(transport_mode)
+                        )
                     except providers.ModelCallError as exc:
                         error = str(exc)
 
@@ -594,7 +759,8 @@ def _advance(db: Session, state: dict) -> dict:
                 budget_note = ""
                 if budget_value is not None:
                     budget_note = f" ({'over' if over_budget else 'under'} budget of {budget_value:g} {currency})"
-                message = f'"{label}" estimated total cost: {total:g} {currency}{budget_note}'
+                skip_note = f" [{'; '.join(skipped_notes)}]" if skipped_notes else ""
+                message = f'"{label}" estimated total cost: {total:g} {currency}{budget_note}{skip_note}'
 
             steps.append(
                 {
@@ -693,16 +859,21 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
     if ntype == "activitySuggestion":
         pending = state.pop("awaiting_suggestion", None)
         accepted = choice.strip().lower() == "accept"
-        if accepted and pending and pending.get("output_var"):
+        if accepted and pending and (pending.get("output_var") or pending.get("destination_output_var")):
             # "|"-joined (not ",") so a stop name that itself contains a comma survives -
-            # matches the separator a Maps Route block's Waypoints field splits on.
-            stops_value = " | ".join(pending.get("stops") or [])
-            _upsert_variable(db, pending["output_var"], "string", stops_value)
-            state["eval_vars"][pending["output_var"]] = stops_value
-            message = (
-                f'Accepted the suggestion at "{label}" - saved to "{pending["output_var"]}" '
-                "for a Maps Route block's Waypoints to pick up"
-            )
+            # matches the separator a Maps Route/Trip Cost block splits its inputs on.
+            saved: list[str] = []
+            if pending.get("output_var"):
+                stops_value = " | ".join(pending.get("stops") or [])
+                _upsert_variable(db, pending["output_var"], "string", stops_value)
+                state["eval_vars"][pending["output_var"]] = stops_value
+                saved.append(f'route stops to "{pending["output_var"]}"')
+            if pending.get("destination_output_var"):
+                dest_value = " | ".join(pending.get("destination_stops") or [])
+                _upsert_variable(db, pending["destination_output_var"], "string", dest_value)
+                state["eval_vars"][pending["destination_output_var"]] = dest_value
+                saved.append(f'destination activities to "{pending["destination_output_var"]}"')
+            message = f'Accepted the suggestion at "{label}" - saved {" and ".join(saved)}'
         elif accepted:
             message = f'Accepted the suggestion at "{label}", but it has no output variable configured to save into'
         else:

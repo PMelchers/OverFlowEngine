@@ -64,7 +64,7 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
       </p>
 
       <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">
-        Stops to price ("|"-separated)
+        Route stops to price - passed ON THE WAY ("|"-separated)
       </label>
       <input
         ref={stopsRef}
@@ -93,6 +93,28 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
       )}
 
       <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">
+        Destination activities to price - done ONCE ARRIVED ("|"-separated)
+      </label>
+      <input
+        type="text"
+        value={data.destinationStops ?? ''}
+        placeholder="e.g. {destinationStops}"
+        onChange={(e) => data.onChange?.({ destinationStops: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
+      <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">
+        Origin (for the transport line)
+      </label>
+      <input
+        type="text"
+        value={data.origin ?? ''}
+        placeholder="e.g. {startingAddress}"
+        onChange={(e) => data.onChange?.({ origin: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
+      <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">
         Destination context
       </label>
       <input
@@ -102,6 +124,60 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
         onChange={(e) => data.onChange?.({ activityContext: e.target.value })}
         className="nodrag mb-2 w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
       />
+
+      <p className="mb-1 text-[11px] font-semibold text-yellow-800 dark:text-yellow-300">
+        Accommodation &amp; transport (leave blank to skip)
+      </p>
+      <div className="mb-2 grid grid-cols-2 gap-1">
+        <input
+          type="text"
+          value={data.stayType ?? ''}
+          placeholder="stay type, e.g. {stayType}"
+          onChange={(e) => data.onChange?.({ stayType: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.transportMode ?? ''}
+          placeholder="transport, e.g. {transportMode}"
+          onChange={(e) => data.onChange?.({ transportMode: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.checkInDate ?? ''}
+          placeholder="check-in, e.g. {tripStartDate}"
+          onChange={(e) => data.onChange?.({ checkInDate: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.checkOutDate ?? ''}
+          placeholder="check-out, e.g. {tripEndDate}"
+          onChange={(e) => data.onChange?.({ checkOutDate: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </div>
+
+      <p className="mb-1 text-[11px] font-semibold text-yellow-800 dark:text-yellow-300">
+        Travelers (every price is the total for the group)
+      </p>
+      <div className="mb-2 grid grid-cols-2 gap-1">
+        <input
+          type="text"
+          value={data.adults ?? ''}
+          placeholder="adults, e.g. {tripAdults}"
+          onChange={(e) => data.onChange?.({ adults: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.children ?? ''}
+          placeholder="children, e.g. {tripChildren}"
+          onChange={(e) => data.onChange?.({ children: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </div>
 
       <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Budget</label>
       <input
@@ -122,8 +198,9 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
       />
 
       <p className="mt-1 text-[10px] text-yellow-700 dark:text-yellow-400">
-        Searches the web for real prices per stop and shows a cost card in the sidebar - not just a
-        console line. Falls back to a rough estimate if search turns up nothing.
+        Searches the web for real prices per stop, plus accommodation/transport if filled in, and
+        shows a cost card in the sidebar - not just a console line. Every price is totaled for the
+        whole group, not per person.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-yellow-600" />

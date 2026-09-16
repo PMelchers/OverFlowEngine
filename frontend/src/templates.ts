@@ -162,6 +162,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         data: { label: 'routeActivities', varType: 'string', value: '' },
       },
       {
+        // Same reasoning as routeActivitiesSeed, but for the Trip Cost block's
+        // "at the destination" input if the suggestion is rejected.
+        id: 'destinationStopsSeed',
+        type: 'variable',
+        position: { x: 1 * STEP, y: 200 },
+        data: { label: 'destinationStops', varType: 'string', value: '' },
+      },
+      {
         id: 'planInput',
         type: 'aiInput',
         position: { x: 2 * STEP, y: 0 },
@@ -201,9 +209,11 @@ export const TEMPLATES: WorkflowTemplate[] = [
         position: { x: 5 * STEP, y: 0 },
         data: {
           label: 'Suggest Activities',
+          origin: '{startingAddress}',
           activityContext: '{destinationAddress}',
           interests: '{destinationActivities}',
           outputVariable: 'routeActivities',
+          destinationOutputVariable: 'destinationStops',
         },
       },
       {
@@ -247,7 +257,15 @@ export const TEMPLATES: WorkflowTemplate[] = [
         data: {
           label: 'Trip Cost',
           waypoints: '{routeActivities}',
+          destinationStops: '{destinationStops}',
+          origin: '{startingAddress}',
           activityContext: '{destinationAddress}',
+          stayType: '{stayType}',
+          transportMode: '{transportMode}',
+          checkInDate: '{tripStartDate}',
+          checkOutDate: '{tripEndDate}',
+          adults: '{tripAdults}',
+          children: '{tripChildren}',
           budget: '{tripBudget}',
           outputVariable: 'tripCostEstimate',
         },
@@ -255,7 +273,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ],
     edges: [
       { id: 'e-trigger-routeActivitiesSeed', source: 'trigger', target: 'routeActivitiesSeed' },
-      { id: 'e-routeActivitiesSeed-planInput', source: 'routeActivitiesSeed', target: 'planInput' },
+      { id: 'e-routeActivitiesSeed-destinationStopsSeed', source: 'routeActivitiesSeed', target: 'destinationStopsSeed' },
+      { id: 'e-destinationStopsSeed-planInput', source: 'destinationStopsSeed', target: 'planInput' },
       { id: 'e-planInput-planAgent', source: 'planInput', target: 'planAgent' },
       { id: 'e-planModel-planAgent', source: 'planModel', target: 'planAgent', targetHandle: 'model' },
       { id: 'e-planAgent-vacationPlan', source: 'planAgent', target: 'vacationPlan' },
