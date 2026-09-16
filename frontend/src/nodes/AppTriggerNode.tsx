@@ -146,7 +146,7 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
 
           <button
             type="button"
-            onClick={data.onTrigger}
+            onClick={() => data.onTrigger?.()}
             className="nodrag mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-cyan-700 active:scale-95 active:bg-cyan-800"
           >
             <Zap className="h-3.5 w-3.5" /> Simulate incoming message

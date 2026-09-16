@@ -1,4 +1,4 @@
-import type { BlockNodeData } from './nodes/types'
+import type { BlockNodeData, FormField } from './nodes/types'
 
 export interface TemplateNode {
   id: string
@@ -28,6 +28,36 @@ export const TEMPLATE_DRAG_PREFIX = 'template::'
 
 /** Horizontal gap between blocks in a single left-to-right row (block width is 320px). */
 const STEP = 380
+
+// Every input the Vacation Planner needs, collected by one Form Trigger block instead
+// of 15+ separate Variable blocks/groups on the canvas - running it pops up a form, and
+// each answer is saved as a variable named `name` (same names the rest of the template
+// already references as `{name}`).
+const VACATION_FORM_FIELDS: FormField[] = [
+  { name: 'destinationCountry', label: 'Destination country', varType: 'string', value: 'Italy' },
+  { name: 'transportMode', label: 'Transport mode', varType: 'string', value: 'car' },
+  { name: 'destinationActivities', label: 'Interests / activities', varType: 'string', value: 'hiking, museums, local food' },
+  { name: 'stayType', label: 'Accommodation type', varType: 'string', value: 'hotel' },
+  // The route can't be built without knowing where it starts/ends - fed into both Maps
+  // Route blocks' Origin/Destination below. destinationAddress is deliberately separate
+  // from destinationCountry - a country name alone isn't a routable endpoint.
+  { name: 'startingAddress', label: 'Starting address', varType: 'string', value: 'Home' },
+  { name: 'destinationAddress', label: 'Destination address (specific place)', varType: 'string', value: 'Rome, Italy' },
+  { name: 'tripStartDate', label: 'Start date', varType: 'string', value: '2026-07-01' },
+  { name: 'tripEndDate', label: 'End date', varType: 'string', value: '2026-07-10' },
+  // int (not string) so a downstream If block can compare these numerically later,
+  // e.g. "if tripChildren > 0" to steer toward family-friendly stops.
+  { name: 'tripAdults', label: 'Adults', varType: 'int', value: '2' },
+  { name: 'tripChildren', label: 'Children', varType: 'int', value: '0' },
+  { name: 'tripBudget', label: 'Budget', varType: 'string', value: '2000 EUR' },
+  { name: 'tripWeatherPreference', label: 'Weather preference', varType: 'string', value: 'warm and sunny' },
+  // These three are informational only - there's no routing/distance API or web-search
+  // node wired up yet, so they're folded into the itinerary prompt as hints for the AI
+  // rather than hard constraints. Add real enforcement later without renaming them.
+  { name: 'tripKmPerStop', label: 'Max driving per stop', varType: 'string', value: 'max 150 km per day' },
+  { name: 'tripDestinationRadius', label: 'Radius around destination', varType: 'string', value: '20 km around the final destination' },
+  { name: 'tripExcludedSiteTypes', label: 'Sources to avoid', varType: 'string', value: 'social media, ad-heavy blogs' },
+]
 
 export const TEMPLATES: WorkflowTemplate[] = [
   {
@@ -119,89 +149,59 @@ export const TEMPLATES: WorkflowTemplate[] = [
     nodes: [
       {
         id: 'trigger',
-        type: 'trigger',
+        type: 'formTrigger',
         position: { x: 0 * STEP, y: 0 },
-        data: { label: 'Plan My Trip' },
-      },
-      {
-        id: 'country',
-        type: 'variable',
-        position: { x: 1 * STEP, y: 0 },
-        data: { label: 'destinationCountry', varType: 'string', value: 'Italy' },
-      },
-      {
-        id: 'transport',
-        type: 'variable',
-        position: { x: 2 * STEP, y: 0 },
-        data: { label: 'transportMode', varType: 'string', value: 'car' },
-      },
-      {
-        id: 'activities',
-        type: 'variable',
-        position: { x: 3 * STEP, y: 0 },
-        data: { label: 'destinationActivities', varType: 'string', value: 'hiking, museums, local food' },
-      },
-      {
-        id: 'stayType',
-        type: 'variable',
-        position: { x: 4 * STEP, y: 0 },
-        data: { label: 'stayType', varType: 'string', value: 'hotel' },
-      },
-      {
-        // The route can't be built without knowing where it starts - fed into both Maps
-        // Route blocks' Origin below so they build an actual point-to-point route instead
-        // of leaving the maps app to ask for the current location.
-        id: 'startAddress',
-        type: 'variable',
-        position: { x: 5 * STEP, y: 0 },
-        data: { label: 'startingAddress', varType: 'string', value: 'Home' },
+        data: { label: 'Plan My Trip', fields: VACATION_FORM_FIELDS },
       },
       {
         // Seeded blank so the Maps Route destinations below render cleanly even if the
         // activity suggestion is rejected (no accepted stops to weave in yet).
         id: 'routeActivitiesSeed',
         type: 'variable',
-        position: { x: 6 * STEP, y: 0 },
+        position: { x: 1 * STEP, y: 0 },
         data: { label: 'routeActivities', varType: 'string', value: '' },
       },
       {
         id: 'planInput',
         type: 'aiInput',
-        position: { x: 7 * STEP, y: 0 },
+        position: { x: 2 * STEP, y: 0 },
         data: {
           label: 'planInput',
           value:
-            'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress}. We are traveling by {transportMode} and enjoy {destinationActivities}. Suggest a day-by-day itinerary with the best stops to visit.',
+            'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress} and ending in {destinationAddress}, from {tripStartDate} to {tripEndDate}. ' +
+            'Travelers: {tripAdults} adult(s) and {tripChildren} child(ren), budget {tripBudget}. We are traveling by {transportMode} and enjoy {destinationActivities}. ' +
+            'Preferred weather: {tripWeatherPreference}. Keep driving to roughly {tripKmPerStop}, and favor stops within {tripDestinationRadius}. ' +
+            "Don't base suggestions on {tripExcludedSiteTypes}. Suggest a day-by-day itinerary with the best stops to visit.",
         },
       },
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 8 * STEP, y: 0 },
+        position: { x: 3 * STEP, y: 0 },
         data: {
           label: 'Vacation Planner Agent',
-          prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, and accommodation preference.',
+          prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, dates, group size, budget, and accommodation preference.',
         },
       },
       {
         id: 'planModel',
         type: 'aiModel',
-        position: { x: 8 * STEP + 120, y: 280 },
+        position: { x: 3 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
-        position: { x: 9 * STEP, y: 0 },
+        position: { x: 4 * STEP, y: 0 },
         data: { label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 10 * STEP, y: 0 },
+        position: { x: 5 * STEP, y: 0 },
         data: {
           label: 'Suggest Activities',
-          activityContext: '{destinationCountry}',
+          activityContext: '{destinationAddress}',
           interests: '{destinationActivities}',
           outputVariable: 'routeActivities',
         },
@@ -209,18 +209,18 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'suggestModel',
         type: 'aiModel',
-        position: { x: 2800, y: 640 },
+        position: { x: 5 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 11 * STEP, y: 0 },
+        position: { x: 6 * STEP, y: 0 },
         data: {
           label: 'Google Maps Route',
           mapsProvider: 'google',
           origin: '{startingAddress}',
-          destination: '{destinationCountry}',
+          destination: '{destinationAddress}',
           waypoints: '{routeActivities}',
           travelMode: 'driving',
           outputVariable: 'googleMapsRoute',
@@ -229,25 +229,32 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 12 * STEP, y: 0 },
+        position: { x: 7 * STEP, y: 0 },
         data: {
           label: 'Apple Maps Route',
           mapsProvider: 'apple',
           origin: '{startingAddress}',
-          destination: '{destinationCountry}',
+          destination: '{destinationAddress}',
           waypoints: '{routeActivities}',
           travelMode: 'driving',
           outputVariable: 'appleMapsRoute',
         },
       },
+      {
+        id: 'costEstimate',
+        type: 'costEstimate',
+        position: { x: 6 * STEP, y: 400 },
+        data: {
+          label: 'Trip Cost',
+          waypoints: '{routeActivities}',
+          activityContext: '{destinationAddress}',
+          budget: '{tripBudget}',
+          outputVariable: 'tripCostEstimate',
+        },
+      },
     ],
     edges: [
-      { id: 'e-trigger-country', source: 'trigger', target: 'country' },
-      { id: 'e-country-transport', source: 'country', target: 'transport' },
-      { id: 'e-transport-activities', source: 'transport', target: 'activities' },
-      { id: 'e-activities-stayType', source: 'activities', target: 'stayType' },
-      { id: 'e-stayType-startAddress', source: 'stayType', target: 'startAddress' },
-      { id: 'e-startAddress-routeActivitiesSeed', source: 'startAddress', target: 'routeActivitiesSeed' },
+      { id: 'e-trigger-routeActivitiesSeed', source: 'trigger', target: 'routeActivitiesSeed' },
       { id: 'e-routeActivitiesSeed-planInput', source: 'routeActivitiesSeed', target: 'planInput' },
       { id: 'e-planInput-planAgent', source: 'planInput', target: 'planAgent' },
       { id: 'e-planModel-planAgent', source: 'planModel', target: 'planAgent', targetHandle: 'model' },
@@ -256,6 +263,10 @@ export const TEMPLATES: WorkflowTemplate[] = [
       { id: 'e-suggestModel-suggestActivities', source: 'suggestModel', target: 'suggestActivities', targetHandle: 'model' },
       { id: 'e-suggestActivities-googleRoute', source: 'suggestActivities', target: 'googleRoute' },
       { id: 'e-googleRoute-appleRoute', source: 'googleRoute', target: 'appleRoute' },
+      { id: 'e-suggestActivities-costEstimate', source: 'suggestActivities', target: 'costEstimate' },
+      // Reuses suggestModel's AI Model block (a second edge from the same node) instead
+      // of another Model block on the canvas - one connected key can feed several blocks.
+      { id: 'e-suggestModel-costEstimate', source: 'suggestModel', target: 'costEstimate', targetHandle: 'model' },
     ],
   },
 ]

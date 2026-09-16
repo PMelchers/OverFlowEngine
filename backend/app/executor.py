@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import uuid
@@ -31,6 +32,56 @@ def _render_message(template: str, variables: dict) -> str:
         return str(variables[name]) if name in variables else match.group(0)
 
     return _VAR_PATTERN.sub(replace, template or "")
+
+
+def _parse_cost_items(reply: str, stops: list[str]) -> list[dict]:
+    """Parses a Cost Estimate model reply, expected to be a bare JSON array of
+    {name, estimated_cost, currency, note}. Falls back to a zeroed-out entry per
+    stop (never silently drops one) if the model didn't return valid JSON."""
+    text = reply.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if "\n" in text:
+            first_line, rest = text.split("\n", 1)
+            text = rest if first_line.strip().lower() in ("json", "") else text
+    try:
+        parsed = json.loads(text)
+        if not isinstance(parsed, list) or not parsed:
+            raise ValueError("not a non-empty list")
+        items = []
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                cost = float(entry.get("estimated_cost", 0) or 0)
+            except (TypeError, ValueError):
+                cost = 0.0
+            items.append(
+                {
+                    "name": str(entry.get("name") or "Unnamed stop").strip(),
+                    "estimated_cost": cost,
+                    "currency": str(entry.get("currency") or "EUR").strip() or "EUR",
+                    "note": str(entry.get("note") or "").strip(),
+                }
+            )
+        if not items:
+            raise ValueError("no usable entries")
+        return items
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return [
+            {"name": s, "estimated_cost": 0.0, "currency": "EUR", "note": "could not parse the AI's price estimate"}
+            for s in stops
+        ]
+
+
+def _parse_number(raw: str) -> float | None:
+    match = re.search(r"\d[\d,]*(?:\.\d+)?", raw or "")
+    if not match:
+        return None
+    try:
+        return float(match.group(0).replace(",", ""))
+    except ValueError:
+        return None
 
 
 def _coerce(var_type: str, raw: str | None):
@@ -114,6 +165,25 @@ def _advance(db: Session, state: dict) -> dict:
             eval_vars[label] = _coerce(var_type, value)
             steps.append(
                 {"node_id": node_id, "type": ntype, "label": label, "message": f'"{label}" = {value} ({var_type})'}
+            )
+
+        elif ntype == "formTrigger":
+            # One variable per field, same as a chain of Variable blocks - just filled in
+            # via the submit-modal on the frontend instead of typed onto separate nodes.
+            fields = data.get("fields") or []
+            parts = []
+            for field in fields:
+                name = (field.get("name") or "").strip()
+                if not name:
+                    continue
+                var_type = field.get("varType", "string")
+                value = field.get("value", "")
+                _upsert_variable(db, name, var_type, value)
+                eval_vars[name] = _coerce(var_type, value)
+                parts.append(f"{name}={value}")
+            summary = ", ".join(parts) if parts else "no fields"
+            steps.append(
+                {"node_id": node_id, "type": ntype, "label": label, "message": f'"{label}" submitted: {summary}'}
             )
 
         elif ntype in ("if", "ifOne"):
@@ -448,6 +518,94 @@ def _advance(db: Session, state: dict) -> dict:
                 "variables": _variables_snapshot(db),
             }
 
+        elif ntype == "costEstimate":
+            stops_raw = _render_message(data.get("waypoints", ""), eval_vars)
+            destination = _render_message(data.get("activityContext", ""), eval_vars)
+            budget_raw = _render_message(data.get("budget", ""), eval_vars)
+            output_var = (data.get("outputVariable") or "").strip()
+            stops = [s.strip() for s in stops_raw.split("|") if s.strip()]
+
+            # Same "model" handle/lookup pattern as the AI Agent and Suggest Activities blocks.
+            model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
+            model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
+            model_data = (model_node.get("data") or {}) if model_node else {}
+            model = model_data.get("model")
+            credential_id = model_data.get("credentialId")
+
+            items: list[dict] = []
+            searched = False
+            error: str | None = None
+
+            if not stops:
+                error = "no stops to price"
+            elif not credential_id or not model:
+                error = "no AI Model block connected/unlocked"
+            else:
+                cred = (
+                    db.query(models.AiCredential)
+                    .filter_by(id=credential_id, user_id=state.get("user_id"))
+                    .one_or_none()
+                )
+                if cred is None:
+                    error = "could not use its linked API key - log in as the account that added it"
+                else:
+                    system_prompt = (
+                        "You are a travel budgeting assistant. Use web search to find realistic, "
+                        "current approximate prices (entrance fees / typical costs) for each given "
+                        "activity or stop, in the given destination. Reply with ONLY a JSON array, "
+                        "no markdown fences and no other text, one object per activity in the same "
+                        'order: [{"name": "...", "estimated_cost": <number>, "currency": "EUR", '
+                        '"note": "..."}]. Never omit an activity - use your best real-world estimate '
+                        "if search doesn't turn up an exact price, and say so in \"note\"."
+                    )
+                    user_message = f"Destination: {destination or 'unspecified'}. Activities: {'; '.join(stops)}."
+                    try:
+                        reply = providers.call_model(
+                            cred.provider, cred.api_key, model, system_prompt, user_message, web_search=True
+                        )
+                        searched = True
+                        items = _parse_cost_items(reply, stops)
+                    except providers.ModelCallError as exc:
+                        error = str(exc)
+
+            total = sum(item["estimated_cost"] for item in items)
+            currency = items[0]["currency"] if items else "EUR"
+            budget_value = _parse_number(budget_raw)
+            over_budget = budget_value is not None and total > budget_value
+
+            breakdown = {
+                "items": items,
+                "total": round(total, 2),
+                "currency": currency,
+                "budget": budget_value,
+                "overBudget": over_budget,
+                "searched": searched,
+                "destination": destination,
+            }
+
+            if output_var:
+                serialized = json.dumps(breakdown)
+                _upsert_variable(db, output_var, "string", serialized)
+                eval_vars[output_var] = serialized
+
+            if error:
+                message = f'"{label}" could not estimate costs: {error}'
+            else:
+                budget_note = ""
+                if budget_value is not None:
+                    budget_note = f" ({'over' if over_budget else 'under'} budget of {budget_value:g} {currency})"
+                message = f'"{label}" estimated total cost: {total:g} {currency}{budget_note}'
+
+            steps.append(
+                {
+                    "node_id": node_id,
+                    "type": ntype,
+                    "label": label,
+                    "message": message,
+                    "costBreakdown": None if error else breakdown,
+                }
+            )
+
         elif ntype == "mapsAction":
             provider = (data.get("mapsProvider") or "google").strip().lower()
             origin = _render_message(data.get("origin", ""), eval_vars)
@@ -495,7 +653,7 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int
         incoming.setdefault(e["target"], []).append(e)
 
     eval_vars = {name: _coerce(v["type"], v["value"]) for name, v in _variables_snapshot(db).items()}
-    trigger_ids = [n["id"] for n in nodes if n.get("type") in ("trigger", "appTrigger")]
+    trigger_ids = [n["id"] for n in nodes if n.get("type") in ("trigger", "appTrigger", "formTrigger")]
 
     state = {
         "node_by_id": node_by_id,

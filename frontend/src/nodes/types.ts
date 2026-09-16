@@ -4,6 +4,7 @@ import {
   Calendar,
   CalendarDays,
   Circle,
+  ClipboardList,
   Diamond,
   FileSearch,
   FileText,
@@ -21,6 +22,7 @@ import {
   MapPin,
   PenLine,
   Play,
+  Receipt,
   Reply,
   Sparkles,
   Tag,
@@ -71,10 +73,22 @@ export interface IfCondition {
   combinator?: 'and' | 'or'
 }
 
+/** One question on a Form Trigger block - becomes one input in the "fill in before
+ *  running" modal, and one variable (named `name`) once the form is submitted. */
+export interface FormField {
+  name: string
+  label: string
+  varType: VariableType
+  /** design-time default shown in the modal; overwritten with whatever the user typed once submitted */
+  value: string
+}
+
 export interface BlockNodeData {
   label: string
   status?: BlockStatus
-  onTrigger?: () => void
+  /** formOverride is only set for a form-trigger block - carries the just-submitted field
+   *  values so the run uses them without waiting on a React state round-trip */
+  onTrigger?: (formOverride?: { nodeId: string; fields: FormField[] }) => void
   onChange?: (patch: Partial<BlockNodeData>) => void
   // if-block
   conditions?: IfCondition[]
@@ -150,6 +164,12 @@ export interface BlockNodeData {
   // downstream Maps Route block's Waypoints field, e.g. "{routeActivities}"
   activityContext?: string
   interests?: string
+  // cost-estimate block (AI looks up real prices via web search and totals them against a
+  // budget) - reuses `waypoints` for the "|"-separated stops to price (e.g. "{routeActivities}"),
+  // `activityContext` for the destination context, `credentialId`/`model` via the "model" handle
+  // exactly like the AI Agent block, and `outputVariable` for the variable name the JSON
+  // breakdown is saved into
+  budget?: string
   // app-action block, targetApp = "Google Calendar" | "Microsoft Calendar" (real OAuth
   // account, connected from Settings - the provider is just targetApp, lowercased)
   /** targetAction "fetchEvents": how many days ahead of now to fetch, e.g. "7" */
@@ -163,11 +183,35 @@ export interface BlockNodeData {
   eventId?: string
   // "fetchEvents"/"createEvent" reuse `outputVariable` for the variable name the
   // result (an event summary, or a newly-created event's id) is saved into
+  // form-trigger block - one question per field; running the workflow first pops up a
+  // modal built from these, and each field's answer is saved as a variable named `field.name`
+  fields?: FormField[]
+}
+
+/** One priced line in a Cost Estimate block's result - carried on the matching run step
+ *  (not on node data) so the console/summary card can render a real table instead of text. */
+export interface CostBreakdownItem {
+  name: string
+  estimated_cost: number
+  currency: string
+  note: string
+}
+
+export interface CostBreakdown {
+  items: CostBreakdownItem[]
+  total: number
+  currency: string
+  budget: number | null
+  overBudget: boolean
+  searched: boolean
+  destination: string
 }
 
 export type BlockKind =
   | 'trigger'
   | 'appTrigger'
+  | 'formTrigger'
+  | 'costEstimate'
   | 'block'
   | 'ifOne'
   | 'if'
@@ -300,9 +344,11 @@ export const AI_QUICK_ACTIONS: AiQuickAction[] = [
 export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400 dark:bg-purple-950 dark:border-purple-700', icon: Play, badgeClassName: 'bg-purple-600', category: 'core' },
   { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow from another app - click it to pick which one (Teams, Outlook, Google/Microsoft Calendar, ...)', color: 'bg-cyan-100 border-cyan-400 dark:bg-cyan-950 dark:border-cyan-700', icon: Zap, badgeClassName: 'bg-cyan-600', category: 'core' },
+  { kind: 'formTrigger', label: 'Form Trigger', description: 'Starts the workflow with a form - define the questions, and running it pops up a modal you fill in; each answer becomes a variable', color: 'bg-blue-100 border-blue-400 dark:bg-blue-950 dark:border-blue-700', icon: ClipboardList, badgeClassName: 'bg-blue-600', category: 'core' },
   { kind: 'appAction', label: 'App Action', description: 'Does one action in another app, or runs an AI call - click it to pick from the app list or the AI category', color: 'bg-emerald-100 border-emerald-400 dark:bg-emerald-950 dark:border-emerald-700', icon: Reply, badgeClassName: 'bg-emerald-600', category: 'core' },
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500 dark:bg-lime-950 dark:border-lime-700', icon: MapPin, badgeClassName: 'bg-lime-600', category: 'core' },
   { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-700', icon: Lightbulb, badgeClassName: 'bg-orange-600', category: 'agentic' },
+  { kind: 'costEstimate', label: 'Trip Cost', description: 'AI searches the web for real prices of your stops and totals them against your budget - connect an AI Model block', color: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-950 dark:border-yellow-700', icon: Receipt, badgeClassName: 'bg-yellow-600', category: 'agentic' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300 dark:bg-gray-800 dark:border-gray-600', icon: Circle, badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: Diamond, badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },
