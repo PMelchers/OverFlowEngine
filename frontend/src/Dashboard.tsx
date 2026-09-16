@@ -1,5 +1,6 @@
 import { Blocks, Check, ClipboardList, Folders, Plus, Settings as SettingsIcon, Store, X, Zap } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import AboutDropdown from './AboutDropdown'
 import AuthModal from './AuthModal'
 import { useAuth } from './auth'
 import { TEMPLATES } from './templates'
@@ -195,6 +196,8 @@ export default function Dashboard({
 }) {
   const { user, authedFetch } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const logoRef = useRef<HTMLButtonElement>(null)
   const [flows, setFlows] = useState<FlowSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -307,11 +310,21 @@ export default function Dashboard({
     <div className="flex h-screen w-screen bg-white dark:bg-gray-950">
       {/* Sidebar */}
       <aside className="flex w-72 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center gap-2.5 px-4 pt-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
-            <Zap className="h-4 w-4" fill="currentColor" />
-          </div>
-          <span className="text-sm font-bold tracking-tight text-gray-900 dark:text-gray-50">OverFlowEngine</span>
+        <div className="px-4 pt-4">
+          <button
+            ref={logoRef}
+            type="button"
+            onClick={() => setAboutOpen((o) => !o)}
+            className="flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-red-600 text-white shadow-sm">
+              <Zap className="h-4 w-4" fill="currentColor" />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              OverFlowEngine
+            </span>
+          </button>
+          {aboutOpen && <AboutDropdown anchorRef={logoRef} onClose={() => setAboutOpen(false)} />}
         </div>
 
         <div className="p-3">

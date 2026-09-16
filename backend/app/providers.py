@@ -31,7 +31,10 @@ def detect_provider(api_key: str) -> str:
         return "anthropic"
     if key.startswith("sk-"):
         return "openai"
-    if key.startswith("AIza"):
+    # Classic Google API key format. Google has since started issuing Gemini API
+    # keys under a second format too (seen starting "AQ.") - recognize both rather
+    # than only the original one.
+    if key.startswith("AIza") or key.startswith("AQ."):
         return "google"
     return "other"
 

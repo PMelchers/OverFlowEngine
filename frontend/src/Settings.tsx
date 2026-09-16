@@ -1,28 +1,34 @@
-import { ArrowLeft, Check, Moon, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, Check, ChevronRight, KeyRound, Link2, Lock, Moon, ShieldCheck, Sun, Unlock } from 'lucide-react'
+import { useState } from 'react'
+import ApiKeysPage from './ApiKeysPage'
 import { useAuth } from './auth'
+import ConnectedAppsPage from './ConnectedAppsPage'
+import ReauthGate from './ReauthGate'
+import SecurityPage from './SecurityPage'
 import { useTheme } from './theme'
 
-type Credential = {
-  id: number
-  provider: string
-  label: string
-  api_key_masked: string
-  verified: boolean
-  created_at: string
-}
+type SubPage = 'security' | 'api-keys' | 'connected-apps'
 
-// Mirrors backend/app/providers.py:detect_provider - a live preview only,
-// the backend re-detects from the key itself and is the source of truth.
-function detectProviderPreview(key: string): string | null {
-  const k = key.trim()
-  if (!k) return null
-  if (k.toLowerCase().startsWith('test')) return 'test'
-  if (k.startsWith('sk-ant-')) return 'anthropic'
-  if (k.startsWith('sk-')) return 'openai'
-  if (k.startsWith('AIza')) return 'google'
-  return 'other'
-}
+const SUB_PAGES: { key: SubPage; label: string; description: string; icon: typeof KeyRound }[] = [
+  {
+    key: 'api-keys',
+    label: 'API Keys',
+    description: 'Link the AI provider keys your workflows run on.',
+    icon: KeyRound,
+  },
+  {
+    key: 'connected-apps',
+    label: 'Connected Apps',
+    description: 'Calendars and other real accounts your flows can act on.',
+    icon: Link2,
+  },
+  {
+    key: 'security',
+    label: 'Security',
+    description: 'Change the password you use to sign in.',
+    icon: ShieldCheck,
+  },
+]
 
 function SectionCard({
   title,
@@ -42,8 +48,16 @@ function SectionCard({
   )
 }
 
-export default function Settings({ onBack }: { onBack: () => void }) {
-  const { user, logout, authedFetch, updateProfile, changePassword } = useAuth()
+export default function Settings({
+  onBack,
+  initialSubPage,
+}: {
+  onBack: () => void
+  /** Deep-link straight into the reauth gate for a sub-page, e.g. from a Canvas "Connect this
+   *  app" nudge - still has to pass the same password re-check as clicking it normally. */
+  initialSubPage?: SubPage
+}) {
+  const { user, logout, updateProfile } = useAuth()
   const { theme, toggleTheme } = useTheme()
 
   // --- Profile ---
@@ -68,93 +82,19 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     }
   }
 
-  // --- Password ---
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordSaving, setPasswordSaving] = useState(false)
-  const [passwordError, setPasswordError] = useState<string | null>(null)
-  const [passwordSaved, setPasswordSaved] = useState(false)
+  // --- Sensitive sub-pages, gated behind a password re-check ---
+  const [subPage, setSubPage] = useState<SubPage | null>(null)
+  const [unlocked, setUnlocked] = useState(false)
+  const [pendingPage, setPendingPage] = useState<SubPage | null>(initialSubPage ?? null)
 
-  const savePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPasswordError(null)
-    setPasswordSaved(false)
-    if (newPassword !== confirmPassword) {
-      setPasswordError('New password and confirmation do not match')
-      return
-    }
-    setPasswordSaving(true)
-    try {
-      await changePassword(currentPassword, newPassword)
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-      setPasswordSaved(true)
-    } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Could not change your password')
-    } finally {
-      setPasswordSaving(false)
-    }
+  const openSubPage = (page: SubPage) => {
+    if (unlocked) setSubPage(page)
+    else setPendingPage(page)
   }
 
-  // --- API keys ---
-  const [credentials, setCredentials] = useState<Credential[]>([])
-  const [credentialsLoading, setCredentialsLoading] = useState(true)
-  const [credentialError, setCredentialError] = useState<string | null>(null)
-  const [label, setLabel] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [credentialSaving, setCredentialSaving] = useState(false)
-  const detectedProvider = detectProviderPreview(apiKey)
-
-  const loadCredentials = async () => {
-    setCredentialsLoading(true)
-    try {
-      const res = await authedFetch('/credentials')
-      if (!res.ok) throw new Error('Could not load API keys')
-      setCredentials(await res.json())
-    } catch (err) {
-      setCredentialError(err instanceof Error ? err.message : 'Could not load API keys')
-    } finally {
-      setCredentialsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadCredentials()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const addCredential = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setCredentialError(null)
-    setCredentialSaving(true)
-    try {
-      const res = await authedFetch('/credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, api_key: apiKey }),
-      })
-      // Clear the key out of this form immediately regardless of outcome, so
-      // it never lingers on screen after being submitted.
-      setApiKey('')
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.detail ?? 'Could not save that API key')
-      }
-      setLabel('')
-      await loadCredentials()
-    } catch (err) {
-      setCredentialError(err instanceof Error ? err.message : 'Could not save that API key')
-    } finally {
-      setCredentialSaving(false)
-    }
-  }
-
-  const removeCredential = async (id: number) => {
-    await authedFetch(`/credentials/${id}`, { method: 'DELETE' })
-    setCredentials((c) => c.filter((cred) => cred.id !== id))
-  }
+  if (subPage === 'security') return <SecurityPage onBack={() => setSubPage(null)} />
+  if (subPage === 'api-keys') return <ApiKeysPage onBack={() => setSubPage(null)} />
+  if (subPage === 'connected-apps') return <ConnectedAppsPage onBack={() => setSubPage(null)} />
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
@@ -247,141 +187,60 @@ export default function Settings({ onBack }: { onBack: () => void }) {
           </form>
         </SectionCard>
 
-        <SectionCard title="Password" description="Change the password you use to sign in.">
-          <form onSubmit={savePassword} className="space-y-3">
-            <label className="block text-sm text-gray-600 dark:text-gray-300">
-              Current password
-              <input
-                type="password"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-              />
-            </label>
-            <label className="block text-sm text-gray-600 dark:text-gray-300">
-              New password
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-              />
-            </label>
-            <label className="block text-sm text-gray-600 dark:text-gray-300">
-              Confirm new password
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-              />
-            </label>
-            {passwordError && <p className="text-sm text-red-600 dark:text-red-400">{passwordError}</p>}
-            {passwordSaved && !passwordError && (
-              <p className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
-                <Check className="h-3.5 w-3.5" /> Password changed
-              </p>
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {unlocked ? (
+              <Unlock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <Lock className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
             )}
-            <button
-              type="submit"
-              disabled={passwordSaving}
-              className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {passwordSaving ? 'Changing...' : 'Change password'}
-            </button>
-          </form>
-        </SectionCard>
-
-        <SectionCard
-          title="AI API keys"
-          description="Paste an API key - we recognize which platform it's from automatically, no need to pick it yourself."
-        >
-          {credentialsLoading ? (
-            <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>
-          ) : credentials.length === 0 ? (
-            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">No API keys linked yet.</p>
-          ) : (
-            <ul className="mb-4 space-y-1.5">
-              {credentials.map((c) => (
-                <li
-                  key={c.id}
-                  className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+            Sensitive settings
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+            {unlocked
+              ? 'Unlocked for this visit - confirmed with your password.'
+              : 'API keys, connected apps, and account security - confirm your password to open any of these.'}
+          </p>
+          <ul className="mt-4 space-y-1.5">
+            {SUB_PAGES.map((page) => (
+              <li key={page.key}>
+                <button
+                  type="button"
+                  onClick={() => openSubPage(page.key)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5 text-left transition-colors hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-700 dark:hover:border-blue-700 dark:hover:bg-blue-950/30"
                 >
-                  <span>
-                    <span className="font-medium text-gray-700 dark:text-gray-200">{c.label}</span>{' '}
-                    {c.verified && (
-                      <span
-                        className="inline-flex align-middle text-green-600 dark:text-green-400"
-                        title="Verified with the provider"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </span>
-                    )}{' '}
-                    <span className="text-gray-400 dark:text-gray-500">
-                      ({c.provider}, {c.api_key_masked})
-                    </span>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                    <page.icon className="h-4 w-4" />
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => removeCredential(c.id)}
-                    className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    title="Remove"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <form onSubmit={addCredential} className="space-y-2 border-t border-gray-200 pt-3 dark:border-gray-700">
-            <input
-              type="text"
-              required
-              placeholder="Label, e.g. Personal key"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-            />
-            <input
-              type="password"
-              required
-              placeholder="API key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-            />
-            {detectedProvider && (
-              <p
-                className={`text-[11px] ${
-                  detectedProvider === 'other'
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-gray-400 dark:text-gray-500'
-                }`}
-              >
-                {detectedProvider === 'other'
-                  ? "Doesn't look like a recognized key format (OpenAI, Anthropic, Google) - won't be accepted."
-                  : detectedProvider === 'test'
-                    ? 'Recognized as a test key - verifies instantly, no real provider called.'
-                    : `Recognized as ${detectedProvider}`}
-              </p>
-            )}
-            {credentialError && <p className="text-sm text-red-600 dark:text-red-400">{credentialError}</p>}
-            <button
-              type="submit"
-              disabled={credentialSaving}
-              className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {credentialSaving ? 'Verifying with provider...' : 'Add API key'}
-            </button>
-          </form>
-        </SectionCard>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {page.label}
+                    </span>
+                    <span className="block text-xs text-gray-400 dark:text-gray-500">{page.description}</span>
+                  </span>
+                  {unlocked ? (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-gray-600" />
+                  ) : (
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-600" />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
+
+      {pendingPage && (
+        <ReauthGate
+          title="Unlock sensitive settings"
+          onSuccess={() => {
+            setUnlocked(true)
+            setSubPage(pendingPage)
+            setPendingPage(null)
+          }}
+          onCancel={() => setPendingPage(null)}
+        />
+      )}
     </div>
   )
 }
