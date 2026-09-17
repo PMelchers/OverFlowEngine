@@ -1,19 +1,13 @@
 import { Bot } from 'lucide-react'
-import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
+import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
 import type { BlockNodeData } from './types'
+import { useConnectedModel } from './useConnectedModel'
 
 export default function AiAgentNode({ data }: NodeProps<BlockNodeData>) {
   const active = data.status === 'active'
-  const nodeId = useNodeId()
-  const edges = useEdges()
-  const nodes = useNodes<BlockNodeData>()
-  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
-  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
-  const connectedModel = modelNode?.data.model
-    ? `${modelNode.data.model} (${modelNode.data.provider})`
-    : undefined
+  const connectedModel = useConnectedModel()
 
   return (
     <GridSnapBox
