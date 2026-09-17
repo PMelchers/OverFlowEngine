@@ -1,20 +1,28 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
 /** Shared overlay + panel for every dialog in the app: traps Tab navigation inside
  *  the panel, closes on Escape or an overlay click, and restores focus to whatever
  *  triggered it on close. Every modal in the app previously reimplemented the
- *  overlay/click-stop pattern without any of that dialog semantics. */
+ *  overlay/click-stop pattern without any of that dialog semantics.
+ *
+ *  Always portals to document.body - some modals (e.g. ConnectAppModal) render from
+ *  deep inside a ReactFlow node, whose transformed ancestor would otherwise break
+ *  this panel's `fixed` positioning. */
 export default function Modal({
   onClose,
   children,
   panelClassName = 'w-80 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800',
+  overlayClassName = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40',
   labelledBy,
 }: {
   onClose: () => void
   children: ReactNode
   panelClassName?: string
+  /** Override the overlay's z-index, e.g. to stack above other node-level popovers. */
+  overlayClassName?: string
   labelledBy?: string
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -55,8 +63,8 @@ export default function Modal({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+  return createPortal(
+    <div className={overlayClassName} onClick={onClose}>
       <div
         ref={panelRef}
         role="dialog"
@@ -68,6 +76,7 @@ export default function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

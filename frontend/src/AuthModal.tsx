@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from './auth'
+import Modal from './Modal'
 
 export default function AuthModal({ onClose }: { onClose: () => void }) {
   const { login, register } = useAuth()
@@ -28,13 +29,9 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <form
-        onSubmit={submit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-80 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800"
-      >
-        <h2 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-100">
+    <Modal onClose={onClose} labelledBy="auth-modal-title">
+      <form onSubmit={submit}>
+        <h2 id="auth-modal-title" className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-100">
           {mode === 'login' ? 'Sign in' : 'Create account'}
         </h2>
 
@@ -92,6 +89,6 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
           Cancel
         </button>
       </form>
-    </div>
+    </Modal>
   )
 }
