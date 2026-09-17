@@ -8,6 +8,7 @@ import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
 import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { useVariableInsertion } from './useVariableInsertion'
 
 const CALENDAR_ACTIONS: { value: NonNullable<BlockNodeData['targetAction']>; label: string }[] = [
   { value: 'fetchEvents', label: 'Fetch Events' },
@@ -39,25 +40,14 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
   const appDisplayLabel = !targetApp ? 'Select an app...' : isAi ? `AI - ${aiModeLabel}` : targetApp
   const connected = targetApp ? (data.appConnections?.[targetApp] ?? false) : false
 
-  const insertInto = (
-    field: 'to' | 'body' | 'eventTitle' | 'eventId',
-    ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
-    name: string,
-  ) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = ref.current
-    const current = data[field] ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ [field]: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertIntoTo = useVariableInsertion(toRef, data.to ?? '', (next) => data.onChange?.({ to: next }))
+  const insertIntoBody = useVariableInsertion(bodyRef, data.body ?? '', (next) => data.onChange?.({ body: next }))
+  const insertIntoTitle = useVariableInsertion(titleRef, data.eventTitle ?? '', (next) =>
+    data.onChange?.({ eventTitle: next }),
+  )
+  const insertIntoEventId = useVariableInsertion(eventIdRef, data.eventId ?? '', (next) =>
+    data.onChange?.({ eventId: next }),
+  )
 
   return (
     <GridSnapBox
@@ -202,7 +192,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('to', toRef, e.target.value)
+                insertIntoTo(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -242,7 +232,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('body', bodyRef, e.target.value)
+                insertIntoBody(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -304,7 +294,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('eventTitle', titleRef, e.target.value)
+                insertIntoTitle(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -382,7 +372,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('eventId', eventIdRef, e.target.value)
+                insertIntoEventId(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"

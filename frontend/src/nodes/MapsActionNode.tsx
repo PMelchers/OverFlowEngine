@@ -4,6 +4,7 @@ import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
 import type { BlockNodeData } from './types'
+import { useVariableInsertion } from './useVariableInsertion'
 
 const TRAVEL_MODES: { value: NonNullable<BlockNodeData['travelMode']>; label: string }[] = [
   { value: 'driving', label: 'Driving' },
@@ -18,37 +19,12 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
   const destRef = useRef<HTMLInputElement>(null)
   const waypointsRef = useRef<HTMLInputElement>(null)
 
-  const insertIntoDestination = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = destRef.current
-    const current = data.destination ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ destination: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
-
-  const insertIntoWaypoints = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = waypointsRef.current
-    const current = data.waypoints ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ waypoints: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertIntoDestination = useVariableInsertion(destRef, data.destination ?? '', (next) =>
+    data.onChange?.({ destination: next }),
+  )
+  const insertIntoWaypoints = useVariableInsertion(waypointsRef, data.waypoints ?? '', (next) =>
+    data.onChange?.({ waypoints: next }),
+  )
 
   return (
     <GridSnapBox
