@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import AiCallFields from './AiCallFields'
 import AppPicker from './AppPicker'
@@ -8,6 +8,7 @@ import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
 import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { useAppConnection } from './useAppConnection'
 import { useVariableInsertion } from './useVariableInsertion'
 
 const CALENDAR_ACTIONS: { value: NonNullable<BlockNodeData['targetAction']>; label: string }[] = [
@@ -23,10 +24,16 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
   const eventIdRef = useRef<HTMLInputElement>(null)
-  const appAnchorRef = useRef<HTMLButtonElement>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [connectNudgeApp, setConnectNudgeApp] = useState<string | null>(null)
-  const [connectModalApp, setConnectModalApp] = useState<string | null>(null)
+  const {
+    anchorRef: appAnchorRef,
+    pickerOpen,
+    setPickerOpen,
+    connectNudgeApp,
+    setConnectNudgeApp,
+    connectModalApp,
+    setConnectModalApp,
+    selectApp,
+  } = useAppConnection(data, 'targetApp')
 
   const targetApp = data.targetApp
   const isCalendar = targetApp ? CALENDAR_APPS.includes(targetApp) : false
@@ -96,16 +103,12 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           onClose={() => setPickerOpen(false)}
           apps={APP_TRIGGER_SOURCES}
           selectedApp={targetApp}
-          onSelectApp={(app) => {
+          onSelectApp={(app) =>
             // Calendar apps default their action to "fetchEvents" for display (see `action`
             // above) - write that default into `data` here too, so a saved workflow that
             // never touches the Action dropdown executes what the UI shows, not `undefined`.
-            data.onChange?.({
-              targetApp: app,
-              targetAction: CALENDAR_APPS.includes(app) ? 'fetchEvents' : undefined,
-            })
-            if (!(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
-          }}
+            selectApp(app, { targetAction: CALENDAR_APPS.includes(app) ? 'fetchEvents' : undefined })
+          }
           aiActions={{
             selectedMode: data.aiCallMode,
             onSelect: (mode) => {

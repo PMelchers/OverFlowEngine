@@ -1,5 +1,4 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Zap } from 'lucide-react'
-import { useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import AppPicker from './AppPicker'
 import BlockHeader from './BlockHeader'
@@ -7,15 +6,22 @@ import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
 import { APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { useAppConnection } from './useAppConnection'
 
 export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
   const active = data.status === 'active'
   const sourceApp = data.sourceApp
   const AppIcon = sourceApp ? (APP_ICONS[sourceApp] ?? Zap) : Plug
-  const anchorRef = useRef<HTMLButtonElement>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [connectNudgeApp, setConnectNudgeApp] = useState<string | null>(null)
-  const [connectModalApp, setConnectModalApp] = useState<string | null>(null)
+  const {
+    anchorRef,
+    pickerOpen,
+    setPickerOpen,
+    connectNudgeApp,
+    setConnectNudgeApp,
+    connectModalApp,
+    setConnectModalApp,
+    selectApp,
+  } = useAppConnection(data, 'sourceApp')
 
   const connected = sourceApp ? (data.appConnections?.[sourceApp] ?? false) : false
   const isConnectable = sourceApp ? CALENDAR_APPS.includes(sourceApp) : false
@@ -60,10 +66,7 @@ export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
           onClose={() => setPickerOpen(false)}
           apps={APP_TRIGGER_SOURCES}
           selectedApp={sourceApp}
-          onSelectApp={(app) => {
-            data.onChange?.({ sourceApp: app })
-            if (!(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
-          }}
+          onSelectApp={(app) => selectApp(app)}
         />
       )}
       {connectNudgeApp && (
