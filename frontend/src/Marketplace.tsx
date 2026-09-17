@@ -1,23 +1,11 @@
 import { ArrowLeft, Globe, Rocket, Store, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from './auth'
+import { relativeDate } from './relativeDate'
+import { useAuthedResource } from './useAuthedResource'
 
 type Listing = { id: number; name: string; description: string | null; author: string; created_at: string }
 type MyFlow = { id: number; name: string; description: string | null; is_public: boolean; created_at: string }
-
-function relativeDate(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diffMs = Date.now() - then
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
-}
 
 function PublishModal({
   flow,
@@ -99,29 +87,18 @@ export default function Marketplace({ onBack }: { onBack: () => void }) {
   const { user, authedFetch } = useAuth()
   const [tab, setTab] = useState<'browse' | 'publish'>('browse')
 
-  const [listings, setListings] = useState<Listing[]>([])
-  const [listingsLoading, setListingsLoading] = useState(true)
-  const [listingsError, setListingsError] = useState<string | null>(null)
+  const {
+    data: listingsData,
+    loading: listingsLoading,
+    error: listingsError,
+  } = useAuthedResource<Listing[]>('/marketplace', 'Could not load the marketplace')
+  const listings = listingsData ?? []
   const [copyingId, setCopyingId] = useState<number | null>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
 
   const [myFlows, setMyFlows] = useState<MyFlow[]>([])
   const [myFlowsLoading, setMyFlowsLoading] = useState(false)
   const [publishTarget, setPublishTarget] = useState<MyFlow | null>(null)
-
-  const loadListings = async () => {
-    setListingsLoading(true)
-    setListingsError(null)
-    try {
-      const res = await authedFetch('/marketplace')
-      if (!res.ok) throw new Error('Could not load the marketplace')
-      setListings(await res.json())
-    } catch (err) {
-      setListingsError(err instanceof Error ? err.message : 'Could not load the marketplace')
-    } finally {
-      setListingsLoading(false)
-    }
-  }
 
   const loadMyFlows = async () => {
     if (!user) return
@@ -133,11 +110,6 @@ export default function Marketplace({ onBack }: { onBack: () => void }) {
       setMyFlowsLoading(false)
     }
   }
-
-  useEffect(() => {
-    loadListings()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (tab === 'publish') loadMyFlows()

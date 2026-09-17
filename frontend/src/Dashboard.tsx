@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import AboutDropdown from './AboutDropdown'
 import AuthModal from './AuthModal'
 import { useAuth } from './auth'
+import { relativeDate } from './relativeDate'
 import { TEMPLATES } from './templates'
 
 type FlowSummary = { id: number; name: string; created_at: string }
@@ -13,20 +14,6 @@ type Assignment = {
   description: string | null
   created_at: string
   flows: { id: number; name: string }[]
-}
-
-function relativeDate(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diffMs = Date.now() - then
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 function AssignmentModal({

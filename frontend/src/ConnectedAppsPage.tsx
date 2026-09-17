@@ -1,6 +1,7 @@
 import { ArrowLeft, Calendar, Link2, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from './auth'
+import { useAuthedResource } from './useAuthedResource'
 
 type CalendarProvider = 'google' | 'microsoft'
 type CalendarConnection = {
@@ -24,8 +25,12 @@ const CALENDAR_REDIRECT_URIS: Record<CalendarProvider, string> = {
 export default function ConnectedAppsPage({ onBack }: { onBack: () => void }) {
   const { authedFetch } = useAuth()
 
-  const [calendarConnections, setCalendarConnections] = useState<CalendarConnection[]>([])
-  const [calendarLoading, setCalendarLoading] = useState(true)
+  const {
+    data: calendarData,
+    loading: calendarLoading,
+    reload: loadCalendars,
+  } = useAuthedResource<CalendarConnection[]>('/calendar/connections')
+  const calendarConnections = calendarData ?? []
   const [calendarError, setCalendarError] = useState<string | null>(null)
   const [connectingProvider, setConnectingProvider] = useState<CalendarProvider | null>(null)
   const [appForms, setAppForms] = useState<Record<CalendarProvider, { clientId: string; clientSecret: string }>>({
@@ -33,21 +38,6 @@ export default function ConnectedAppsPage({ onBack }: { onBack: () => void }) {
     microsoft: { clientId: '', clientSecret: '' },
   })
   const [savingApp, setSavingApp] = useState<CalendarProvider | null>(null)
-
-  const loadCalendars = async () => {
-    setCalendarLoading(true)
-    try {
-      const res = await authedFetch('/calendar/connections')
-      if (res.ok) setCalendarConnections(await res.json())
-    } finally {
-      setCalendarLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadCalendars()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const saveCalendarApp = async (provider: CalendarProvider, e: React.FormEvent) => {
     e.preventDefault()

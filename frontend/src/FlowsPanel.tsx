@@ -1,7 +1,8 @@
 import { X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from './auth'
 import type { SubgraphEdge, SubgraphNode } from './nodes/types'
+import { useAuthedResource } from './useAuthedResource'
 
 type FlowSummary = { id: number; name: string; created_at: string }
 
@@ -15,48 +16,35 @@ export default function FlowsPanel({
   onSaveCurrent: (name: string) => Promise<void>
 }) {
   const { authedFetch } = useAuth()
-  const [flows, setFlows] = useState<FlowSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: flowsData,
+    loading,
+    error: loadError,
+    reload: loadList,
+  } = useAuthedResource<FlowSummary[]>('/flows', 'Could not load your saved flows')
+  const flows = flowsData ?? []
+  const [actionError, setActionError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [loadingId, setLoadingId] = useState<number | null>(null)
 
-  const loadList = async () => {
-    setLoading(true)
-    try {
-      const res = await authedFetch('/flows')
-      if (!res.ok) throw new Error('Could not load your saved flows')
-      setFlows(await res.json())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your saved flows')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadList()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setActionError(null)
     setSaving(true)
     try {
       await onSaveCurrent(name)
       setName('')
       await loadList()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save this flow')
+      setActionError(err instanceof Error ? err.message : 'Could not save this flow')
     } finally {
       setSaving(false)
     }
   }
 
   const handleLoad = async (id: number) => {
-    setError(null)
+    setActionError(null)
     setLoadingId(id)
     try {
       const res = await authedFetch(`/flows/${id}`)
@@ -65,7 +53,7 @@ export default function FlowsPanel({
       onLoad(body.nodes, body.edges)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load that flow')
+      setActionError(err instanceof Error ? err.message : 'Could not load that flow')
     } finally {
       setLoadingId(null)
     }
@@ -73,7 +61,7 @@ export default function FlowsPanel({
 
   const handleDelete = async (id: number) => {
     await authedFetch(`/flows/${id}`, { method: 'DELETE' })
-    setFlows((f) => f.filter((flow) => flow.id !== id))
+    await loadList()
   }
 
   return (
@@ -134,7 +122,9 @@ export default function FlowsPanel({
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
           />
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {(actionError ?? loadError) && (
+            <p className="text-sm text-red-600 dark:text-red-400">{actionError ?? loadError}</p>
+          )}
           <button
             type="submit"
             disabled={saving}
