@@ -8,7 +8,16 @@ type AppConnectionData = AppActionBlockData | AppTriggerBlockData
  *  that isn't linked yet, and writing the chosen app into `data[appField]`. Each node
  *  still renders its own AppPicker/ConnectAppNudge/ConnectAppModal JSX, since their
  *  layouts (and AppActionNode's extra AI branch) differ. */
-export function useAppConnection<T extends AppConnectionData>(data: T, appField: 'targetApp' | 'sourceApp') {
+export function useAppConnection<T extends AppConnectionData>(
+  data: T,
+  appField: 'targetApp' | 'sourceApp',
+  options?: {
+    /** Skip the connect-nudge for apps that don't use the OAuth connect flow at all
+     *  (e.g. Discord, which links a bot token from Settings instead). Defaults to
+     *  nudging for every app. */
+    shouldNudge?: (app: string) => boolean
+  },
+) {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [connectNudgeApp, setConnectNudgeApp] = useState<string | null>(null)
@@ -19,7 +28,8 @@ export function useAppConnection<T extends AppConnectionData>(data: T, appField:
     // shape is exactly `{ [appField]: app, ...extra }`, which is what T's own onChange expects.
     const onChange = data.onChange as ((patch: Partial<T>) => void) | undefined
     onChange?.({ [appField]: app, ...extra } as Partial<T>)
-    if (!(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
+    const shouldNudge = options?.shouldNudge ?? (() => true)
+    if (shouldNudge(app) && !(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
   }
 
   return {

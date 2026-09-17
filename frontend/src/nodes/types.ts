@@ -233,6 +233,10 @@ export interface AppActionBlockData extends BaseBlockData, WithAvailableVariable
   to?: string
   subject?: string
   body?: string
+  // targetApp "Discord" - which per-user bot credential to send as; unset uses the
+  // server's default bot (mcp-servers/discord/.env). Same field name as an AI Model
+  // block's credentialId, but an unrelated credential (a bot token, not an AI API key).
+  credentialId?: number | null
   // targetApp "AI" (targetAction 'aiCall') - `prompt` is the same concept as an AI Agent
   // block's; `aiCallMode` is which quick-action template last filled it, purely so the
   // picker can show it selected again when reopened

@@ -1,5 +1,5 @@
 import { ArrowLeft, Calendar, Check, Link2, MessageSquare, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from './auth'
 import { useAuthedResource } from './useAuthedResource'
 

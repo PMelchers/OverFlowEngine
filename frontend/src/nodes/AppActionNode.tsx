@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { useAuth } from '../auth'
 import AiCallFields from './AiCallFields'
@@ -18,7 +18,10 @@ const CALENDAR_ACTIONS: { value: NonNullable<AppActionBlockData['targetAction']>
   { value: 'deleteEvent', label: 'Delete Event' },
 ]
 
+type AppCredential = { id: number; target_app: string; label: string; verified: boolean }
+
 export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
+  const { authedFetch } = useAuth()
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const toRef = useRef<HTMLInputElement>(null)
@@ -45,7 +48,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
     connectModalApp,
     setConnectModalApp,
     selectApp,
-  } = useAppConnection(data, 'targetApp')
+  } = useAppConnection(data, 'targetApp', { shouldNudge: (app) => app !== 'Discord' })
 
   const targetApp = data.targetApp
   const isCalendar = targetApp ? CALENDAR_APPS.includes(targetApp) : false
