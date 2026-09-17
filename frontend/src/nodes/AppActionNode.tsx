@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { useAuth } from '../auth'
 import AiCallFields from './AiCallFields'
@@ -8,18 +8,17 @@ import BlockHeader from './BlockHeader'
 import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
-import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppActionBlockData } from './types'
+import { useAppConnection } from './useAppConnection'
+import { useVariableInsertion } from './useVariableInsertion'
 
-const CALENDAR_ACTIONS: { value: NonNullable<BlockNodeData['targetAction']>; label: string }[] = [
+const CALENDAR_ACTIONS: { value: NonNullable<AppActionBlockData['targetAction']>; label: string }[] = [
   { value: 'fetchEvents', label: 'Fetch Events' },
   { value: 'createEvent', label: 'Create Event' },
   { value: 'deleteEvent', label: 'Delete Event' },
 ]
 
-type AppCredential = { id: number; target_app: string; label: string; verified: boolean }
-
-export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
-  const { authedFetch } = useAuth()
+export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const toRef = useRef<HTMLInputElement>(null)
@@ -37,10 +36,16 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
   }, [isDiscord, authedFetch])
   const titleRef = useRef<HTMLInputElement>(null)
   const eventIdRef = useRef<HTMLInputElement>(null)
-  const appAnchorRef = useRef<HTMLButtonElement>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [connectNudgeApp, setConnectNudgeApp] = useState<string | null>(null)
-  const [connectModalApp, setConnectModalApp] = useState<string | null>(null)
+  const {
+    anchorRef: appAnchorRef,
+    pickerOpen,
+    setPickerOpen,
+    connectNudgeApp,
+    setConnectNudgeApp,
+    connectModalApp,
+    setConnectModalApp,
+    selectApp,
+  } = useAppConnection(data, 'targetApp')
 
   const targetApp = data.targetApp
   const isCalendar = targetApp ? CALENDAR_APPS.includes(targetApp) : false
@@ -54,25 +59,14 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
   const appDisplayLabel = !targetApp ? 'Select an app...' : isAi ? `AI - ${aiModeLabel}` : targetApp
   const connected = targetApp ? (data.appConnections?.[targetApp] ?? false) : false
 
-  const insertInto = (
-    field: 'to' | 'body' | 'eventTitle' | 'eventId',
-    ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
-    name: string,
-  ) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = ref.current
-    const current = data[field] ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ [field]: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertIntoTo = useVariableInsertion(toRef, data.to ?? '', (next) => data.onChange?.({ to: next }))
+  const insertIntoBody = useVariableInsertion(bodyRef, data.body ?? '', (next) => data.onChange?.({ body: next }))
+  const insertIntoTitle = useVariableInsertion(titleRef, data.eventTitle ?? '', (next) =>
+    data.onChange?.({ eventTitle: next }),
+  )
+  const insertIntoEventId = useVariableInsertion(eventIdRef, data.eventId ?? '', (next) =>
+    data.onChange?.({ eventId: next }),
+  )
 
   return (
     <GridSnapBox
@@ -121,10 +115,12 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           onClose={() => setPickerOpen(false)}
           apps={APP_TRIGGER_SOURCES}
           selectedApp={targetApp}
-          onSelectApp={(app) => {
-            data.onChange?.({ targetApp: app, targetAction: undefined })
-            if (app !== 'Discord' && !(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
-          }}
+          onSelectApp={(app) =>
+            // Calendar apps default their action to "fetchEvents" for display (see `action`
+            // above) - write that default into `data` here too, so a saved workflow that
+            // never touches the Action dropdown executes what the UI shows, not `undefined`.
+            selectApp(app, { targetAction: CALENDAR_APPS.includes(app) ? 'fetchEvents' : undefined })
+          }
           aiActions={{
             selectedMode: data.aiCallMode,
             onSelect: (mode) => {
@@ -184,7 +180,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           </label>
           <select
             value={action}
-            onChange={(e) => data.onChange?.({ targetAction: e.target.value as BlockNodeData['targetAction'] })}
+            onChange={(e) => data.onChange?.({ targetAction: e.target.value as AppActionBlockData['targetAction'] })}
             className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
           >
             {CALENDAR_ACTIONS.map((a) => (
@@ -238,7 +234,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('to', toRef, e.target.value)
+                insertIntoTo(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -278,7 +274,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('body', bodyRef, e.target.value)
+                insertIntoBody(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -342,7 +338,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('eventTitle', titleRef, e.target.value)
+                insertIntoTitle(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
@@ -420,7 +416,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
             <select
               value=""
               onChange={(e) => {
-                insertInto('eventId', eventIdRef, e.target.value)
+                insertIntoEventId(e.target.value)
                 e.target.value = ''
               }}
               className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"

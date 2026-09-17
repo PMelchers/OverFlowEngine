@@ -3,9 +3,9 @@ import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import ConditionRow, { emptyCondition } from './ConditionRow'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { IfSingleBlockData } from './types'
 
-export default function IfSingleNode({ data }: NodeProps<BlockNodeData>) {
+export default function IfSingleNode({ data }: NodeProps<IfSingleBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const cond = data.conditions?.[0] ?? emptyCondition()

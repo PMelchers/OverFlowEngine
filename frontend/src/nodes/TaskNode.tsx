@@ -3,28 +3,15 @@ import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { TaskBlockData } from './types'
+import { useVariableInsertion } from './useVariableInsertion'
 
-export default function TaskNode({ data }: NodeProps<BlockNodeData>) {
+export default function TaskNode({ data }: NodeProps<TaskBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const insertVariable = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const input = inputRef.current
-    const current = data.title ?? ''
-    const start = input?.selectionStart ?? current.length
-    const end = input?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ title: next })
-    requestAnimationFrame(() => {
-      input?.focus()
-      const caret = start + token.length
-      input?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertVariable = useVariableInsertion(inputRef, data.title ?? '', (next) => data.onChange?.({ title: next }))
 
   return (
     <GridSnapBox

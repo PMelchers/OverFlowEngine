@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { ChoiceBlockData } from './types'
 
-export default function ChoiceNode({ data }: NodeProps<BlockNodeData>) {
+export default function ChoiceNode({ data }: NodeProps<ChoiceBlockData>) {
   const active = data.status === 'active'
   const options = data.options ?? []
   const [draft, setDraft] = useState('')

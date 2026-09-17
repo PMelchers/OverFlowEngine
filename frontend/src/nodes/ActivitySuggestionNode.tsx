@@ -1,38 +1,21 @@
 import { Lightbulb } from 'lucide-react'
 import { useRef } from 'react'
-import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
+import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { ActivitySuggestionBlockData } from './types'
+import { useConnectedModel } from './useConnectedModel'
+import { useVariableInsertion } from './useVariableInsertion'
 
-export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData>) {
+export default function ActivitySuggestionNode({ data }: NodeProps<ActivitySuggestionBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const contextRef = useRef<HTMLInputElement>(null)
-  const nodeId = useNodeId()
-  const edges = useEdges()
-  const nodes = useNodes<BlockNodeData>()
-  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
-  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
-  const connectedModel = modelNode?.data.model
-    ? `${modelNode.data.model} (${modelNode.data.provider})`
-    : undefined
+  const connectedModel = useConnectedModel()
 
-  const insertIntoContext = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = contextRef.current
-    const current = data.activityContext ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ activityContext: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertIntoContext = useVariableInsertion(contextRef, data.activityContext ?? '', (next) =>
+    data.onChange?.({ activityContext: next }),
+  )
 
   return (
     <GridSnapBox

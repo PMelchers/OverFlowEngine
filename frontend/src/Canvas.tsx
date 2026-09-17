@@ -36,6 +36,7 @@ import 'reactflow/dist/style.css'
 import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
 import AboutDropdown from './AboutDropdown'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
+import { API_BASE } from './apiBase'
 import AuthModal from './AuthModal'
 import GroupNameModal from './GroupNameModal'
 import { useAuth } from './auth'
@@ -67,11 +68,15 @@ import TaskNode from './nodes/TaskNode'
 import TriggerNode from './nodes/TriggerNode'
 import {
   CALENDAR_PROVIDER_TO_APP,
+  type AppActionBlockData,
+  type AppTriggerBlockData,
+  type BlockDataPatch,
   type BlockKind,
   type BlockNodeData,
   type Subgraph,
   type SubgraphEdge,
   type SubgraphNode,
+  type VariableBlockData,
   type VariableType,
 } from './nodes/types'
 import VariableNode from './nodes/VariableNode'
@@ -85,8 +90,8 @@ import type { NodeProps } from 'reactflow'
  *  AI Model (whose only handle feeds *up* into an Agent, not "the next step"). Applied
  *  once at module scope, not per-render, so `nodeTypes` below stays referentially
  *  stable (React Flow remounts every node whenever that object's identity changes). */
-function withQuickAdd(NodeComponent: React.ComponentType<NodeProps<BlockNodeData>>) {
-  function Wrapped(props: NodeProps<BlockNodeData>) {
+function withQuickAdd<T extends BlockNodeData>(NodeComponent: React.ComponentType<NodeProps<T>>) {
+  function Wrapped(props: NodeProps<T>) {
     return (
       <div className="relative">
         <NodeComponent {...props} />
@@ -158,8 +163,6 @@ function AlignmentGuideLines({ guides }: { guides: AlignmentGuides }) {
   )
 }
 
-const API_BASE = 'http://localhost:8000'
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 let idCount = 1
@@ -207,33 +210,41 @@ interface PendingGroup {
   groupIdCount: number
 }
 
+// Overloads so a call site with a literal kind (the "starter" nodes below, which spread
+// the result and add more of that kind's own fields) gets the narrowed return type back,
+// instead of the full union every other (kind: BlockKind, generic) call site gets.
+function defaultDataFor(kind: 'appTrigger', label: string): AppTriggerBlockData
+function defaultDataFor(kind: 'appAction', label: string): AppActionBlockData
+function defaultDataFor(kind: BlockKind, label: string): BlockNodeData
 function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
   switch (kind) {
     case 'ifOne':
+      return { kind, label, conditions: [{ variable: '', operator: '==', value: '', combinator: 'and' }] }
     case 'if':
-      return { label, conditions: [{ variable: '', operator: '==', value: '', combinator: 'and' }] }
+      return { kind, label, conditions: [{ variable: '', operator: '==', value: '', combinator: 'and' }] }
     case 'variable':
-      return { label: 'myVar', varType: 'string', value: '' }
+      return { kind, label: 'myVar', varType: 'string', value: '' }
     case 'log':
-      return { label, message: '' }
+      return { kind, label, message: '' }
     case 'task':
-      return { label, title: '' }
+      return { kind, label, title: '' }
     case 'choice':
-      return { label, options: [] }
+      return { kind, label, options: [] }
     case 'aiAgent':
-      return { label, prompt: '' }
+      return { kind, label, prompt: '' }
     case 'aiInput':
-      return { label, value: '' }
+      return { kind, label, value: '' }
     case 'aiOutput':
-      return { label: 'agentReply' }
+      return { kind, label: 'agentReply' }
     case 'aiModel':
-      return { label: 'Model', credentialId: null }
+      return { kind, label: 'Model', credentialId: null }
     case 'appTrigger':
-      return { label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
+      return { kind, label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
     case 'appAction':
-      return { label, to: '', subject: '', body: '' }
+      return { kind, label, to: '', subject: '', body: '' }
     case 'mapsAction':
       return {
+        kind,
         label,
         mapsProvider: 'google',
         origin: '',
@@ -243,15 +254,25 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
         outputVariable: '',
       }
     case 'activitySuggestion':
-      return { label, activityContext: '', interests: '', outputVariable: '' }
-    default:
-      return { label }
+      return { kind, label, activityContext: '', interests: '', outputVariable: '' }
+    case 'trigger':
+      return { kind, label }
+    case 'block':
+      return { kind, label }
+    case 'group':
+      return { kind, label }
   }
 }
 
 function sanitizeData(data: BlockNodeData): BlockNodeData {
-  const { onChange, onTrigger, status, availableVariables, ...rest } = data
-  return rest
+  // onTrigger/availableVariables aren't declared on every kind (only the ones that use
+  // them) - widen the destructure target so this stays kind-agnostic cleanup, same as
+  // it was before the discriminated union.
+  const { onChange, onTrigger, status, availableVariables, ...rest } = data as BlockNodeData & {
+    onTrigger?: unknown
+    availableVariables?: unknown
+  }
+  return rest as BlockNodeData
 }
 
 /** Recursively inlines Group blocks into their stored subgraph so the backend only ever sees plain blocks. */
@@ -264,7 +285,7 @@ function expandGraph(
   const boundary: Record<string, { entry: string[]; exit: string[] }> = {}
 
   for (const n of rawNodes) {
-    if (n.type === 'group' && n.data.subgraph) {
+    if (n.data.kind === 'group' && n.data.subgraph) {
       const sub = n.data.subgraph
       const prefix = `${n.id}::`
       const prefixedNodes = sub.nodes.map((sn: SubgraphNode) => ({ ...sn, id: prefix + sn.id }))
@@ -376,7 +397,7 @@ function CanvasInner({
   // Reduced to stable string keys so this only recomputes when the underlying set of
   // names/types actually changes - not on every unrelated node/data edit.
   const canvasVariableKey = nodes
-    .filter((n) => n.type === 'variable')
+    .filter((n): n is Node<VariableBlockData> => n.data.kind === 'variable')
     .map((n) => `${n.data.label}:${n.data.varType ?? 'string'}`)
     .join('|')
   const savedVariableKey = Object.entries(variables)
@@ -410,13 +431,13 @@ function CanvasInner({
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.type === 'if' ||
-        n.type === 'ifOne' ||
-        n.type === 'log' ||
-        n.type === 'task' ||
-        n.type === 'appAction' ||
-        n.type === 'mapsAction' ||
-        n.type === 'activitySuggestion'
+        n.data.kind === 'if' ||
+        n.data.kind === 'ifOne' ||
+        n.data.kind === 'log' ||
+        n.data.kind === 'task' ||
+        n.data.kind === 'appAction' ||
+        n.data.kind === 'mapsAction' ||
+        n.data.kind === 'activitySuggestion'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -463,7 +484,7 @@ function CanvasInner({
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.type === 'appTrigger' || n.type === 'appAction'
+        n.data.kind === 'appTrigger' || n.data.kind === 'appAction'
           ? { ...n, data: { ...n.data, appConnections, onOpenSettings: openConnectedApps, onAppConnected: refreshAppConnections } }
           : n,
       ),
@@ -479,8 +500,13 @@ function CanvasInner({
   }, [logs])
 
   const updateNodeData = useCallback(
-    (id: string, patch: Partial<BlockNodeData>) => {
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)))
+    (id: string, patch: BlockDataPatch) => {
+      // patch is always produced by that same node's own onChange (wired 1:1 per node
+      // below), so it always matches n.data's actual kind - but this function is kind-
+      // agnostic infrastructure serving every kind, so TS can't verify that pairing here.
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } as BlockNodeData } : n)),
+      )
     },
     [setNodes],
   )
@@ -691,7 +717,7 @@ function CanvasInner({
         data: {
           ...defaultDataFor(kind, label),
           status: 'idle',
-          onChange: (patch) => updateNodeData(id, patch),
+          onChange: (patch: BlockDataPatch) => updateNodeData(id, patch),
           ...(TRIGGER_NODE_TYPES.has(kind) ? { onTrigger: runWorkflow } : {}),
           ...(kind === 'if' ||
           kind === 'ifOne' ||
@@ -748,11 +774,12 @@ function CanvasInner({
         type: 'group',
         position,
         data: {
+          kind: 'group',
           label: block.label,
           subgraph,
           sourceBlockId: block.id,
           status: 'idle',
-          onChange: (patch) => updateNodeData(id, patch),
+          onChange: (patch: BlockDataPatch) => updateNodeData(id, patch),
         },
       }
       setNodes((nds) => [...nds, newNode])
@@ -783,7 +810,7 @@ function CanvasInner({
           data: {
             ...n.data,
             status: 'idle',
-            onChange: (patch) => updateNodeData(id, patch),
+            onChange: (patch: BlockDataPatch) => updateNodeData(id, patch),
             ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
             ...(n.type === 'if' ||
             n.type === 'ifOne' ||
@@ -914,11 +941,12 @@ function CanvasInner({
         type: 'group',
         position: centroid,
         data: {
+          kind: 'group',
           label,
           subgraph,
           sourceBlockId: `custom-${groupId}`,
           status: 'idle',
-          onChange: (patch) => updateNodeData(groupId, patch),
+          onChange: (patch: BlockDataPatch) => updateNodeData(groupId, patch),
         },
       }
 
@@ -964,7 +992,7 @@ function CanvasInner({
         data: {
           ...sn.data,
           status: 'idle',
-          onChange: (patch) => updateNodeData(sn.id, patch),
+          onChange: (patch: BlockDataPatch) => updateNodeData(sn.id, patch),
           ...(TRIGGER_NODE_TYPES.has(sn.type) ? { onTrigger: runWorkflow } : {}),
           ...(sn.type === 'if' ||
           sn.type === 'ifOne' ||
@@ -1113,7 +1141,7 @@ function CanvasInner({
         data: {
           ...n.data,
           status: 'idle',
-          onChange: (patch) => updateNodeData(n.id, patch),
+          onChange: (patch: BlockDataPatch) => updateNodeData(n.id, patch),
           ...(TRIGGER_NODE_TYPES.has(n.type) ? { onTrigger: runWorkflow } : {}),
           ...(n.type === 'if' ||
           n.type === 'ifOne' ||
@@ -1208,7 +1236,7 @@ function CanvasInner({
       data: {
         ...defaultDataFor('appTrigger', 'App Trigger'),
         status: 'idle',
-        onChange: (patch) => updateNodeData(triggerId, patch),
+        onChange: (patch: BlockDataPatch) => updateNodeData(triggerId, patch),
         onTrigger: runWorkflow,
         appConnections: appConnectionsRef.current,
         onOpenSettings: openConnectedApps,
@@ -1222,7 +1250,7 @@ function CanvasInner({
       data: {
         ...defaultDataFor('appAction', 'App Action'),
         status: 'idle',
-        onChange: (patch) => updateNodeData(actionId, patch),
+        onChange: (patch: BlockDataPatch) => updateNodeData(actionId, patch),
         availableVariables: availableVariablesRef.current,
         appConnections: appConnectionsRef.current,
         onOpenSettings: openConnectedApps,

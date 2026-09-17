@@ -2,11 +2,11 @@ import { Check, Lock, Unlock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { useAuth } from '../auth'
-import type { BlockNodeData } from './types'
+import type { AiModelBlockData } from './types'
 
 type Credential = { id: number; provider: string; label: string; verified: boolean }
 
-export default function AiModelNode({ data }: NodeProps<BlockNodeData>) {
+export default function AiModelNode({ data }: NodeProps<AiModelBlockData>) {
   const { authedFetch } = useAuth()
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [modelOptions, setModelOptions] = useState<string[]>([])

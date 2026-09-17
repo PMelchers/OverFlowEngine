@@ -1,6 +1,7 @@
 import { Lock, X } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from './auth'
+import Modal from './Modal'
 
 /** Confirms the current password before revealing a sensitive settings page -
  *  a second, short-lived check on top of the normal login session. */
@@ -33,14 +34,10 @@ export default function ReauthGate({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
-      <form
-        onSubmit={submit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-80 rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
-      >
+    <Modal onClose={onCancel} panelClassName="w-80 rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800" labelledBy="reauth-title">
+      <form onSubmit={submit}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100">
+          <h2 id="reauth-title" className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100">
             <Lock className="h-4 w-4 text-blue-600 dark:text-blue-400" /> {title}
           </h2>
           <button
@@ -72,6 +69,6 @@ export default function ReauthGate({
           {checking ? 'Checking...' : 'Continue'}
         </button>
       </form>
-    </div>
+    </Modal>
   )
 }

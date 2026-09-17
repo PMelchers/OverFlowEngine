@@ -1,6 +1,7 @@
 import { ArrowLeft, Check, KeyRound, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from './auth'
+import { useAuthedResource } from './useAuthedResource'
 
 type Credential = {
   id: number
@@ -27,31 +28,18 @@ function detectProviderPreview(key: string): string | null {
 export default function ApiKeysPage({ onBack }: { onBack: () => void }) {
   const { authedFetch } = useAuth()
 
-  const [credentials, setCredentials] = useState<Credential[]>([])
-  const [credentialsLoading, setCredentialsLoading] = useState(true)
+  const {
+    data: credentialsData,
+    loading: credentialsLoading,
+    error: loadError,
+    reload: loadCredentials,
+  } = useAuthedResource<Credential[]>('/credentials', 'Could not load API keys')
+  const credentials = credentialsData ?? []
   const [credentialError, setCredentialError] = useState<string | null>(null)
   const [label, setLabel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [credentialSaving, setCredentialSaving] = useState(false)
   const detectedProvider = detectProviderPreview(apiKey)
-
-  const loadCredentials = async () => {
-    setCredentialsLoading(true)
-    try {
-      const res = await authedFetch('/credentials')
-      if (!res.ok) throw new Error('Could not load API keys')
-      setCredentials(await res.json())
-    } catch (err) {
-      setCredentialError(err instanceof Error ? err.message : 'Could not load API keys')
-    } finally {
-      setCredentialsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadCredentials()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const addCredential = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -81,7 +69,7 @@ export default function ApiKeysPage({ onBack }: { onBack: () => void }) {
 
   const removeCredential = async (id: number) => {
     await authedFetch(`/credentials/${id}`, { method: 'DELETE' })
-    setCredentials((c) => c.filter((cred) => cred.id !== id))
+    await loadCredentials()
   }
 
   return (
@@ -178,7 +166,9 @@ export default function ApiKeysPage({ onBack }: { onBack: () => void }) {
                       : `Recognized as ${detectedProvider}`}
                 </p>
               )}
-              {credentialError && <p className="text-sm text-red-600 dark:text-red-400">{credentialError}</p>}
+              {(credentialError ?? loadError) && (
+                <p className="text-sm text-red-600 dark:text-red-400">{credentialError ?? loadError}</p>
+              )}
               <button
                 type="submit"
                 disabled={credentialSaving}

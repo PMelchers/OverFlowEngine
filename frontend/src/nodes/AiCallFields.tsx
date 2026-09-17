@@ -1,37 +1,18 @@
 import { useRef } from 'react'
-import { useEdges, useNodeId, useNodes } from 'reactflow'
-import type { BlockNodeData } from './types'
+import type { AppActionBlockData } from './types'
+import { useConnectedModel } from './useConnectedModel'
+import { useVariableInsertion } from './useVariableInsertion'
 
 /** Fields shown inside an App Action block once its app is set to "AI" - the model
  *  comes from an AI Model block wired to this node's own "model" handle, same as an
  *  AI Agent block, so AI actions reuse the credential/model-picking UI that already
  *  exists rather than duplicating it here. */
-export default function AiCallFields({ data }: { data: BlockNodeData }) {
+export default function AiCallFields({ data }: { data: AppActionBlockData }) {
   const availableVariables = data.availableVariables ?? []
   const promptRef = useRef<HTMLTextAreaElement>(null)
 
-  const nodeId = useNodeId()
-  const edges = useEdges()
-  const nodes = useNodes<BlockNodeData>()
-  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
-  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
-  const connectedModel = modelNode?.data.model ? `${modelNode.data.model} (${modelNode.data.provider})` : undefined
-
-  const insertVariable = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = promptRef.current
-    const current = data.prompt ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ prompt: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const connectedModel = useConnectedModel()
+  const insertVariable = useVariableInsertion(promptRef, data.prompt ?? '', (next) => data.onChange?.({ prompt: next }))
 
   return (
     <>

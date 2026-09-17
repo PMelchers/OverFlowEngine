@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import AboutDropdown from './AboutDropdown'
 import AuthModal from './AuthModal'
 import { useAuth } from './auth'
+import Modal from './Modal'
+import { relativeDate } from './relativeDate'
 import { TEMPLATES } from './templates'
 
 type FlowSummary = { id: number; name: string; created_at: string }
@@ -13,20 +15,6 @@ type Assignment = {
   description: string | null
   created_at: string
   flows: { id: number; name: string }[]
-}
-
-function relativeDate(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diffMs = Date.now() - then
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 function AssignmentModal({
@@ -104,26 +92,29 @@ function AssignmentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-96 max-h-[80vh] overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100">
-            <Folders className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            {assignment ? 'Edit Assignment' : 'New Assignment'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Modal
+      onClose={onClose}
+      panelClassName="w-96 max-h-[80vh] overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
+      labelledBy="assignment-modal-title"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2
+          id="assignment-modal-title"
+          className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100"
+        >
+          <Folders className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          {assignment ? 'Edit Assignment' : 'New Assignment'}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <label className="mb-3 block text-sm text-gray-600 dark:text-gray-300">
+      <label className="mb-3 block text-sm text-gray-600 dark:text-gray-300">
           Name
           <input
             type="text"
@@ -176,8 +167,7 @@ function AssignmentModal({
         >
           {saving ? 'Saving...' : assignment ? 'Save Changes' : 'Create Assignment'}
         </button>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

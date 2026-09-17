@@ -3,52 +3,28 @@ import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { MapsActionBlockData } from './types'
+import { useVariableInsertion } from './useVariableInsertion'
 
-const TRAVEL_MODES: { value: NonNullable<BlockNodeData['travelMode']>; label: string }[] = [
+const TRAVEL_MODES: { value: NonNullable<MapsActionBlockData['travelMode']>; label: string }[] = [
   { value: 'driving', label: 'Driving' },
   { value: 'walking', label: 'Walking' },
   { value: 'transit', label: 'Transit' },
   { value: 'bicycling', label: 'Bicycling (Google only)' },
 ]
 
-export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
+export default function MapsActionNode({ data }: NodeProps<MapsActionBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const destRef = useRef<HTMLInputElement>(null)
   const waypointsRef = useRef<HTMLInputElement>(null)
 
-  const insertIntoDestination = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = destRef.current
-    const current = data.destination ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ destination: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
-
-  const insertIntoWaypoints = (name: string) => {
-    if (!name) return
-    const token = `{${name}}`
-    const el = waypointsRef.current
-    const current = data.waypoints ?? ''
-    const start = el?.selectionStart ?? current.length
-    const end = el?.selectionEnd ?? current.length
-    const next = current.slice(0, start) + token + current.slice(end)
-    data.onChange?.({ waypoints: next })
-    requestAnimationFrame(() => {
-      el?.focus()
-      const caret = start + token.length
-      el?.setSelectionRange(caret, caret)
-    })
-  }
+  const insertIntoDestination = useVariableInsertion(destRef, data.destination ?? '', (next) =>
+    data.onChange?.({ destination: next }),
+  )
+  const insertIntoWaypoints = useVariableInsertion(waypointsRef, data.waypoints ?? '', (next) =>
+    data.onChange?.({ waypoints: next }),
+  )
 
   return (
     <GridSnapBox
@@ -164,7 +140,7 @@ export default function MapsActionNode({ data }: NodeProps<BlockNodeData>) {
       <label className="mb-1 block text-[11px] font-medium text-lime-800 dark:text-lime-300">Travel mode</label>
       <select
         value={data.travelMode ?? 'driving'}
-        onChange={(e) => data.onChange?.({ travelMode: e.target.value as BlockNodeData['travelMode'] })}
+        onChange={(e) => data.onChange?.({ travelMode: e.target.value as MapsActionBlockData['travelMode'] })}
         className="nodrag mb-2 w-full rounded border border-lime-400 bg-white px-2 py-1 text-sm dark:border-lime-700 dark:bg-gray-900 dark:text-gray-100"
       >
         {TRAVEL_MODES.map((m) => (

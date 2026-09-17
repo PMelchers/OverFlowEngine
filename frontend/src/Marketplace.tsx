@@ -1,23 +1,12 @@
 import { ArrowLeft, Globe, Rocket, Store, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from './auth'
+import Modal from './Modal'
+import { relativeDate } from './relativeDate'
+import { useAuthedResource } from './useAuthedResource'
 
 type Listing = { id: number; name: string; description: string | null; author: string; created_at: string }
 type MyFlow = { id: number; name: string; description: string | null; is_public: boolean; created_at: string }
-
-function relativeDate(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diffMs = Date.now() - then
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
-}
 
 function PublishModal({
   flow,
@@ -53,45 +42,50 @@ function PublishModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-96 rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100">
-            <Rocket className="h-4 w-4 text-blue-600 dark:text-blue-400" /> Publish "{flow.name}"
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">
-          Anyone will be able to see and copy this flow into their own account. AI Model blocks are never
-          shared - copiers link their own API key.
-        </p>
-        <label className="mb-3 block text-sm text-gray-600 dark:text-gray-300">
-          Description
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What does this workflow do?"
-            rows={3}
-            className="mt-1 w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-          />
-        </label>
-        {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+    <Modal
+      onClose={onClose}
+      panelClassName="w-96 rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
+      labelledBy="publish-modal-title"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2
+          id="publish-modal-title"
+          className="flex items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-gray-100"
+        >
+          <Rocket className="h-4 w-4 text-blue-600 dark:text-blue-400" /> Publish "{flow.name}"
+        </h2>
         <button
           type="button"
-          onClick={publish}
-          disabled={saving}
-          className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
         >
-          {saving ? 'Publishing...' : 'Publish to Marketplace'}
+          <X className="h-4 w-4" />
         </button>
       </div>
-    </div>
+      <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">
+        Anyone will be able to see and copy this flow into their own account. AI Model blocks are never
+        shared - copiers link their own API key.
+      </p>
+      <label className="mb-3 block text-sm text-gray-600 dark:text-gray-300">
+        Description
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What does this workflow do?"
+          rows={3}
+          className="mt-1 w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </label>
+      {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <button
+        type="button"
+        onClick={publish}
+        disabled={saving}
+        className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+      >
+        {saving ? 'Publishing...' : 'Publish to Marketplace'}
+      </button>
+    </Modal>
   )
 }
 
@@ -99,29 +93,18 @@ export default function Marketplace({ onBack }: { onBack: () => void }) {
   const { user, authedFetch } = useAuth()
   const [tab, setTab] = useState<'browse' | 'publish'>('browse')
 
-  const [listings, setListings] = useState<Listing[]>([])
-  const [listingsLoading, setListingsLoading] = useState(true)
-  const [listingsError, setListingsError] = useState<string | null>(null)
+  const {
+    data: listingsData,
+    loading: listingsLoading,
+    error: listingsError,
+  } = useAuthedResource<Listing[]>('/marketplace', 'Could not load the marketplace')
+  const listings = listingsData ?? []
   const [copyingId, setCopyingId] = useState<number | null>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
 
   const [myFlows, setMyFlows] = useState<MyFlow[]>([])
   const [myFlowsLoading, setMyFlowsLoading] = useState(false)
   const [publishTarget, setPublishTarget] = useState<MyFlow | null>(null)
-
-  const loadListings = async () => {
-    setListingsLoading(true)
-    setListingsError(null)
-    try {
-      const res = await authedFetch('/marketplace')
-      if (!res.ok) throw new Error('Could not load the marketplace')
-      setListings(await res.json())
-    } catch (err) {
-      setListingsError(err instanceof Error ? err.message : 'Could not load the marketplace')
-    } finally {
-      setListingsLoading(false)
-    }
-  }
 
   const loadMyFlows = async () => {
     if (!user) return
@@ -133,11 +116,6 @@ export default function Marketplace({ onBack }: { onBack: () => void }) {
       setMyFlowsLoading(false)
     }
   }
-
-  useEffect(() => {
-    loadListings()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (tab === 'publish') loadMyFlows()

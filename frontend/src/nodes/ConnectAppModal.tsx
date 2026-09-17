@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, ExternalLink, Loader2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useAuth } from '../auth'
+import Modal from '../Modal'
 import { APP_ICONS, APP_TO_CALENDAR_PROVIDER } from './types'
 
 type CalendarProvider = 'google' | 'microsoft'
@@ -161,29 +161,33 @@ export default function ConnectAppModal({
 
   if (!provider) return null
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] w-[420px] overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-50">
-            {Icon && (
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
-                <Icon className="h-3.5 w-3.5" />
-              </span>
-            )}
-            Connect {app}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  return (
+    <Modal
+      onClose={onClose}
+      overlayClassName="fixed inset-0 z-[110] flex items-center justify-center bg-black/40"
+      panelClassName="max-h-[85vh] w-[420px] overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-gray-800"
+      labelledBy="connect-app-title"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2
+          id="connect-app-title"
+          className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-50"
+        >
+          {Icon && (
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+          )}
+          Connect {app}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
         {status === 'loading' && (
           <p className="flex items-center gap-2 py-6 text-sm text-gray-400 dark:text-gray-500">
@@ -302,8 +306,6 @@ export default function ConnectAppModal({
             )}
           </>
         )}
-      </div>
-    </div>,
-    document.body,
+    </Modal>
   )
 }
