@@ -2,11 +2,11 @@ import { Variable } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData, VariableType } from './types'
+import type { VariableBlockData, VariableType } from './types'
 
 const TYPE_OPTIONS: VariableType[] = ['string', 'int', 'boolean']
 
-export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
+export default function VariableNode({ data }: NodeProps<VariableBlockData>) {
   const active = data.status === 'active'
   const varType = data.varType ?? 'string'
 
@@ -33,7 +33,7 @@ export default function VariableNode({ data }: NodeProps<BlockNodeData>) {
         value={varType}
         onChange={(e) => {
           const nextType = e.target.value as VariableType
-          const patch: Partial<BlockNodeData> = { varType: nextType }
+          const patch: Partial<VariableBlockData> = { varType: nextType }
           // Keep data.value in sync with the visible default so a switch to boolean
           // is actually saved as "false" right away, not left empty until touched.
           if (nextType === 'boolean' && data.value !== 'true' && data.value !== 'false') {

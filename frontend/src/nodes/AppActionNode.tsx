@@ -7,17 +7,17 @@ import BlockHeader from './BlockHeader'
 import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
-import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppActionBlockData } from './types'
 import { useAppConnection } from './useAppConnection'
 import { useVariableInsertion } from './useVariableInsertion'
 
-const CALENDAR_ACTIONS: { value: NonNullable<BlockNodeData['targetAction']>; label: string }[] = [
+const CALENDAR_ACTIONS: { value: NonNullable<AppActionBlockData['targetAction']>; label: string }[] = [
   { value: 'fetchEvents', label: 'Fetch Events' },
   { value: 'createEvent', label: 'Create Event' },
   { value: 'deleteEvent', label: 'Delete Event' },
 ]
 
-export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
+export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const toRef = useRef<HTMLInputElement>(null)
@@ -168,7 +168,7 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           </label>
           <select
             value={action}
-            onChange={(e) => data.onChange?.({ targetAction: e.target.value as BlockNodeData['targetAction'] })}
+            onChange={(e) => data.onChange?.({ targetAction: e.target.value as AppActionBlockData['targetAction'] })}
             className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
           >
             {CALENDAR_ACTIONS.map((a) => (

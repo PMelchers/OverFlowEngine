@@ -41,6 +41,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'appTrigger',
         position: { x: 0 * STEP, y: 0 },
         data: {
+          kind: 'appTrigger',
           label: 'Email Trigger',
           sourceApp: 'Email',
           fromAddress: 'sender@example.com',
@@ -57,6 +58,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'appAction',
         position: { x: 1 * STEP, y: 0 },
         data: {
+          kind: 'appAction',
           label: 'Extract Instructions',
           targetApp: 'AI',
           targetAction: 'aiCall',
@@ -69,13 +71,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'extractModel',
         type: 'aiModel',
         position: { x: 1 * STEP + 120, y: 280 },
-        data: { label: 'Model', credentialId: null },
+        data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'reply',
         type: 'appAction',
         position: { x: 2 * STEP, y: 0 },
         data: {
+          kind: 'appAction',
           label: 'Draft Reply',
           targetApp: 'AI',
           targetAction: 'aiCall',
@@ -88,13 +91,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'replyModel',
         type: 'aiModel',
         position: { x: 2 * STEP + 120, y: 280 },
-        data: { label: 'Model', credentialId: null },
+        data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'send',
         type: 'appAction',
         position: { x: 3 * STEP, y: 0 },
         data: {
+          kind: 'appAction',
           label: 'Send Reply',
           targetApp: 'Email',
           to: '{incomingMessageFrom}',
@@ -121,31 +125,31 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'trigger',
         type: 'trigger',
         position: { x: 0 * STEP, y: 0 },
-        data: { label: 'Plan My Trip' },
+        data: { kind: 'trigger', label: 'Plan My Trip' },
       },
       {
         id: 'country',
         type: 'variable',
         position: { x: 1 * STEP, y: 0 },
-        data: { label: 'destinationCountry', varType: 'string', value: 'Italy' },
+        data: { kind: 'variable', label: 'destinationCountry', varType: 'string', value: 'Italy' },
       },
       {
         id: 'transport',
         type: 'variable',
         position: { x: 2 * STEP, y: 0 },
-        data: { label: 'transportMode', varType: 'string', value: 'car' },
+        data: { kind: 'variable', label: 'transportMode', varType: 'string', value: 'car' },
       },
       {
         id: 'activities',
         type: 'variable',
         position: { x: 3 * STEP, y: 0 },
-        data: { label: 'destinationActivities', varType: 'string', value: 'hiking, museums, local food' },
+        data: { kind: 'variable', label: 'destinationActivities', varType: 'string', value: 'hiking, museums, local food' },
       },
       {
         id: 'stayType',
         type: 'variable',
         position: { x: 4 * STEP, y: 0 },
-        data: { label: 'stayType', varType: 'string', value: 'hotel' },
+        data: { kind: 'variable', label: 'stayType', varType: 'string', value: 'hotel' },
       },
       {
         // The route can't be built without knowing where it starts - fed into both Maps
@@ -154,7 +158,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'startAddress',
         type: 'variable',
         position: { x: 5 * STEP, y: 0 },
-        data: { label: 'startingAddress', varType: 'string', value: 'Home' },
+        data: { kind: 'variable', label: 'startingAddress', varType: 'string', value: 'Home' },
       },
       {
         // Seeded blank so the Maps Route destinations below render cleanly even if the
@@ -162,13 +166,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'routeActivitiesSeed',
         type: 'variable',
         position: { x: 6 * STEP, y: 0 },
-        data: { label: 'routeActivities', varType: 'string', value: '' },
+        data: { kind: 'variable', label: 'routeActivities', varType: 'string', value: '' },
       },
       {
         id: 'planInput',
         type: 'aiInput',
         position: { x: 7 * STEP, y: 0 },
         data: {
+          kind: 'aiInput',
           label: 'planInput',
           value:
             'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress}. We are traveling by {transportMode} and enjoy {destinationActivities}. Suggest a day-by-day itinerary with the best stops to visit.',
@@ -179,6 +184,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'aiAgent',
         position: { x: 8 * STEP, y: 0 },
         data: {
+          kind: 'aiAgent',
           label: 'Vacation Planner Agent',
           prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, and accommodation preference.',
         },
@@ -187,19 +193,20 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'planModel',
         type: 'aiModel',
         position: { x: 8 * STEP + 120, y: 280 },
-        data: { label: 'Model', credentialId: null },
+        data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
         position: { x: 9 * STEP, y: 0 },
-        data: { label: 'vacationPlan' },
+        data: { kind: 'aiOutput', label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
         position: { x: 10 * STEP, y: 0 },
         data: {
+          kind: 'activitySuggestion',
           label: 'Suggest Activities',
           activityContext: '{destinationCountry}',
           interests: '{destinationActivities}',
@@ -210,13 +217,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'suggestModel',
         type: 'aiModel',
         position: { x: 2800, y: 640 },
-        data: { label: 'Model', credentialId: null },
+        data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'googleRoute',
         type: 'mapsAction',
         position: { x: 11 * STEP, y: 0 },
         data: {
+          kind: 'mapsAction',
           label: 'Google Maps Route',
           mapsProvider: 'google',
           origin: '{startingAddress}',
@@ -231,6 +239,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'mapsAction',
         position: { x: 12 * STEP, y: 0 },
         data: {
+          kind: 'mapsAction',
           label: 'Apple Maps Route',
           mapsProvider: 'apple',
           origin: '{startingAddress}',

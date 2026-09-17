@@ -3,11 +3,11 @@ import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { ActivitySuggestionBlockData } from './types'
 import { useConnectedModel } from './useConnectedModel'
 import { useVariableInsertion } from './useVariableInsertion'
 
-export default function ActivitySuggestionNode({ data }: NodeProps<BlockNodeData>) {
+export default function ActivitySuggestionNode({ data }: NodeProps<ActivitySuggestionBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const contextRef = useRef<HTMLInputElement>(null)

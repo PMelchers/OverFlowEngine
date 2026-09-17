@@ -42,7 +42,7 @@ export function refreshGroupInstances<T extends { type?: string; data: BlockNode
 ): { items: T[]; changed: boolean } {
   let changed = false
   const next = items.map((item) => {
-    if (item.type !== 'group' || !item.data.subgraph) return item
+    if (item.data.kind !== 'group' || !item.data.subgraph) return item
 
     if (item.data.sourceBlockId === targetId) {
       changed = true

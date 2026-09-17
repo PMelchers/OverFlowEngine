@@ -2,9 +2,9 @@ import { LogOut } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { AiOutputBlockData } from './types'
 
-export default function AiOutputNode({ data }: NodeProps<BlockNodeData>) {
+export default function AiOutputNode({ data }: NodeProps<AiOutputBlockData>) {
   const active = data.status === 'active'
 
   return (

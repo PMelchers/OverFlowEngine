@@ -11,7 +11,10 @@ export function useConnectedModel(): string | undefined {
   return useStore((state: ReactFlowState) => {
     if (!nodeId) return undefined
     const edge = state.edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
-    const modelData = edge ? (state.nodeInternals.get(edge.source)?.data as BlockNodeData | undefined) : undefined
-    return modelData?.model ? `${modelData.model} (${modelData.provider})` : undefined
+    const sourceData = edge ? (state.nodeInternals.get(edge.source)?.data as BlockNodeData | undefined) : undefined
+    // A "model" edge should always come from an AI Model block, but nothing besides this
+    // check actually guarantees it - narrow explicitly rather than assuming.
+    if (sourceData?.kind !== 'aiModel' || !sourceData.model) return undefined
+    return `${sourceData.model} (${sourceData.provider})`
   })
 }

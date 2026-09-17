@@ -3,10 +3,10 @@ import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { TaskBlockData } from './types'
 import { useVariableInsertion } from './useVariableInsertion'
 
-export default function TaskNode({ data }: NodeProps<BlockNodeData>) {
+export default function TaskNode({ data }: NodeProps<TaskBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const inputRef = useRef<HTMLInputElement>(null)

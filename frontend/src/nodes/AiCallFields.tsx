@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { BlockNodeData } from './types'
+import type { AppActionBlockData } from './types'
 import { useConnectedModel } from './useConnectedModel'
 import { useVariableInsertion } from './useVariableInsertion'
 
@@ -7,7 +7,7 @@ import { useVariableInsertion } from './useVariableInsertion'
  *  comes from an AI Model block wired to this node's own "model" handle, same as an
  *  AI Agent block, so AI actions reuse the credential/model-picking UI that already
  *  exists rather than duplicating it here. */
-export default function AiCallFields({ data }: { data: BlockNodeData }) {
+export default function AiCallFields({ data }: { data: AppActionBlockData }) {
   const availableVariables = data.availableVariables ?? []
   const promptRef = useRef<HTMLTextAreaElement>(null)
 

@@ -5,10 +5,10 @@ import BlockHeader from './BlockHeader'
 import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
-import { APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type BlockNodeData } from './types'
+import { APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppTriggerBlockData } from './types'
 import { useAppConnection } from './useAppConnection'
 
-export default function AppTriggerNode({ data }: NodeProps<BlockNodeData>) {
+export default function AppTriggerNode({ data }: NodeProps<AppTriggerBlockData>) {
   const active = data.status === 'active'
   const sourceApp = data.sourceApp
   const AppIcon = sourceApp ? (APP_ICONS[sourceApp] ?? Zap) : Plug
