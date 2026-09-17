@@ -80,7 +80,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 Write-Step "Checking backend dependencies"
-& $venvPython -c "import fastapi, uvicorn, pydantic, psycopg, httpx, dotenv" 2> $null
+& $venvPython -c "import fastapi, uvicorn, pydantic, psycopg, httpx, dotenv, mcp" 2> $null
 if ($LASTEXITCODE -ne 0) {
     Write-Warn "Backend dependencies missing, installing from requirements.txt..."
     & $venvPython -m pip install -q -r (Join-Path $backendDir "requirements.txt")
