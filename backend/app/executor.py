@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from . import models, providers, calendar_providers
 from .conditions import evaluate_conditions
+from .discord_mcp_client import send_discord_message
 from .maps import build_maps_url
 
 logger = logging.getLogger("overflowengine.workflow")
@@ -293,16 +294,44 @@ def _advance(db: Session, state: dict) -> dict:
                     else:
                         message = f'"{label}" ran an AI call with {model} (simulated - real model calls not wired up yet)'
             elif calendar_provider is None:
-                # Plain "send a message" apps (Email/Slack/Teams/Webhook) - still simulated,
-                # no real send wired up yet.
+                # Plain "send a message" apps (Email/Slack/Teams/Webhook/Discord) - Discord is
+                # wired up for real via the Discord MCP server; the rest stay simulated.
                 to = _render_message(data.get("to", ""), eval_vars)
                 subject = _render_message(data.get("subject", ""), eval_vars)
                 body = _render_message(data.get("body", ""), eval_vars)
                 subject_part = f' "{subject}"' if subject else ""
-                message = (
-                    f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
-                    "(simulated - real send not wired up yet)"
-                )
+
+                if target_app == "Discord":
+                    credential_id = data.get("credentialId")
+                    bot_token = None
+                    credential_error = None
+                    if credential_id:
+                        cred = (
+                            db.query(models.AppCredential)
+                            .filter(
+                                models.AppCredential.id == credential_id,
+                                models.AppCredential.user_id == state.get("user_id"),
+                            )
+                            .one_or_none()
+                        )
+                        if cred is None:
+                            credential_error = "the selected Discord bot credential no longer exists"
+                        else:
+                            bot_token = cred.token
+
+                    if credential_error:
+                        message = f'"{label}" failed to send to Discord channel "{to}": {credential_error}'
+                    else:
+                        ok, detail = send_discord_message(to, body, bot_token=bot_token)
+                        if ok:
+                            message = f'"{label}" sent to Discord channel "{to}": "{body}" (message id {detail})'
+                        else:
+                            message = f'"{label}" failed to send to Discord channel "{to}": {detail}'
+                else:
+                    message = (
+                        f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
+                        "(simulated - real send not wired up yet)"
+                    )
             else:
                 # Real calendar accounts - which action runs depends on targetAction,
                 # not on the node type, so adding a new app/action never needs a new

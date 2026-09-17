@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, Link2, X } from 'lucide-react'
+import { ArrowLeft, Calendar, Check, Link2, MessageSquare, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from './auth'
 
@@ -9,6 +9,15 @@ type CalendarConnection = {
   client_id: string | null
   connected: boolean
   account_email: string | null
+}
+
+type AppCredential = {
+  id: number
+  target_app: string
+  label: string
+  token_masked: string
+  verified: boolean
+  created_at: string
 }
 
 const CALENDAR_LABELS: Record<CalendarProvider, string> = {
@@ -102,6 +111,63 @@ export default function ConnectedAppsPage({ onBack }: { onBack: () => void }) {
     }
     await authedFetch(`/calendar/${provider}`, { method: 'DELETE' })
     await loadCalendars()
+  }
+
+  // --- Discord bot tokens ---
+  const [discordCreds, setDiscordCreds] = useState<AppCredential[]>([])
+  const [discordCredsLoading, setDiscordCredsLoading] = useState(true)
+  const [discordError, setDiscordError] = useState<string | null>(null)
+  const [discordLabel, setDiscordLabel] = useState('')
+  const [discordToken, setDiscordToken] = useState('')
+  const [discordSaving, setDiscordSaving] = useState(false)
+
+  const loadDiscordCreds = async () => {
+    setDiscordCredsLoading(true)
+    try {
+      const res = await authedFetch('/app-credentials?target_app=Discord')
+      if (!res.ok) throw new Error('Could not load Discord bots')
+      setDiscordCreds(await res.json())
+    } catch (err) {
+      setDiscordError(err instanceof Error ? err.message : 'Could not load Discord bots')
+    } finally {
+      setDiscordCredsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDiscordCreds()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const addDiscordCred = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setDiscordError(null)
+    setDiscordSaving(true)
+    try {
+      const res = await authedFetch('/app-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_app: 'Discord', label: discordLabel, token: discordToken }),
+      })
+      // Clear the token out of this form immediately regardless of outcome, so
+      // it never lingers on screen after being submitted.
+      setDiscordToken('')
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.detail ?? 'Could not save that bot token')
+      }
+      setDiscordLabel('')
+      await loadDiscordCreds()
+    } catch (err) {
+      setDiscordError(err instanceof Error ? err.message : 'Could not save that bot token')
+    } finally {
+      setDiscordSaving(false)
+    }
+  }
+
+  const removeDiscordCred = async (id: number) => {
+    await authedFetch(`/app-credentials/${id}`, { method: 'DELETE' })
+    setDiscordCreds((c) => c.filter((cred) => cred.id !== id))
   }
 
   return (
@@ -233,6 +299,83 @@ export default function ConnectedAppsPage({ onBack }: { onBack: () => void }) {
               </div>
             )}
             {calendarError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{calendarError}</p>}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
+            <MessageSquare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Discord bots
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+            Link a bot token so App Action blocks can send to Discord as your own bot instead of the
+            server's default one. Get a token from the Discord Developer Portal (Bot tab).
+          </p>
+
+          <div className="mt-4">
+            {discordCredsLoading ? (
+              <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>
+            ) : discordCreds.length === 0 ? (
+              <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">
+                No Discord bots linked yet - App Action blocks will use the server's default bot.
+              </p>
+            ) : (
+              <ul className="mb-4 space-y-1.5">
+                {discordCreds.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  >
+                    <span>
+                      <span className="font-medium text-gray-700 dark:text-gray-200">{c.label}</span>{' '}
+                      {c.verified && (
+                        <span
+                          className="inline-flex align-middle text-green-600 dark:text-green-400"
+                          title="Verified with Discord"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                      )}{' '}
+                      <span className="text-gray-400 dark:text-gray-500">({c.token_masked})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeDiscordCred(c.id)}
+                      className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                      title="Remove"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <form onSubmit={addDiscordCred} className="space-y-2 border-t border-gray-200 pt-3 dark:border-gray-700">
+              <input
+                type="text"
+                required
+                placeholder="Label, e.g. Team server bot"
+                value={discordLabel}
+                onChange={(e) => setDiscordLabel(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+              <input
+                type="password"
+                required
+                placeholder="Bot token"
+                value={discordToken}
+                onChange={(e) => setDiscordToken(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+              {discordError && <p className="text-sm text-red-600 dark:text-red-400">{discordError}</p>}
+              <button
+                type="submit"
+                disabled={discordSaving}
+                className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {discordSaving ? 'Verifying with Discord...' : 'Add Discord bot'}
+              </button>
+            </form>
           </div>
         </section>
       </div>

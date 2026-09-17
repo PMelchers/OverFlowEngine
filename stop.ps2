@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Stop script #2 - for Ubuntu (and other Debian-based Linux) users.
-# Stops OverFlowEngine's backend and frontend dev servers by freeing
-# ports 8000 and 5173, so a leftover uvicorn --reload / vite process
-# doesn't hold the port next time you start.
+# Stops OverFlowEngine's backend, frontend and Discord MCP dev servers by
+# freeing ports 8000, 5173 and 8765, so a leftover uvicorn --reload / vite /
+# MCP server process doesn't hold the port next time you start.
 
 set -uo pipefail
 
@@ -31,6 +31,7 @@ stop_port() {
 step "Stopping OverFlowEngine dev servers"
 stop_port 8000 "Backend"
 stop_port 5173 "Frontend"
+stop_port 8765 "Discord MCP server"
 
 echo ""
 echo "Postgres/Redis are still running in Docker. Run 'docker compose down' if you want to stop those too."

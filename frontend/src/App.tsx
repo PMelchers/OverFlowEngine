@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Canvas from './Canvas'
 import Dashboard from './Dashboard'
 import Marketplace from './Marketplace'
 import OAuthPopupBridge from './OAuthPopupBridge'
 import Settings from './Settings'
-import { AuthProvider } from './auth'
+import { AuthProvider, useAuth } from './auth'
 import { ThemeProvider } from './theme'
 
 type View =
@@ -14,7 +14,19 @@ type View =
   | { kind: 'marketplace'; from: View }
 
 function AppShell() {
+  const { user } = useAuth()
   const [view, setView] = useState<View>({ kind: 'dashboard' })
+
+  // Every other view assumes it's rendering for a signed-in user and has no
+  // sign-in gate of its own (only Dashboard checks `user`) - without this,
+  // logging out from Settings/Canvas/Marketplace would leave that same
+  // now-stale, now-unauthenticated page on screen instead of showing signed
+  // out state anywhere.
+  useEffect(() => {
+    if (!user && view.kind !== 'dashboard') {
+      setView({ kind: 'dashboard' })
+    }
+  }, [user, view.kind])
 
   // This tab is the small OAuth consent popup ConnectAppModal opened, landing back
   // here after the provider redirects it - not the app itself. window.opener is only
