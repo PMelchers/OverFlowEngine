@@ -107,7 +107,13 @@ export default function AppActionNode({ data }: NodeProps<BlockNodeData>) {
           apps={APP_TRIGGER_SOURCES}
           selectedApp={targetApp}
           onSelectApp={(app) => {
-            data.onChange?.({ targetApp: app, targetAction: undefined })
+            // Calendar apps default their action to "fetchEvents" for display (see `action`
+            // above) - write that default into `data` here too, so a saved workflow that
+            // never touches the Action dropdown executes what the UI shows, not `undefined`.
+            data.onChange?.({
+              targetApp: app,
+              targetAction: CALENDAR_APPS.includes(app) ? 'fetchEvents' : undefined,
+            })
             if (!(data.appConnections?.[app] ?? false)) setConnectNudgeApp(app)
           }}
           aiActions={{

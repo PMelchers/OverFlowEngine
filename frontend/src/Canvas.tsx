@@ -36,6 +36,7 @@ import 'reactflow/dist/style.css'
 import ActivitySuggestionNode from './nodes/ActivitySuggestionNode'
 import AboutDropdown from './AboutDropdown'
 import { type AlignmentGuides, snapToNearbyNodes } from './alignment'
+import { API_BASE } from './apiBase'
 import AuthModal from './AuthModal'
 import GroupNameModal from './GroupNameModal'
 import { useAuth } from './auth'
@@ -157,8 +158,6 @@ function AlignmentGuideLines({ guides }: { guides: AlignmentGuides }) {
     </>
   )
 }
-
-const API_BASE = 'http://localhost:8000'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 

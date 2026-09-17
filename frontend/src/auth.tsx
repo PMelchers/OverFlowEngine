@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-
-const API_BASE = 'http://localhost:8000'
+import { API_BASE } from './apiBase'
 
 export type AuthUser = { id: number; email: string; name: string | null }
 
