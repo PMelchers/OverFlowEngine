@@ -363,7 +363,7 @@ function CanvasInner({
   const logoRef = useRef<HTMLButtonElement>(null)
   const { user, authedFetch } = useAuth()
   const { theme } = useTheme()
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, zoomTo, getZoom } = useReactFlow()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const templatesButtonRef = useRef<HTMLButtonElement>(null)
@@ -857,6 +857,28 @@ function CanvasInner({
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
   }, [])
+
+  // React Flow's built-in pinch/ctrl+scroll zoom has no speed knob and feels sluggish on
+  // a touchpad. React registers wheel listeners as passive by default (for scroll
+  // perf), which silently blocks preventDefault() from a JSX onWheel/onWheelCapture
+  // prop - so this needs a real addEventListener with {passive: false} to actually be
+  // able to intercept the gesture before React Flow's own (non-passive, DOM-level)
+  // zoom handler processes it. Plain two-finger scroll (no ctrlKey) is left alone so
+  // panning is unaffected.
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    const handler = (event: WheelEvent) => {
+      if (!event.ctrlKey) return
+      event.preventDefault()
+      event.stopPropagation()
+      const ZOOM_SPEED = 3
+      const factor = Math.exp(-event.deltaY * 0.01 * ZOOM_SPEED)
+      zoomTo(getZoom() * factor, { duration: 0 })
+    }
+    el.addEventListener('wheel', handler, { passive: false, capture: true })
+    return () => el.removeEventListener('wheel', handler, { capture: true })
+  }, [zoomTo, getZoom])
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
