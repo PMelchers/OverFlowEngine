@@ -10,6 +10,7 @@ import ConnectAppNudge from './ConnectAppNudge'
 import GridSnapBox from './GridSnapBox'
 import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppActionBlockData } from './types'
 import { useAppConnection } from './useAppConnection'
+import { useConnectedModel } from './useConnectedModel'
 import { useVariableInsertion } from './useVariableInsertion'
 
 const CALENDAR_ACTIONS: { value: NonNullable<AppActionBlockData['targetAction']>; label: string }[] = [
@@ -26,9 +27,11 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
   const availableVariables = data.availableVariables ?? []
   const toRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const replyInstructionsRef = useRef<HTMLTextAreaElement>(null)
   const isDiscord = data.targetApp === 'Discord'
 
   const [discordCredentials, setDiscordCredentials] = useState<AppCredential[]>([])
+  const [discordCredentialsLoaded, setDiscordCredentialsLoaded] = useState(false)
 
   useEffect(() => {
     if (!isDiscord) return
@@ -36,6 +39,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
       .then((res) => (res.ok ? res.json() : []))
       .then(setDiscordCredentials)
       .catch(() => setDiscordCredentials([]))
+      .finally(() => setDiscordCredentialsLoaded(true))
   }, [isDiscord, authedFetch])
   const titleRef = useRef<HTMLInputElement>(null)
   const eventIdRef = useRef<HTMLInputElement>(null)
@@ -53,8 +57,10 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
   const targetApp = data.targetApp
   const isCalendar = targetApp ? CALENDAR_APPS.includes(targetApp) : false
   const isAi = targetApp === AI_ACTION_APP
+  const isAwaitReply = isDiscord && data.targetAction === 'awaitReply'
   // Every non-calendar, non-AI app only has one action; calendar apps default to fetching.
   const action = isCalendar ? (data.targetAction ?? 'fetchEvents') : isAi ? 'aiCall' : 'sendMessage'
+  const connectedModel = useConnectedModel()
 
   const aiMode = data.aiCallMode ?? 'custom'
   const aiModeLabel = AI_QUICK_ACTIONS.find((a) => a.key === aiMode)?.label ?? 'Custom prompt'
@@ -64,6 +70,9 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
 
   const insertIntoTo = useVariableInsertion(toRef, data.to ?? '', (next) => data.onChange?.({ to: next }))
   const insertIntoBody = useVariableInsertion(bodyRef, data.body ?? '', (next) => data.onChange?.({ body: next }))
+  const insertIntoReplyInstructions = useVariableInsertion(replyInstructionsRef, data.prompt ?? '', (next) =>
+    data.onChange?.({ prompt: next }),
+  )
   const insertIntoTitle = useVariableInsertion(titleRef, data.eventTitle ?? '', (next) =>
     data.onChange?.({ eventTitle: next }),
   )
@@ -200,6 +209,20 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
           {isDiscord && (
             <>
               <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                Action
+              </label>
+              <select
+                value={data.targetAction ?? 'sendMessage'}
+                onChange={(e) =>
+                  data.onChange?.({ targetAction: e.target.value as AppActionBlockData['targetAction'] })
+                }
+                className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <option value="sendMessage">Just send a message</option>
+                <option value="awaitReply">Send, then auto-reply to one response</option>
+              </select>
+
+              <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
                 Discord bot
               </label>
               <select
@@ -214,10 +237,88 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
                   </option>
                 ))}
               </select>
-              {discordCredentials.length === 0 && (
+              {discordCredentialsLoaded &&
+                data.credentialId != null &&
+                !discordCredentials.some((c) => c.id === data.credentialId) && (
+                  <p className="mb-2 text-[10px] font-medium text-red-500 dark:text-red-400">
+                    The bot linked here was removed or belongs to a different account - pick another
+                    one below (sends will fail until you do).
+                  </p>
+                )}
+              {discordCredentials.length === 0 && data.credentialId == null && (
                 <p className="mb-2 text-[10px] text-emerald-600 dark:text-emerald-400">
                   No Discord bot linked yet - add one from Settings, or leave this on the server default.
                 </p>
+              )}
+
+              {isAwaitReply && (
+                <>
+                  <p className="mb-2 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    Waits for the first reply in this channel, then answers it with one short
+                    AI-generated reply and stops - not an ongoing conversation. Needs the bot's
+                    "Read Message History" permission in this channel.
+                  </p>
+
+                  <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                    Max wait (seconds)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={data.waitSeconds ?? ''}
+                    placeholder="60 (capped at 120)"
+                    onChange={(e) => data.onChange?.({ waitSeconds: e.target.value })}
+                    className="nodrag mb-2 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
+                  />
+
+                  <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                    Reply model
+                  </label>
+                  <p
+                    className={`mb-2 w-full rounded border px-2 py-1 text-sm ${
+                      connectedModel
+                        ? 'border-emerald-300 bg-white text-emerald-700 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300'
+                        : 'border-dashed border-emerald-300 bg-emerald-50 text-emerald-400 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-500'
+                    }`}
+                  >
+                    {connectedModel ?? 'Connect an AI Model block below ↓'}
+                  </p>
+
+                  <label className="mb-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                    Reply instructions &amp; background facts (optional)
+                  </label>
+                  <p className="mb-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    Only this field is used to write the reply - it does NOT automatically know
+                    what an AI Agent block's Instructions said, even if that's what generated the
+                    message above. Anything the reply needs to know has to be stated here (or
+                    inserted as a variable below).
+                  </p>
+                  <textarea
+                    ref={replyInstructionsRef}
+                    value={data.prompt ?? ''}
+                    onChange={(e) => data.onChange?.({ prompt: e.target.value })}
+                    placeholder="e.g. Sven is a small player, but only mention that if asked. Answer in a friendly tone."
+                    rows={2}
+                    className="nodrag w-full resize-none rounded border border-emerald-300 bg-white px-2 py-1 text-xs dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
+                  />
+                  {availableVariables.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        insertIntoReplyInstructions(e.target.value)
+                        e.target.value = ''
+                      }}
+                      className="nodrag mb-2 mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-600 dark:border-emerald-700 dark:bg-gray-900 dark:text-emerald-300"
+                    >
+                      <option value="">Insert a variable into Reply instructions...</option>
+                      {availableVariables.map((v) => (
+                        <option key={v.name} value={v.name}>
+                          {v.name} ({v.varType})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
               )}
             </>
           )}
@@ -292,9 +393,11 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
           )}
 
           <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-            {isDiscord
-              ? 'Sends a real message to this Discord channel via the bot.'
-              : `Preview action - logs what would be sent; a real ${targetApp} connection isn't wired up yet.`}
+            {isAwaitReply
+              ? 'Sends this message for real, then waits for one reply and answers it - see above.'
+              : isDiscord
+                ? 'Sends a real message to this Discord channel via the bot.'
+                : `Preview action - logs what would be sent; a real ${targetApp} connection isn't wired up yet.`}
           </p>
         </>
       )}
@@ -442,7 +545,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
       )}
 
       <Handle type="source" position={Position.Right} className="!bg-emerald-500" />
-      {isAi && <Handle type="target" position={Position.Bottom} id="model" className="!bg-emerald-500" />}
+      {(isAi || isAwaitReply) && <Handle type="target" position={Position.Bottom} id="model" className="!bg-emerald-500" />}
     </GridSnapBox>
   )
 }

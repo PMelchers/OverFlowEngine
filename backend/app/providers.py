@@ -82,8 +82,19 @@ def verify_api_key(provider: str, api_key: str) -> bool | None:
     return None
 
 
-def call_model(provider: str, api_key: str, model: str, system_prompt: str | None, user_message: str) -> str:
+def call_model(
+    provider: str,
+    api_key: str,
+    model: str,
+    system_prompt: str | None,
+    user_message: str,
+    max_tokens: int = 1024,
+) -> str:
     """Sends one message to the given provider/model and returns the reply text.
+
+    max_tokens caps the reply length - callers that want to keep usage small
+    (e.g. a quick auto-reply) can pass a low value rather than always paying
+    for a full-length response.
 
     Raises ModelCallError with a step-log-safe message on any failure - bad
     key, rate limit, network error, or an unrecognized provider.
@@ -100,7 +111,7 @@ def call_model(provider: str, api_key: str, model: str, system_prompt: str | Non
             client = anthropic.Anthropic(api_key=api_key, timeout=_CALL_TIMEOUT)
             response = client.messages.create(
                 model=model,
-                max_tokens=1024,
+                max_tokens=max_tokens,
                 system=system_prompt or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": user_message}],
             )
@@ -117,7 +128,7 @@ def call_model(provider: str, api_key: str, model: str, system_prompt: str | Non
             resp = httpx.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": model, "messages": messages},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens},
                 timeout=_CALL_TIMEOUT,
             )
             if resp.status_code != 200:
@@ -130,7 +141,7 @@ def call_model(provider: str, api_key: str, model: str, system_prompt: str | Non
 
         if provider == "google":
             contents = [{"role": "user", "parts": [{"text": user_message}]}]
-            payload: dict = {"contents": contents}
+            payload: dict = {"contents": contents, "generationConfig": {"maxOutputTokens": max_tokens}}
             if system_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
             resp = httpx.post(

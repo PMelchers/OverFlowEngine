@@ -53,6 +53,34 @@ def send_discord_message(channel_id: str, content: str, bot_token: str | None = 
     return False, str(result.get("error", "unknown error"))
 
 
+def read_discord_messages(
+    channel_id: str, after_message_id: str = "", limit: int = 10, bot_token: str | None = None
+) -> tuple[bool, list[dict] | str]:
+    """Reads recent messages from a Discord channel via the MCP server.
+
+    Returns (ok, detail) - detail is a list of {id, author_id, author_name, is_bot,
+    content} dicts in chronological order on success, or an error string on failure.
+    """
+    try:
+        result = asyncio.run(
+            _call_tool(
+                "read_messages",
+                {
+                    "channel_id": channel_id,
+                    "after_message_id": after_message_id,
+                    "limit": limit,
+                    "bot_token": bot_token or "",
+                },
+            )
+        )
+    except Exception as exc:
+        return False, f"could not reach Discord MCP server at {DISCORD_MCP_URL}: {exc}"
+
+    if result.get("ok"):
+        return True, result.get("messages", [])
+    return False, str(result.get("error", "unknown error"))
+
+
 def verify_discord_bot_token(bot_token: str) -> tuple[bool | None, str]:
     """Checks a bot token against Discord via the MCP server.
 

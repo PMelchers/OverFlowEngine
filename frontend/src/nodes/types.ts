@@ -227,16 +227,24 @@ export interface AppActionBlockData extends BaseBlockData, WithAvailableVariable
   targetApp?: string
   /** which action to run against targetApp - 'sendMessage' (Email/Slack/Teams/Webhook),
    *  'aiCall' (targetApp = "AI" - no external account, calls a connected model instead),
-   *  or, for Google/Microsoft Calendar, 'fetchEvents' | 'createEvent' | 'deleteEvent' */
-  targetAction?: 'sendMessage' | 'aiCall' | 'fetchEvents' | 'createEvent' | 'deleteEvent'
-  // targetAction 'sendMessage'
+   *  'awaitReply' (targetApp = "Discord" only - send, wait briefly for one human reply,
+   *  answer it with one short AI-generated reply, then stop), or, for Google/Microsoft
+   *  Calendar, 'fetchEvents' | 'createEvent' | 'deleteEvent' */
+  targetAction?: 'sendMessage' | 'aiCall' | 'awaitReply' | 'fetchEvents' | 'createEvent' | 'deleteEvent'
+  // targetAction 'sendMessage' | 'awaitReply'
   to?: string
   subject?: string
   body?: string
-  // targetApp "Discord" - which per-user bot credential to send as; unset uses the
+  // targetApp "Discord" - which per-user bot credential to send/read as; unset uses the
   // server's default bot (mcp-servers/discord/.env). Same field name as an AI Model
   // block's credentialId, but an unrelated credential (a bot token, not an AI API key).
   credentialId?: number | null
+  // targetAction "awaitReply" - how long to wait for a human reply before giving up, in
+  // seconds (server-side hard-capped regardless of what's entered here, so this can't
+  // turn into an open-ended listener). The AI model that writes the reply comes from an
+  // AI Model block wired to this node's own "model" handle, same as targetAction
+  // "aiCall" above; `prompt` doubles as optional extra instructions for that reply.
+  waitSeconds?: string
   // targetApp "AI" (targetAction 'aiCall') - `prompt` is the same concept as an AI Agent
   // block's; `aiCallMode` is which quick-action template last filled it, purely so the
   // picker can show it selected again when reopened
