@@ -1,11 +1,11 @@
 """Discord MCP server.
 
-Exposes one tool, `send_message`, that posts a message to a Discord channel
-via the bot REST API (no gateway connection - a bot only needs the gateway
-to *receive* events in real time, not to send). Runs as a standalone
-Streamable HTTP MCP server so any MCP client (OverFlowEngine's backend today,
-an AI Agent block later) can call it over the network instead of spawning it
-as a subprocess.
+Exposes `send_message` and `read_messages`, both plain REST calls (no gateway
+connection - a bot only needs the gateway to *receive* events in real time;
+`read_messages` is a point-in-time fetch, called by polling rather than by
+holding a connection open). Runs as a standalone Streamable HTTP MCP server
+so any MCP client (OverFlowEngine's backend today, an AI Agent block later)
+can call it over the network instead of spawning it as a subprocess.
 """
 
 import os
@@ -64,6 +64,64 @@ def send_message(channel_id: str, content: str, bot_token: str = "") -> dict:
         return {"ok": True, "message_id": body.get("id")}
 
     return {"ok": False, "error": f"Discord API returned {resp.status_code}: {resp.text[:300]}"}
+
+
+@mcp.tool()
+def read_messages(channel_id: str, after_message_id: str = "", limit: int = 10, bot_token: str = "") -> dict:
+    """Read recent messages from a Discord text channel (one-off fetch, not a live listener).
+
+    Requires the bot to have the "Read Message History" permission in that channel,
+    in addition to the "Send Messages"/"View Channel" permissions send_message needs.
+
+    Args:
+        channel_id: The numeric Discord channel ID to read from.
+        after_message_id: Only return messages posted after this message id (Discord's
+            own pagination cursor) - pass the id send_message returned to fetch only
+            what arrived since then. Empty fetches the most recent messages instead.
+        limit: Max messages to return, 1-100.
+        bot_token: Bot token to read as. Falls back to this server's own
+            DISCORD_BOT_TOKEN env var when omitted.
+    """
+    token = bot_token.strip() or DEFAULT_BOT_TOKEN
+    if not token:
+        return {"ok": False, "error": "no bot token given and DISCORD_BOT_TOKEN is not set on the MCP server"}
+    channel_id = str(channel_id).strip()
+    if not channel_id:
+        return {"ok": False, "error": "channel_id is required"}
+
+    params: dict = {"limit": max(1, min(int(limit), 100))}
+    if after_message_id.strip():
+        params["after"] = after_message_id.strip()
+
+    try:
+        resp = httpx.get(
+            f"{DISCORD_API_BASE}/channels/{channel_id}/messages",
+            headers={"Authorization": f"Bot {token}"},
+            params=params,
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        return {"ok": False, "error": f"request to Discord failed: {exc}"}
+
+    if resp.status_code != 200:
+        return {"ok": False, "error": f"Discord API returned {resp.status_code}: {resp.text[:300]}"}
+
+    # Discord returns newest-first; flip to chronological order so "the first reply"
+    # is simply the first item a caller sees.
+    raw_messages = list(reversed(resp.json()))
+    return {
+        "ok": True,
+        "messages": [
+            {
+                "id": m["id"],
+                "author_id": m["author"]["id"],
+                "author_name": m["author"].get("username", "unknown"),
+                "is_bot": bool(m["author"].get("bot", False)),
+                "content": m.get("content", ""),
+            }
+            for m in raw_messages
+        ],
+    }
 
 
 @mcp.tool()

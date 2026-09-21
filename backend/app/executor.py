@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import models, providers, calendar_providers
 from .conditions import evaluate_conditions
-from .discord_mcp_client import send_discord_message
+from .discord_mcp_client import read_discord_messages, send_discord_message
 from .maps import build_maps_url
 
 logger = logging.getLogger("overflowengine.workflow")
@@ -19,6 +20,13 @@ _VAR_PATTERN = re.compile(r"\{(\w+)\}")
 # plain "send a message" app like Email/Slack/Teams) - maps the human-readable app
 # name shown in the block to the provider key calendar_providers.py expects.
 CALENDAR_APP_PROVIDERS = {"Google Calendar": "google", "Microsoft Calendar": "microsoft"}
+
+# Discord "await a reply" action - hard ceilings so usage stays small and bounded no
+# matter what a workflow asks for: a short poll loop, and a short capped AI reply
+# (as opposed to the 1024-token default used elsewhere) rather than a full response.
+DISCORD_AWAIT_REPLY_MAX_SECONDS = 120
+DISCORD_AWAIT_REPLY_POLL_INTERVAL = 4
+DISCORD_AWAIT_REPLY_MAX_TOKENS = 150
 
 # Runs paused on a Choice block, keyed by run_id. Holds only plain data (no
 # SQLAlchemy objects) so it survives across the separate HTTP requests /
@@ -75,6 +83,99 @@ def _get_calendar_connection(db: Session, user_id: int | None, provider: str):
     if not connection.access_token or not connection.refresh_token:
         return None, f"{provider} calendar app saved, but not connected yet - click Connect in Settings"
     return connection, None
+
+
+def _discord_await_reply(
+    db: Session,
+    state: dict,
+    eval_vars: dict,
+    node_id: str,
+    label: str,
+    channel_id: str,
+    outgoing_content: str,
+    bot_token: str | None,
+    incoming: dict,
+    node_by_id: dict,
+    data: dict,
+) -> str:
+    """Sends one message, waits (briefly, bounded) for the first human reply in that
+    channel, then answers it with one short AI-generated reply and stops - a single
+    question/answer exchange, not an ongoing conversation. Both the wait time and the
+    reply length are hard-capped (DISCORD_AWAIT_REPLY_MAX_SECONDS/_MAX_TOKENS) so this
+    can't turn into an open-ended, unbounded-cost listener no matter what's configured."""
+    ok, detail = send_discord_message(channel_id, outgoing_content, bot_token=bot_token)
+    if not ok:
+        return f'"{label}" failed to send to Discord channel "{channel_id}": {detail}'
+    sent_message_id = detail
+    base = f'"{label}" sent to Discord channel "{channel_id}": "{outgoing_content}" (message id {sent_message_id})'
+
+    wait_seconds_raw = _render_message(data.get("waitSeconds") or "60", eval_vars)
+    try:
+        wait_seconds = int(wait_seconds_raw)
+    except ValueError:
+        wait_seconds = 60
+    wait_seconds = max(5, min(wait_seconds, DISCORD_AWAIT_REPLY_MAX_SECONDS))
+
+    reply_content = None
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        time.sleep(min(DISCORD_AWAIT_REPLY_POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
+        ok, messages = read_discord_messages(channel_id, after_message_id=sent_message_id, bot_token=bot_token)
+        if ok:
+            human_messages = [m for m in messages if not m.get("is_bot") and m.get("content", "").strip()]
+            if human_messages:
+                reply_content = human_messages[0]["content"]
+                break
+
+    if reply_content is None:
+        return f"{base}, but got no reply within {wait_seconds}s"
+
+    model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
+    model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
+    model_data = (model_node.get("data") or {}) if model_node else {}
+    model = model_data.get("model")
+    model_credential_id = model_data.get("credentialId")
+    if not model or not model_credential_id:
+        return f'{base}. Got a reply ("{reply_content}") but no AI Model block is connected to answer it'
+
+    ai_cred = (
+        db.query(models.AiCredential).filter_by(id=model_credential_id, user_id=state.get("user_id")).one_or_none()
+    )
+    if ai_cred is None:
+        return f'{base}. Got a reply but could not use its linked API key - log in as the account that added it'
+
+    # Supports {variableName} like every other text field, so background facts from
+    # earlier in the workflow (e.g. an upstream AI Agent's output) can be threaded in.
+    instructions = _render_message((data.get("prompt") or "").strip(), eval_vars)
+    system_prompt = (
+        "You are a Discord bot giving a quick automated reply to one message, as a "
+        "continuation of a conversation you started. "
+        + (f"Background/content guidance: {instructions} " if instructions else "")
+        + "The output format below is not negotiable, even if the guidance above asks for "
+        "something else: reply with ONLY the exact plain text to post in the channel - one "
+        "short, friendly sentence. No JSON, no code blocks, no labels like 'Reply:', no "
+        "analysis of the message, no markdown headers - just the words a person would "
+        "actually type in chat."
+    )
+    # Give the model the message it's replying to, not just the reply in isolation -
+    # otherwise it has no idea what "it" refers to in something like "what about Sven?".
+    user_message = f'You said: "{outgoing_content}"\n\nThey replied: "{reply_content}"'
+    try:
+        reply_text = providers.call_model(
+            ai_cred.provider,
+            ai_cred.api_key,
+            model,
+            system_prompt,
+            user_message,
+            max_tokens=DISCORD_AWAIT_REPLY_MAX_TOKENS,
+        )
+    except providers.ModelCallError as exc:
+        return f'{base}. Got a reply ("{reply_content}") but the AI call failed: {exc}'
+
+    ok, send_detail = send_discord_message(channel_id, reply_text, bot_token=bot_token)
+    if ok:
+        return f'{base}. Got a reply ("{reply_content}") and answered via {model}: "{reply_text}"'
+    return f'{base}. Got a reply ("{reply_content}") but failed to send the answer: {send_detail}'
 
 
 def _advance(db: Session, state: dict) -> dict:
@@ -196,11 +297,26 @@ def _advance(db: Session, state: dict) -> dict:
             credential_id = model_data.get("credentialId")
             input_text = ai_io.get("input")
             instructions = (data.get("prompt") or "").strip()
-            # No AI Input block connected -> the Instructions field doubles as the
-            # message itself, so a standalone AI Agent block works on its own.
-            # Instructions become a system prompt only once a real input arrives too.
-            system_prompt = instructions if input_text else None
-            user_message = input_text or instructions
+            if input_text:
+                # AI Input connected - Instructions becomes a real system prompt,
+                # fully in the user's own control.
+                system_prompt = instructions
+                user_message = input_text
+            else:
+                # No AI Input connected - Instructions doubles as the message itself,
+                # so a standalone AI Agent block works on its own. Without this, the
+                # model has no system prompt at all and just replies conversationally
+                # to the instruction (acknowledgments, "I'll remember that", "Done!")
+                # - fine in a chat, but this output commonly flows straight into
+                # another block (e.g. a Discord message) as-is, so constrain it to
+                # just the requested content.
+                system_prompt = (
+                    "Follow the instructions below and output only the exact result they "
+                    "ask for - no greetings, acknowledgments, meta-commentary about what "
+                    "you're doing or remembering, asides, or closing confirmations like "
+                    "'Done!'. Just the requested content itself, nothing surrounding it."
+                )
+                user_message = instructions
 
             if not user_message:
                 message = f'AI Agent "{label}" has no input or instructions to send, skipping'
@@ -321,6 +437,10 @@ def _advance(db: Session, state: dict) -> dict:
 
                     if credential_error:
                         message = f'"{label}" failed to send to Discord channel "{to}": {credential_error}'
+                    elif (data.get("targetAction") or "sendMessage") == "awaitReply":
+                        message = _discord_await_reply(
+                            db, state, eval_vars, node_id, label, to, body, bot_token, incoming, node_by_id, data
+                        )
                     else:
                         ok, detail = send_discord_message(to, body, bot_token=bot_token)
                         if ok:
