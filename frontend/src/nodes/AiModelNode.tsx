@@ -1,4 +1,4 @@
-import { Check, Lock, Unlock } from 'lucide-react'
+import { AlertTriangle, Check, Lock, Unlock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { useAuth } from '../auth'
@@ -25,12 +25,16 @@ export default function AiModelNode({ data }: NodeProps<AiModelBlockData>) {
       .finally(() => setLoading(false))
   }, [open, locked, authedFetch])
 
+  // Fetched as soon as unlocked (not just once the popover opens) so a stale/renamed
+  // model choice can be flagged on the node itself, not only discovered at run time.
   useEffect(() => {
-    if (!open || locked || !data.provider) return
+    if (locked || !data.provider) return
     authedFetch(`/models/${data.provider}`)
       .then((res) => (res.ok ? res.json() : { models: [] }))
       .then((body) => setModelOptions(body.models ?? []))
-  }, [open, locked, data.provider, authedFetch])
+  }, [locked, data.provider, authedFetch])
+
+  const modelStale = !locked && !!data.model && modelOptions.length > 0 && !modelOptions.includes(data.model)
 
   const unlock = (cred: Credential) => {
     data.onChange?.({ credentialId: cred.id, provider: cred.provider, model: undefined })
@@ -55,15 +59,28 @@ export default function AiModelNode({ data }: NodeProps<AiModelBlockData>) {
         className={`flex h-20 w-20 flex-col items-center justify-center rounded-full border-4 text-center shadow-sm transition-all hover:shadow-md ${
           locked
             ? 'border-gray-400 bg-gray-100 text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400'
-            : 'border-fuchsia-500 bg-fuchsia-100 text-fuchsia-700 dark:border-fuchsia-600 dark:bg-fuchsia-950 dark:text-fuchsia-300'
+            : modelStale
+              ? 'border-red-500 bg-red-100 text-red-700 dark:border-red-600 dark:bg-red-950 dark:text-red-300'
+              : 'border-fuchsia-500 bg-fuchsia-100 text-fuchsia-700 dark:border-fuchsia-600 dark:bg-fuchsia-950 dark:text-fuchsia-300'
         }`}
-        title={locked ? 'Click to unlock with a verified API key' : `${data.provider}: ${data.model ?? 'no model chosen yet'}`}
+        title={
+          locked
+            ? 'Click to unlock with a verified API key'
+            : modelStale
+              ? `"${data.model}" isn't a current ${data.provider} model - click to pick a valid one`
+              : `${data.provider}: ${data.model ?? 'no model chosen yet'}`
+        }
       >
-        {locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+        {locked ? <Lock className="h-4 w-4" /> : modelStale ? <AlertTriangle className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
         <span className="mt-1 max-w-[4.5rem] truncate px-1 text-[10px] font-medium leading-tight">
           {displayText}
         </span>
       </button>
+      {modelStale && !open && (
+        <p className="mt-1 max-w-[7rem] text-center text-[9px] font-medium leading-tight text-red-500 dark:text-red-400">
+          Not a current model - click to fix
+        </p>
+      )}
 
       {open && (
         <div className="absolute top-24 z-10 w-56 rounded-lg border border-gray-300 bg-white p-2 text-left shadow-lg dark:border-gray-600 dark:bg-gray-800">
@@ -101,6 +118,11 @@ export default function AiModelNode({ data }: NodeProps<AiModelBlockData>) {
               <p className="mb-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300">
                 Pick a {data.provider} model
               </p>
+              {modelStale && (
+                <p className="mb-1 text-[10px] text-red-500 dark:text-red-400">
+                  "{data.model}" isn't offered anymore (renamed or retired) - pick a current one below.
+                </p>
+              )}
               {modelOptions.length === 0 ? (
                 <p className="text-xs text-gray-400 dark:text-gray-500">No known models for this platform yet.</p>
               ) : (

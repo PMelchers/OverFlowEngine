@@ -29,6 +29,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
   const isDiscord = data.targetApp === 'Discord'
 
   const [discordCredentials, setDiscordCredentials] = useState<AppCredential[]>([])
+  const [discordCredentialsLoaded, setDiscordCredentialsLoaded] = useState(false)
 
   useEffect(() => {
     if (!isDiscord) return
@@ -36,6 +37,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
       .then((res) => (res.ok ? res.json() : []))
       .then(setDiscordCredentials)
       .catch(() => setDiscordCredentials([]))
+      .finally(() => setDiscordCredentialsLoaded(true))
   }, [isDiscord, authedFetch])
   const titleRef = useRef<HTMLInputElement>(null)
   const eventIdRef = useRef<HTMLInputElement>(null)
@@ -214,7 +216,15 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
                   </option>
                 ))}
               </select>
-              {discordCredentials.length === 0 && (
+              {discordCredentialsLoaded &&
+                data.credentialId != null &&
+                !discordCredentials.some((c) => c.id === data.credentialId) && (
+                  <p className="mb-2 text-[10px] font-medium text-red-500 dark:text-red-400">
+                    The bot linked here was removed or belongs to a different account - pick another
+                    one below (sends will fail until you do).
+                  </p>
+                )}
+              {discordCredentials.length === 0 && data.credentialId == null && (
                 <p className="mb-2 text-[10px] text-emerald-600 dark:text-emerald-400">
                   No Discord bot linked yet - add one from Settings, or leave this on the server default.
                 </p>
