@@ -6,6 +6,7 @@ import {
   Circle,
   ClipboardList,
   Diamond,
+  FileDown,
   FileSearch,
   FileText,
   GitFork,
@@ -179,6 +180,9 @@ export interface BlockNodeData {
    *  separately from `waypoints` as category "destination_activity", since they aren't stops
    *  on the way there */
   destinationStops?: string
+  /** every price is converted to this currency (default "EUR") - an item the AI couldn't
+   *  actually convert is flagged in its note rather than silently trusted */
+  currency?: string
   /** accommodation/transport lines are only priced once these resolve to a real value -
    *  left blank (or an unresolved "{var}") to skip that line entirely */
   stayType?: string
@@ -189,6 +193,15 @@ export interface BlockNodeData {
    *  TOTAL for this many travelers, not a per-person price */
   adults?: string
   children?: string
+  // trip-summary block (renders a clean, downloadable PDF - itinerary + route links + cost
+  // table - server-side via reportlab) - reuses `activityContext` for the destination and
+  // `checkInDate`/`checkOutDate` for the date range shown at the top
+  /** itinerary text to render, e.g. "{vacationPlan}" - a light #/##/-/** markdown subset is understood */
+  itinerary?: string
+  googleMapsLink?: string
+  appleMapsLink?: string
+  /** the JSON string a Trip Cost block saved, e.g. "{tripCostEstimate}" */
+  costBreakdownData?: string
   // app-action block, targetApp = "Google Calendar" | "Microsoft Calendar" (real OAuth
   // account, connected from Settings - the provider is just targetApp, lowercased)
   /** targetAction "fetchEvents": how many days ahead of now to fetch, e.g. "7" */
@@ -225,6 +238,9 @@ export interface CostBreakdown {
   overBudget: boolean
   searched: boolean
   destination: string
+  /** true if any item's own currency didn't match `currency` - its number was likely not
+   *  actually converted, so the total may be off; check that item's note */
+  currencyWarning: boolean
 }
 
 export type BlockKind =
@@ -232,6 +248,7 @@ export type BlockKind =
   | 'appTrigger'
   | 'formTrigger'
   | 'costEstimate'
+  | 'tripSummary'
   | 'block'
   | 'ifOne'
   | 'if'
@@ -369,6 +386,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500 dark:bg-lime-950 dark:border-lime-700', icon: MapPin, badgeClassName: 'bg-lime-600', category: 'core' },
   { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-700', icon: Lightbulb, badgeClassName: 'bg-orange-600', category: 'agentic' },
   { kind: 'costEstimate', label: 'Trip Cost', description: 'AI searches the web for real prices of your stops and totals them against your budget - connect an AI Model block', color: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-950 dark:border-yellow-700', icon: Receipt, badgeClassName: 'bg-yellow-600', category: 'agentic' },
+  { kind: 'tripSummary', label: 'Trip PDF', description: 'Builds a clean, downloadable PDF - itinerary, route links, and cost table - from earlier blocks in the flow', color: 'bg-slate-100 border-slate-400 dark:bg-slate-800 dark:border-slate-600', icon: FileDown, badgeClassName: 'bg-slate-600', category: 'core' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300 dark:bg-gray-800 dark:border-gray-600', icon: Circle, badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: Diamond, badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },

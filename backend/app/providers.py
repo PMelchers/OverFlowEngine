@@ -2,7 +2,10 @@ import anthropic
 import httpx
 
 _TIMEOUT = 6.0
-_CALL_TIMEOUT = 30.0
+# A large max_tokens generation (a long itinerary) or a web-search call (several
+# sequential searches before the final reply) can easily run past 30s - that showed up
+# as a hard timeout failure rather than just a slow-but-successful response.
+_CALL_TIMEOUT = 120.0
 
 
 class ModelCallError(Exception):
@@ -115,7 +118,13 @@ def call_model(
             client = anthropic.Anthropic(api_key=api_key, timeout=_CALL_TIMEOUT)
             response = client.messages.create(
                 model=model,
-                max_tokens=1024,
+                # max_tokens is a ceiling, not a target - the model still stops naturally
+                # (end_turn) once it's done, so a generous cap costs nothing extra on a short
+                # reply. 1024 silently truncated anything long-form (e.g. a multi-day
+                # itinerary cuts off mid-sentence well before that). Web-search replies also
+                # spend budget on server_tool_use/web_search_tool_result blocks (the searches
+                # themselves), on top of the final text, so they get even more room.
+                max_tokens=16384 if web_search else 8192,
                 system=system_prompt or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": user_message}],
                 tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]

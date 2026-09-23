@@ -38,11 +38,12 @@ const VACATION_FORM_FIELDS: FormField[] = [
   { name: 'transportMode', label: 'Transport mode', varType: 'string', value: 'car' },
   { name: 'destinationActivities', label: 'Interests / activities', varType: 'string', value: 'hiking, museums, local food' },
   { name: 'stayType', label: 'Accommodation type', varType: 'string', value: 'hotel' },
-  // The route can't be built without knowing where it starts/ends - fed into both Maps
-  // Route blocks' Origin/Destination below. destinationAddress is deliberately separate
-  // from destinationCountry - a country name alone isn't a routable endpoint.
+  // The route can't be built without knowing where it starts - fed into both Maps Route
+  // blocks' Origin below. There's no matching "destination address" field - that's
+  // deliberately NOT asked here; an AI step further down picks one specific place
+  // within destinationCountry based on the answers below, instead of making the user
+  // name an exact place themselves.
   { name: 'startingAddress', label: 'Starting address', varType: 'string', value: 'Home' },
-  { name: 'destinationAddress', label: 'Destination address (specific place)', varType: 'string', value: 'Rome, Italy' },
   { name: 'tripStartDate', label: 'Start date', varType: 'string', value: '2026-07-01' },
   { name: 'tripEndDate', label: 'End date', varType: 'string', value: '2026-07-10' },
   // int (not string) so a downstream If block can compare these numerically later,
@@ -145,7 +146,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
     id: 'vacation-planner',
     label: 'Vacation Planner',
     description:
-      'Enter your destination, transport, activities and stay type, have AI draft an itinerary, then get real Google/Apple Maps routes.',
+      'Enter a country, transport, activities and stay type - AI picks a specific destination for you, drafts an itinerary, then builds real Google/Apple Maps routes.',
     nodes: [
       {
         id: 'trigger',
@@ -170,9 +171,41 @@ export const TEMPLATES: WorkflowTemplate[] = [
         data: { label: 'destinationStops', varType: 'string', value: '' },
       },
       {
-        id: 'planInput',
+        id: 'pickDestInput',
         type: 'aiInput',
         position: { x: 2 * STEP, y: 0 },
+        data: {
+          label: 'pickDestInput',
+          value:
+            'Country/region: {destinationCountry}. Traveler interests: {destinationActivities}. ' +
+            'Weather preference: {tripWeatherPreference}. Accommodation type: {stayType}. ' +
+            'Recommend ONE specific city or region within {destinationCountry} to use as the trip\'s ' +
+            "destination, chosen to best match these interests and preferences. Reply with ONLY the " +
+            "place name and country (e.g. \"Florence, Italy\") - nothing else, no explanation.",
+        },
+      },
+      {
+        id: 'pickDestAgent',
+        type: 'aiAgent',
+        position: { x: 3 * STEP, y: 0 },
+        data: {
+          label: 'Pick Destination Agent',
+          prompt:
+            'You are a knowledgeable travel destination expert. Given a country/region and trip ' +
+            'preferences, name exactly one ideal specific destination (a city or region) - concise, ' +
+            'no extra commentary.',
+        },
+      },
+      {
+        id: 'destinationAddress',
+        type: 'aiOutput',
+        position: { x: 4 * STEP, y: 0 },
+        data: { label: 'destinationAddress' },
+      },
+      {
+        id: 'planInput',
+        type: 'aiInput',
+        position: { x: 5 * STEP, y: 0 },
         data: {
           label: 'planInput',
           value:
@@ -185,7 +218,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 3 * STEP, y: 0 },
+        position: { x: 6 * STEP, y: 0 },
         data: {
           label: 'Vacation Planner Agent',
           prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, dates, group size, budget, and accommodation preference.',
@@ -194,19 +227,19 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planModel',
         type: 'aiModel',
-        position: { x: 3 * STEP + 120, y: 280 },
+        position: { x: 6 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
-        position: { x: 4 * STEP, y: 0 },
+        position: { x: 7 * STEP, y: 0 },
         data: { label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 5 * STEP, y: 0 },
+        position: { x: 8 * STEP, y: 0 },
         data: {
           label: 'Suggest Activities',
           origin: '{startingAddress}',
@@ -219,13 +252,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'suggestModel',
         type: 'aiModel',
-        position: { x: 5 * STEP + 120, y: 280 },
+        position: { x: 8 * STEP + 120, y: 280 },
         data: { label: 'Model', credentialId: null },
       },
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 6 * STEP, y: 0 },
+        position: { x: 9 * STEP, y: 0 },
         data: {
           label: 'Google Maps Route',
           mapsProvider: 'google',
@@ -239,7 +272,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 7 * STEP, y: 0 },
+        position: { x: 10 * STEP, y: 0 },
         data: {
           label: 'Apple Maps Route',
           mapsProvider: 'apple',
@@ -253,7 +286,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'costEstimate',
         type: 'costEstimate',
-        position: { x: 6 * STEP, y: 400 },
+        position: { x: 9 * STEP, y: 400 },
         data: {
           label: 'Trip Cost',
           waypoints: '{routeActivities}',
@@ -267,14 +300,36 @@ export const TEMPLATES: WorkflowTemplate[] = [
           adults: '{tripAdults}',
           children: '{tripChildren}',
           budget: '{tripBudget}',
+          currency: 'EUR',
           outputVariable: 'tripCostEstimate',
+        },
+      },
+      {
+        id: 'tripSummary',
+        type: 'tripSummary',
+        position: { x: 10 * STEP, y: 400 },
+        data: {
+          label: 'Trip PDF',
+          activityContext: '{destinationAddress}',
+          checkInDate: '{tripStartDate}',
+          checkOutDate: '{tripEndDate}',
+          itinerary: '{vacationPlan}',
+          googleMapsLink: '{googleMapsRoute}',
+          appleMapsLink: '{appleMapsRoute}',
+          costBreakdownData: '{tripCostEstimate}',
         },
       },
     ],
     edges: [
       { id: 'e-trigger-routeActivitiesSeed', source: 'trigger', target: 'routeActivitiesSeed' },
       { id: 'e-routeActivitiesSeed-destinationStopsSeed', source: 'routeActivitiesSeed', target: 'destinationStopsSeed' },
-      { id: 'e-destinationStopsSeed-planInput', source: 'destinationStopsSeed', target: 'planInput' },
+      { id: 'e-destinationStopsSeed-pickDestInput', source: 'destinationStopsSeed', target: 'pickDestInput' },
+      { id: 'e-pickDestInput-pickDestAgent', source: 'pickDestInput', target: 'pickDestAgent' },
+      // Reuses planModel's AI Model block (a second edge from the same node) instead of
+      // another Model block on the canvas - one connected key can feed several blocks.
+      { id: 'e-planModel-pickDestAgent', source: 'planModel', target: 'pickDestAgent', targetHandle: 'model' },
+      { id: 'e-pickDestAgent-destinationAddress', source: 'pickDestAgent', target: 'destinationAddress' },
+      { id: 'e-destinationAddress-planInput', source: 'destinationAddress', target: 'planInput' },
       { id: 'e-planInput-planAgent', source: 'planInput', target: 'planAgent' },
       { id: 'e-planModel-planAgent', source: 'planModel', target: 'planAgent', targetHandle: 'model' },
       { id: 'e-planAgent-vacationPlan', source: 'planAgent', target: 'vacationPlan' },
@@ -282,10 +337,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
       { id: 'e-suggestModel-suggestActivities', source: 'suggestModel', target: 'suggestActivities', targetHandle: 'model' },
       { id: 'e-suggestActivities-googleRoute', source: 'suggestActivities', target: 'googleRoute' },
       { id: 'e-googleRoute-appleRoute', source: 'googleRoute', target: 'appleRoute' },
-      { id: 'e-suggestActivities-costEstimate', source: 'suggestActivities', target: 'costEstimate' },
+      // Chained after both routes (not run in parallel off suggestActivities) so it's
+      // guaranteed to start only once googleMapsRoute/appleMapsRoute are already saved -
+      // the Trip PDF block below needs both of those plus the cost breakdown to exist.
+      { id: 'e-appleRoute-costEstimate', source: 'appleRoute', target: 'costEstimate' },
       // Reuses suggestModel's AI Model block (a second edge from the same node) instead
       // of another Model block on the canvas - one connected key can feed several blocks.
       { id: 'e-suggestModel-costEstimate', source: 'suggestModel', target: 'costEstimate', targetHandle: 'model' },
+      { id: 'e-costEstimate-tripSummary', source: 'costEstimate', target: 'tripSummary' },
     ],
   },
 ]

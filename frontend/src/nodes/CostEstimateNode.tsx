@@ -179,14 +179,28 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
         />
       </div>
 
-      <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Budget</label>
-      <input
-        type="text"
-        value={data.budget ?? ''}
-        placeholder="e.g. {tripBudget}"
-        onChange={(e) => data.onChange?.({ budget: e.target.value })}
-        className="nodrag mb-2 w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
-      />
+      <div className="mb-2 grid grid-cols-2 gap-1">
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Budget</label>
+          <input
+            type="text"
+            value={data.budget ?? ''}
+            placeholder="e.g. {tripBudget}"
+            onChange={(e) => data.onChange?.({ budget: e.target.value })}
+            className="nodrag w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Currency</label>
+          <input
+            type="text"
+            value={data.currency ?? ''}
+            placeholder="EUR"
+            onChange={(e) => data.onChange?.({ currency: e.target.value })}
+            className="nodrag w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+          />
+        </div>
+      </div>
 
       <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Save breakdown as</label>
       <input
@@ -200,7 +214,9 @@ export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
       <p className="mt-1 text-[10px] text-yellow-700 dark:text-yellow-400">
         Searches the web for real prices per stop, plus accommodation/transport if filled in, and
         shows a cost card in the sidebar - not just a console line. Every price is totaled for the
-        whole group, not per person.
+        whole group (not per person) and converted to Currency above - a price the AI couldn't
+        convert is flagged, not silently trusted. Car/own-vehicle transport is priced as fuel only,
+        never a rental.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-yellow-600" />

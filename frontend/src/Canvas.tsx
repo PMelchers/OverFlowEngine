@@ -48,10 +48,12 @@ import {
   type CustomBlock,
 } from './customBlocks'
 import CostSummaryCard from './CostSummaryCard'
+import TripPdfCard, { type TripPdf } from './TripPdfCard'
 import FlowsPanel from './FlowsPanel'
 import AiAgentNode from './nodes/AiAgentNode'
 import CostEstimateNode from './nodes/CostEstimateNode'
 import FormTriggerNode from './nodes/FormTriggerNode'
+import TripSummaryNode from './nodes/TripSummaryNode'
 import AiInputNode from './nodes/AiInputNode'
 import AiModelNode from './nodes/AiModelNode'
 import AiOutputNode from './nodes/AiOutputNode'
@@ -111,6 +113,7 @@ const nodeTypes = {
   mapsAction: withQuickAdd(MapsActionNode),
   activitySuggestion: withQuickAdd(ActivitySuggestionNode),
   costEstimate: withQuickAdd(CostEstimateNode),
+  tripSummary: withQuickAdd(TripSummaryNode),
   block: withQuickAdd(BlockNode),
   ifOne: IfSingleNode,
   if: IfNode,
@@ -183,6 +186,7 @@ interface RunStep {
   branch?: string
   options?: string[]
   costBreakdown?: CostBreakdown | null
+  pdf?: TripPdf | null
 }
 
 interface StoredVariable {
@@ -275,7 +279,19 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
         adults: '',
         children: '',
         budget: '',
+        currency: 'EUR',
         outputVariable: '',
+      }
+    case 'tripSummary':
+      return {
+        label,
+        activityContext: '',
+        checkInDate: '',
+        checkOutDate: '',
+        itinerary: '',
+        googleMapsLink: '',
+        appleMapsLink: '',
+        costBreakdownData: '',
       }
     default:
       return { label }
@@ -359,6 +375,7 @@ function CanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [logs, setLogs] = useState<string[]>([])
   const [costSummary, setCostSummary] = useState<CostBreakdown | null>(null)
+  const [tripPdf, setTripPdf] = useState<TripPdf | null>(null)
   const [running, setRunning] = useState(false)
   const [variables, setVariables] = useState<Record<string, StoredVariable>>({})
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
@@ -451,7 +468,8 @@ function CanvasInner({
         n.type === 'appAction' ||
         n.type === 'mapsAction' ||
         n.type === 'activitySuggestion' ||
-        n.type === 'costEstimate'
+        n.type === 'costEstimate' ||
+        n.type === 'tripSummary'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -569,6 +587,7 @@ function CanvasInner({
         }
         addLog(step.message)
         if (step.costBreakdown) setCostSummary(step.costBreakdown)
+        if (step.pdf) setTripPdf(step.pdf)
         await sleep(450)
       }
 
@@ -750,7 +769,8 @@ function CanvasInner({
           kind === 'appAction' ||
           kind === 'mapsAction' ||
           kind === 'activitySuggestion' ||
-          kind === 'costEstimate'
+          kind === 'costEstimate' ||
+          kind === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(kind === 'appTrigger' || kind === 'appAction'
@@ -843,7 +863,8 @@ function CanvasInner({
             n.type === 'appAction' ||
             n.type === 'mapsAction' ||
             n.type === 'activitySuggestion' ||
-            n.type === 'costEstimate'
+            n.type === 'costEstimate' ||
+            n.type === 'tripSummary'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
             ...(n.type === 'appTrigger' || n.type === 'appAction'
@@ -1025,7 +1046,8 @@ function CanvasInner({
           sn.type === 'appAction' ||
           sn.type === 'mapsAction' ||
           sn.type === 'activitySuggestion' ||
-          sn.type === 'costEstimate'
+          sn.type === 'costEstimate' ||
+          sn.type === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(sn.type === 'appTrigger' || sn.type === 'appAction'
@@ -1175,7 +1197,8 @@ function CanvasInner({
           n.type === 'appAction' ||
           n.type === 'mapsAction' ||
           n.type === 'activitySuggestion' ||
-          n.type === 'costEstimate'
+          n.type === 'costEstimate' ||
+          n.type === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(n.type === 'appTrigger' || n.type === 'appAction'
@@ -1593,6 +1616,7 @@ function CanvasInner({
           </div>
 
           {costSummary && <CostSummaryCard breakdown={costSummary} onClose={() => setCostSummary(null)} />}
+          {tripPdf && <TripPdfCard pdf={tripPdf} onClose={() => setTripPdf(null)} />}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
             <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-800">
