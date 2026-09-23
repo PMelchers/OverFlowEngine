@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Canvas from './Canvas'
 import Dashboard from './Dashboard'
 import Marketplace from './Marketplace'
@@ -21,11 +21,15 @@ function AppShell() {
   // sign-in gate of its own (only Dashboard checks `user`) - without this,
   // logging out from Settings/Canvas/Marketplace would leave that same
   // now-stale, now-unauthenticated page on screen instead of showing signed
-  // out state anywhere.
+  // out state anywhere. Only fires on an actual sign-in -> sign-out transition
+  // (tracked via the ref) - anonymous browsing (never signed in at all) is a
+  // supported mode on its own and must not get bounced back to Dashboard.
+  const wasSignedIn = useRef(!!user)
   useEffect(() => {
-    if (!user && view.kind !== 'dashboard') {
+    if (wasSignedIn.current && !user && view.kind !== 'dashboard') {
       setView({ kind: 'dashboard' })
     }
+    wasSignedIn.current = !!user
   }, [user, view.kind])
 
   // This tab is the small OAuth consent popup ConnectAppModal opened, landing back

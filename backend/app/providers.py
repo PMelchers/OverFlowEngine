@@ -125,9 +125,6 @@ def call_model(
                 max_tokens=max_tokens or (16384 if web_search else 8192),
                 system=system_prompt or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": user_message}],
-                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}] if web_search else [],
-                system=system_prompt or anthropic.NOT_GIVEN,
-                messages=[{"role": "user", "content": user_message}],
                 tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]
                 if web_search
                 else anthropic.NOT_GIVEN,

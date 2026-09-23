@@ -85,142 +85,6 @@ export interface FormField {
   value: string
 }
 
-export interface BlockNodeData {
-  label: string
-  status?: BlockStatus
-  /** formOverride is only set for a form-trigger block - carries the just-submitted field
-   *  values so the run uses them without waiting on a React state round-trip */
-  onTrigger?: (formOverride?: { nodeId: string; fields: FormField[] }) => void
-  onChange?: (patch: Partial<BlockNodeData>) => void
-  // if-block
-  conditions?: IfCondition[]
-  /** variables currently on the canvas, synced in by Canvas so the picker can suggest them */
-  availableVariables?: { name: string; varType: VariableType }[]
-  // app-trigger / app-action blocks - synced in by Canvas from /calendar/connections,
-  // keyed by app label (e.g. "Google Calendar"); missing keys read as not connected
-  appConnections?: Record<string, boolean>
-  /** opens Settings straight to Connected Apps - synced in by Canvas */
-  onOpenSettings?: (subPage?: 'connected-apps') => void
-  /** re-fetches appConnections after the in-canvas connect modal finishes - synced in by Canvas */
-  onAppConnected?: () => void
-  // variable-block
-  varType?: VariableType
-  value?: string
-  // log-block
-  message?: string
-  // task-block (adds a small to-do item to the signed-in user's dashboard when it runs)
-  title?: string
-  // choice-block
-  options?: string[]
-  // group-block
-  subgraph?: Subgraph
-  /** id of the saved custom block this instance was created from, if any - lets edits to that
-   *  saved block propagate to every instance stamped out from it */
-  sourceBlockId?: string
-  // ai-agent block
-  prompt?: string
-  // ai-model block (circular) - unlocked by picking one of the user's verified API keys
-  credentialId?: number | null
-  /** the linked credential's auto-detected provider - scopes which models can be chosen */
-  provider?: string
-  /** the chosen model id, e.g. "gpt-4o" - also what the AI Agent block reads as its model */
-  model?: string
-  // ai-input block reuses `value` (the text/expression fed into the agent)
-  // ai-output block reuses `label` as the variable name the result is saved into
-  // app-trigger block
-  sourceApp?: string
-  outputVariable?: string
-  /** sample sender address, e.g. for an email trigger - saved as "{outputVariable}From" so a
-   *  downstream App Action block can reply to whoever sent the original message */
-  fromAddress?: string
-  // app-trigger block reuses `value` for the sample incoming message/payload
-  // app-action block (does one action against another connected app - which action
-  // is available depends on targetApp, so the palette stays at one Trigger block and
-  // one Action block no matter how many apps get added later)
-  targetApp?: string
-  /** which action to run against targetApp - 'sendMessage' (Email/Slack/Teams/Webhook),
-   *  'aiCall' (targetApp = "AI" - no external account, calls a connected model instead),
-   *  or, for Google/Microsoft Calendar, 'fetchEvents' | 'createEvent' | 'deleteEvent' */
-  targetAction?: 'sendMessage' | 'aiCall' | 'fetchEvents' | 'createEvent' | 'deleteEvent'
-  to?: string
-  subject?: string
-  body?: string
-  // app-action block, targetApp = "AI" (targetAction "aiCall") - reuses `credentialId`/
-  // `provider`/`model` (same fields as an AI Model block) and `prompt` (same field as an
-  // AI Agent block); which quick-action template last filled `prompt`, purely so the
-  // picker can show it selected again when reopened
-  aiCallMode?: AiCallMode
-  // maps-action block (builds a real Google/Apple Maps directions URL - no API key needed)
-  mapsProvider?: 'google' | 'apple'
-  origin?: string
-  destination?: string
-  travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
-  /** extra stops between origin and destination - "|"-separated (not comma, so a stop name
-   *  can itself contain a comma), e.g. "{routeActivities}" or "Eiffel Tower|Louvre" */
-  waypoints?: string
-  // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
-  // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
-  // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
-  // a simulated one if no AI Model block is connected. Reuses `outputVariable` for the variable
-  // name the accepted ROUTE stops are saved into as a "|"-separated list, meant to be referenced
-  // from a downstream Maps Route block's Waypoints field, e.g. "{routeActivities}" - these are
-  // things passed on the way, not things to do once already at the destination
-  activityContext?: string
-  interests?: string
-  /** variable name the accepted DESTINATION activities are saved into (also "|"-separated) -
-   *  things to actually do once arrived, not waypoints on the way there */
-  destinationOutputVariable?: string
-  // cost-estimate block (AI looks up real prices via web search and totals them against a
-  // budget) - reuses `waypoints` for the "|"-separated ROUTE stops to price (e.g.
-  // "{routeActivities}", priced as category "route_activity"), `activityContext` for the
-  // destination context, `origin` for the starting point (transport line), `credentialId`/
-  // `model` via the "model" handle exactly like the AI Agent block, and `outputVariable` for
-  // the variable name the JSON breakdown is saved into
-  budget?: string
-  /** "|"-separated things to do ONCE AT the destination (e.g. "{destinationStops}") - priced
-   *  separately from `waypoints` as category "destination_activity", since they aren't stops
-   *  on the way there */
-  destinationStops?: string
-  /** every price is converted to this currency (default "EUR") - an item the AI couldn't
-   *  actually convert is flagged in its note rather than silently trusted */
-  currency?: string
-  /** accommodation/transport lines are only priced once these resolve to a real value -
-   *  left blank (or an unresolved "{var}") to skip that line entirely */
-  stayType?: string
-  transportMode?: string
-  checkInDate?: string
-  checkOutDate?: string
-  /** defaults to "{tripAdults}"/"{tripChildren}" in the template - every cost line is the
-   *  TOTAL for this many travelers, not a per-person price */
-  adults?: string
-  children?: string
-  // trip-summary block (renders a clean, downloadable PDF - itinerary + route links + cost
-  // table - server-side via reportlab) - reuses `activityContext` for the destination and
-  // `checkInDate`/`checkOutDate` for the date range shown at the top
-  /** itinerary text to render, e.g. "{vacationPlan}" - a light #/##/-/** markdown subset is understood */
-  itinerary?: string
-  googleMapsLink?: string
-  appleMapsLink?: string
-  /** the JSON string a Trip Cost block saved, e.g. "{tripCostEstimate}" */
-  costBreakdownData?: string
-  // app-action block, targetApp = "Google Calendar" | "Microsoft Calendar" (real OAuth
-  // account, connected from Settings - the provider is just targetApp, lowercased)
-  /** targetAction "fetchEvents": how many days ahead of now to fetch, e.g. "7" */
-  daysAhead?: string
-  /** targetAction "createEvent" */
-  eventTitle?: string
-  startTime?: string
-  endTime?: string
-  eventDescription?: string
-  /** targetAction "deleteEvent": the event id to remove - typically {a Create/Fetch block's outputVariable} */
-  eventId?: string
-  // "fetchEvents"/"createEvent" reuse `outputVariable` for the variable name the
-  // result (an event summary, or a newly-created event's id) is saved into
-  // form-trigger block - one question per field; running the workflow first pops up a
-  // modal built from these, and each field's answer is saved as a variable named `field.name`
-  fields?: FormField[]
-}
-
 /** One priced line in a Cost Estimate block's result - carried on the matching run step
  *  (not on node data) so the console/summary card can render a real table instead of text. */
 export interface CostBreakdownItem {
@@ -463,14 +327,85 @@ export interface MapsActionBlockData extends BaseBlockData, WithAvailableVariabl
  *  Maps Route block's Waypoints field, e.g. "{routeActivities}". */
 export interface ActivitySuggestionBlockData extends BaseBlockData, WithAvailableVariables {
   kind: 'activitySuggestion'
+  /** starting point, so route stops can be spread across the whole trip rather than
+   *  clustered near the destination */
+  origin?: string
   activityContext?: string
   interests?: string
   outputVariable?: string
+  /** variable name the accepted DESTINATION activities (once-arrived, not en-route
+   *  stops) are saved into, also "|"-separated */
+  destinationOutputVariable?: string
   onChange?: (patch: Partial<ActivitySuggestionBlockData>) => void
+}
+
+/** One question per field; "Fill in & run" pops up a modal built from these, and each
+ *  field's answer is saved as a variable named `field.name` once submitted. */
+export interface FormTriggerBlockData extends BaseBlockData {
+  kind: 'formTrigger'
+  fields?: FormField[]
+  /** carries the just-submitted field values so a run can start immediately without
+   *  waiting on a React state round-trip - only ever set for this block kind, but every
+   *  trigger-type block shares one onTrigger signature since Canvas wires the same
+   *  runWorkflow closure to all of them */
+  onTrigger?: (formOverride?: { nodeId: string; fields: FormField[] }) => void
+  onChange?: (patch: Partial<FormTriggerBlockData>) => void
+}
+
+/** AI searches the web for real prices for each stop (route + destination) plus
+ *  accommodation/transport if filled in, and totals them against a budget - reads the
+ *  connected AI Model block's `model`/`provider` via the "model" handle, same as an AI
+ *  Agent block, rather than storing its own credential. */
+export interface CostEstimateBlockData extends BaseBlockData, WithAvailableVariables {
+  kind: 'costEstimate'
+  /** "|"-separated route stops to price (e.g. "{routeActivities}"), priced as category "route_activity" */
+  waypoints?: string
+  /** "|"-separated destination stops to price (e.g. "{destinationStops}"), priced as category "destination_activity" */
+  destinationStops?: string
+  /** starting point, for the transport line */
+  origin?: string
+  /** destination context */
+  activityContext?: string
+  /** accommodation/transport lines are only priced once these resolve to a real value -
+   *  left blank (or an unresolved "{var}") to skip that line entirely */
+  stayType?: string
+  transportMode?: string
+  checkInDate?: string
+  checkOutDate?: string
+  /** every cost line is the TOTAL for this many travelers, not a per-person price */
+  adults?: string
+  children?: string
+  budget?: string
+  /** every price is converted to this currency (default "EUR") - an item the AI
+   *  couldn't actually convert is flagged in its note rather than silently trusted */
+  currency?: string
+  /** variable name the JSON cost breakdown is saved into */
+  outputVariable?: string
+  onChange?: (patch: Partial<CostEstimateBlockData>) => void
+}
+
+/** Renders a clean, downloadable PDF (itinerary + route links + cost table) server-side
+ *  via reportlab - every field is optional and left out of the PDF if blank. */
+export interface TripSummaryBlockData extends BaseBlockData {
+  kind: 'tripSummary'
+  /** destination shown at the top of the PDF */
+  activityContext?: string
+  checkInDate?: string
+  checkOutDate?: string
+  /** itinerary text, e.g. "{vacationPlan}" - a light #/##/-/** markdown subset is understood */
+  itinerary?: string
+  googleMapsLink?: string
+  appleMapsLink?: string
+  /** the JSON string a Trip Cost block saved, e.g. "{tripCostEstimate}" */
+  costBreakdownData?: string
+  onChange?: (patch: Partial<TripSummaryBlockData>) => void
 }
 
 export type BlockNodeData =
   | TriggerBlockData
+  | FormTriggerBlockData
+  | CostEstimateBlockData
+  | TripSummaryBlockData
   | AppTriggerBlockData
   | ActionBlockData
   | IfSingleBlockData

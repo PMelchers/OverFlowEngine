@@ -4,7 +4,7 @@ import { Handle, Position, useNodeId, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import FormSubmissionModal from './FormSubmissionModal'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData, FormField, VariableType } from './types'
+import type { FormField, FormTriggerBlockData, VariableType } from './types'
 
 const VAR_TYPES: VariableType[] = ['string', 'int', 'boolean']
 
@@ -21,7 +21,7 @@ function slugify(label: string): string {
     .join('')
 }
 
-export default function FormTriggerNode({ data }: NodeProps<BlockNodeData>) {
+export default function FormTriggerNode({ data }: NodeProps<FormTriggerBlockData>) {
   const active = data.status === 'active'
   const fields = data.fields ?? []
   const nodeId = useNodeId()

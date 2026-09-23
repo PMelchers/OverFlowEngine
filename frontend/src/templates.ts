@@ -156,7 +156,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'trigger',
         type: 'formTrigger',
         position: { x: 0 * STEP, y: 0 },
-        data: { kind: 'trigger', label: 'Plan My Trip', fields: VACATION_FORM_FIELDS },
+        data: { kind: 'formTrigger', label: 'Plan My Trip', fields: VACATION_FORM_FIELDS },
       },
       {
         // Seeded blank so the Maps Route destinations below render cleanly even if the
@@ -172,13 +172,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'destinationStopsSeed',
         type: 'variable',
         position: { x: 1 * STEP, y: 200 },
-        data: { label: 'destinationStops', varType: 'string', value: '' },
+        data: { kind: 'variable', label: 'destinationStops', varType: 'string', value: '' },
       },
       {
         id: 'pickDestInput',
         type: 'aiInput',
         position: { x: 2 * STEP, y: 0 },
         data: {
+          kind: 'aiInput',
           label: 'pickDestInput',
           value:
             'Country/region: {destinationCountry}. Traveler interests: {destinationActivities}. ' +
@@ -193,6 +194,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'aiAgent',
         position: { x: 3 * STEP, y: 0 },
         data: {
+          kind: 'aiAgent',
           label: 'Pick Destination Agent',
           prompt:
             'You are a knowledgeable travel destination expert. Given a country/region and trip ' +
@@ -204,7 +206,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         id: 'destinationAddress',
         type: 'aiOutput',
         position: { x: 4 * STEP, y: 0 },
-        data: { label: 'destinationAddress' },
+        data: { kind: 'aiOutput', label: 'destinationAddress' },
       },
       {
         id: 'planInput',
@@ -297,6 +299,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'costEstimate',
         position: { x: 9 * STEP, y: 400 },
         data: {
+          kind: 'costEstimate',
           label: 'Trip Cost',
           waypoints: '{routeActivities}',
           destinationStops: '{destinationStops}',
@@ -318,6 +321,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         type: 'tripSummary',
         position: { x: 10 * STEP, y: 400 },
         data: {
+          kind: 'tripSummary',
           label: 'Trip PDF',
           activityContext: '{destinationAddress}',
           checkInDate: '{tripStartDate}',
