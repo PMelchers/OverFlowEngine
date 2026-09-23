@@ -36,13 +36,24 @@ export default function ActivitySuggestionNode({ data }: NodeProps<ActivitySugge
       </BlockHeader>
 
       <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
-        Route / destination
+        Starting point (so route stops can be spread across the whole trip, not just near the destination)
+      </label>
+      <input
+        type="text"
+        value={data.origin ?? ''}
+        placeholder="e.g. {startingAddress}"
+        onChange={(e) => data.onChange?.({ origin: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-orange-300 bg-white px-2 py-1 text-sm dark:border-orange-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
+      <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
+        Destination
       </label>
       <input
         ref={contextRef}
         type="text"
         value={data.activityContext ?? ''}
-        placeholder="e.g. {destinationCountry}"
+        placeholder="e.g. {destinationAddress}"
         onChange={(e) => data.onChange?.({ activityContext: e.target.value })}
         className="nodrag mb-1 w-full rounded border border-orange-300 bg-white px-2 py-1 text-sm dark:border-orange-700 dark:bg-gray-900 dark:text-gray-100"
       />
@@ -87,21 +98,33 @@ export default function ActivitySuggestionNode({ data }: NodeProps<ActivitySugge
       />
 
       <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
-        Save accepted suggestion as
+        Save accepted route stops as
       </label>
       <input
         type="text"
         value={data.outputVariable ?? ''}
         placeholder="e.g. routeActivities"
         onChange={(e) => data.onChange?.({ outputVariable: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-orange-300 bg-white px-2 py-1 text-sm dark:border-orange-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
+      <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
+        Save accepted destination activities as
+      </label>
+      <input
+        type="text"
+        value={data.destinationOutputVariable ?? ''}
+        placeholder="e.g. destinationStops"
+        onChange={(e) => data.onChange?.({ destinationOutputVariable: e.target.value })}
         className="nodrag w-full rounded border border-orange-300 bg-white px-2 py-1 text-sm dark:border-orange-700 dark:bg-gray-900 dark:text-gray-100"
       />
 
       <p className="mt-1 text-[10px] text-orange-700 dark:text-orange-400">
-        Pauses the run with the suggested stops. Accepting saves them to the variable above as a
-        "|"-separated list - reference it from a Maps Route block's Waypoints field (e.g.{' '}
-        {'{routeActivities}'}) to add them as real stops on the route. Rejecting leaves the route
-        unchanged.
+        Pauses the run with two suggestion lists: stops spread across the WHOLE route from start to
+        destination - could be 20km in or 200km in, not just near the end (reference the first
+        variable from a Maps Route block's Waypoints field, e.g. {'{routeActivities}'}) - and things
+        to do ONCE AT the destination (not added to the route - reference the second variable from
+        a Trip Cost block's Destination activities field). Rejecting leaves both unchanged.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-orange-500" />

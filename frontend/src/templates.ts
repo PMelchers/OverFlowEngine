@@ -1,4 +1,4 @@
-import type { BlockNodeData } from './nodes/types'
+import type { BlockNodeData, FormField } from './nodes/types'
 
 export interface TemplateNode {
   id: string
@@ -28,6 +28,37 @@ export const TEMPLATE_DRAG_PREFIX = 'template::'
 
 /** Horizontal gap between blocks in a single left-to-right row (block width is 320px). */
 const STEP = 380
+
+// Every input the Vacation Planner needs, collected by one Form Trigger block instead
+// of 15+ separate Variable blocks/groups on the canvas - running it pops up a form, and
+// each answer is saved as a variable named `name` (same names the rest of the template
+// already references as `{name}`).
+const VACATION_FORM_FIELDS: FormField[] = [
+  { name: 'destinationCountry', label: 'Destination country', varType: 'string', value: 'Italy' },
+  { name: 'transportMode', label: 'Transport mode', varType: 'string', value: 'car' },
+  { name: 'destinationActivities', label: 'Interests / activities', varType: 'string', value: 'hiking, museums, local food' },
+  { name: 'stayType', label: 'Accommodation type', varType: 'string', value: 'hotel' },
+  // The route can't be built without knowing where it starts - fed into both Maps Route
+  // blocks' Origin below. There's no matching "destination address" field - that's
+  // deliberately NOT asked here; an AI step further down picks one specific place
+  // within destinationCountry based on the answers below, instead of making the user
+  // name an exact place themselves.
+  { name: 'startingAddress', label: 'Starting address', varType: 'string', value: 'Home' },
+  { name: 'tripStartDate', label: 'Start date', varType: 'string', value: '2026-07-01' },
+  { name: 'tripEndDate', label: 'End date', varType: 'string', value: '2026-07-10' },
+  // int (not string) so a downstream If block can compare these numerically later,
+  // e.g. "if tripChildren > 0" to steer toward family-friendly stops.
+  { name: 'tripAdults', label: 'Adults', varType: 'int', value: '2' },
+  { name: 'tripChildren', label: 'Children', varType: 'int', value: '0' },
+  { name: 'tripBudget', label: 'Budget', varType: 'string', value: '2000 EUR' },
+  { name: 'tripWeatherPreference', label: 'Weather preference', varType: 'string', value: 'warm and sunny' },
+  // These three are informational only - there's no routing/distance API or web-search
+  // node wired up yet, so they're folded into the itinerary prompt as hints for the AI
+  // rather than hard constraints. Add real enforcement later without renaming them.
+  { name: 'tripKmPerStop', label: 'Max driving per stop', varType: 'string', value: 'max 150 km per day' },
+  { name: 'tripDestinationRadius', label: 'Radius around destination', varType: 'string', value: '20 km around the final destination' },
+  { name: 'tripExcludedSiteTypes', label: 'Sources to avoid', varType: 'string', value: 'social media, ad-heavy blogs' },
+]
 
 export const TEMPLATES: WorkflowTemplate[] = [
   {
@@ -119,46 +150,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
     id: 'vacation-planner',
     label: 'Vacation Planner',
     description:
-      'Enter your destination, transport, activities and stay type, have AI draft an itinerary, then get real Google/Apple Maps routes.',
+      'Enter a country, transport, activities and stay type - AI picks a specific destination for you, drafts an itinerary, then builds real Google/Apple Maps routes.',
     nodes: [
       {
         id: 'trigger',
-        type: 'trigger',
+        type: 'formTrigger',
         position: { x: 0 * STEP, y: 0 },
-        data: { kind: 'trigger', label: 'Plan My Trip' },
-      },
-      {
-        id: 'country',
-        type: 'variable',
-        position: { x: 1 * STEP, y: 0 },
-        data: { kind: 'variable', label: 'destinationCountry', varType: 'string', value: 'Italy' },
-      },
-      {
-        id: 'transport',
-        type: 'variable',
-        position: { x: 2 * STEP, y: 0 },
-        data: { kind: 'variable', label: 'transportMode', varType: 'string', value: 'car' },
-      },
-      {
-        id: 'activities',
-        type: 'variable',
-        position: { x: 3 * STEP, y: 0 },
-        data: { kind: 'variable', label: 'destinationActivities', varType: 'string', value: 'hiking, museums, local food' },
-      },
-      {
-        id: 'stayType',
-        type: 'variable',
-        position: { x: 4 * STEP, y: 0 },
-        data: { kind: 'variable', label: 'stayType', varType: 'string', value: 'hotel' },
-      },
-      {
-        // The route can't be built without knowing where it starts - fed into both Maps
-        // Route blocks' Origin below so they build an actual point-to-point route instead
-        // of leaving the maps app to ask for the current location.
-        id: 'startAddress',
-        type: 'variable',
-        position: { x: 5 * STEP, y: 0 },
-        data: { kind: 'variable', label: 'startingAddress', varType: 'string', value: 'Home' },
+        data: { kind: 'trigger', label: 'Plan My Trip', fields: VACATION_FORM_FIELDS },
       },
       {
         // Seeded blank so the Maps Route destinations below render cleanly even if the
@@ -169,24 +167,67 @@ export const TEMPLATES: WorkflowTemplate[] = [
         data: { kind: 'variable', label: 'routeActivities', varType: 'string', value: '' },
       },
       {
+        // Same reasoning as routeActivitiesSeed, but for the Trip Cost block's
+        // "at the destination" input if the suggestion is rejected.
+        id: 'destinationStopsSeed',
+        type: 'variable',
+        position: { x: 1 * STEP, y: 200 },
+        data: { label: 'destinationStops', varType: 'string', value: '' },
+      },
+      {
+        id: 'pickDestInput',
+        type: 'aiInput',
+        position: { x: 2 * STEP, y: 0 },
+        data: {
+          label: 'pickDestInput',
+          value:
+            'Country/region: {destinationCountry}. Traveler interests: {destinationActivities}. ' +
+            'Weather preference: {tripWeatherPreference}. Accommodation type: {stayType}. ' +
+            'Recommend ONE specific city or region within {destinationCountry} to use as the trip\'s ' +
+            "destination, chosen to best match these interests and preferences. Reply with ONLY the " +
+            "place name and country (e.g. \"Florence, Italy\") - nothing else, no explanation.",
+        },
+      },
+      {
+        id: 'pickDestAgent',
+        type: 'aiAgent',
+        position: { x: 3 * STEP, y: 0 },
+        data: {
+          label: 'Pick Destination Agent',
+          prompt:
+            'You are a knowledgeable travel destination expert. Given a country/region and trip ' +
+            'preferences, name exactly one ideal specific destination (a city or region) - concise, ' +
+            'no extra commentary.',
+        },
+      },
+      {
+        id: 'destinationAddress',
+        type: 'aiOutput',
+        position: { x: 4 * STEP, y: 0 },
+        data: { label: 'destinationAddress' },
+      },
+      {
         id: 'planInput',
         type: 'aiInput',
-        position: { x: 7 * STEP, y: 0 },
+        position: { x: 5 * STEP, y: 0 },
         data: {
           kind: 'aiInput',
           label: 'planInput',
           value:
-            'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress}. We are traveling by {transportMode} and enjoy {destinationActivities}. Suggest a day-by-day itinerary with the best stops to visit.',
+            'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress} and ending in {destinationAddress}, from {tripStartDate} to {tripEndDate}. ' +
+            'Travelers: {tripAdults} adult(s) and {tripChildren} child(ren), budget {tripBudget}. We are traveling by {transportMode} and enjoy {destinationActivities}. ' +
+            'Preferred weather: {tripWeatherPreference}. Keep driving to roughly {tripKmPerStop}, and favor stops within {tripDestinationRadius}. ' +
+            "Don't base suggestions on {tripExcludedSiteTypes}. Suggest a day-by-day itinerary with the best stops to visit.",
         },
       },
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 8 * STEP, y: 0 },
+        position: { x: 6 * STEP, y: 0 },
         data: {
           kind: 'aiAgent',
           label: 'Vacation Planner Agent',
-          prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, and accommodation preference.',
+          prompt: 'You are a helpful travel planner. Write a clear day-by-day itinerary matching the traveler\'s starting point, destination, transport, interests, dates, group size, budget, and accommodation preference.',
         },
       },
       {
@@ -204,13 +245,15 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 10 * STEP, y: 0 },
+        position: { x: 8 * STEP, y: 0 },
         data: {
           kind: 'activitySuggestion',
           label: 'Suggest Activities',
-          activityContext: '{destinationCountry}',
+          origin: '{startingAddress}',
+          activityContext: '{destinationAddress}',
           interests: '{destinationActivities}',
           outputVariable: 'routeActivities',
+          destinationOutputVariable: 'destinationStops',
         },
       },
       {
@@ -222,13 +265,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 11 * STEP, y: 0 },
+        position: { x: 9 * STEP, y: 0 },
         data: {
           kind: 'mapsAction',
           label: 'Google Maps Route',
           mapsProvider: 'google',
           origin: '{startingAddress}',
-          destination: '{destinationCountry}',
+          destination: '{destinationAddress}',
           waypoints: '{routeActivities}',
           travelMode: 'driving',
           outputVariable: 'googleMapsRoute',
@@ -237,27 +280,65 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 12 * STEP, y: 0 },
+        position: { x: 10 * STEP, y: 0 },
         data: {
           kind: 'mapsAction',
           label: 'Apple Maps Route',
           mapsProvider: 'apple',
           origin: '{startingAddress}',
-          destination: '{destinationCountry}',
+          destination: '{destinationAddress}',
           waypoints: '{routeActivities}',
           travelMode: 'driving',
           outputVariable: 'appleMapsRoute',
         },
       },
+      {
+        id: 'costEstimate',
+        type: 'costEstimate',
+        position: { x: 9 * STEP, y: 400 },
+        data: {
+          label: 'Trip Cost',
+          waypoints: '{routeActivities}',
+          destinationStops: '{destinationStops}',
+          origin: '{startingAddress}',
+          activityContext: '{destinationAddress}',
+          stayType: '{stayType}',
+          transportMode: '{transportMode}',
+          checkInDate: '{tripStartDate}',
+          checkOutDate: '{tripEndDate}',
+          adults: '{tripAdults}',
+          children: '{tripChildren}',
+          budget: '{tripBudget}',
+          currency: 'EUR',
+          outputVariable: 'tripCostEstimate',
+        },
+      },
+      {
+        id: 'tripSummary',
+        type: 'tripSummary',
+        position: { x: 10 * STEP, y: 400 },
+        data: {
+          label: 'Trip PDF',
+          activityContext: '{destinationAddress}',
+          checkInDate: '{tripStartDate}',
+          checkOutDate: '{tripEndDate}',
+          itinerary: '{vacationPlan}',
+          googleMapsLink: '{googleMapsRoute}',
+          appleMapsLink: '{appleMapsRoute}',
+          costBreakdownData: '{tripCostEstimate}',
+        },
+      },
     ],
     edges: [
-      { id: 'e-trigger-country', source: 'trigger', target: 'country' },
-      { id: 'e-country-transport', source: 'country', target: 'transport' },
-      { id: 'e-transport-activities', source: 'transport', target: 'activities' },
-      { id: 'e-activities-stayType', source: 'activities', target: 'stayType' },
-      { id: 'e-stayType-startAddress', source: 'stayType', target: 'startAddress' },
-      { id: 'e-startAddress-routeActivitiesSeed', source: 'startAddress', target: 'routeActivitiesSeed' },
-      { id: 'e-routeActivitiesSeed-planInput', source: 'routeActivitiesSeed', target: 'planInput' },
+      { id: 'e-trigger-routeActivitiesSeed', source: 'trigger', target: 'routeActivitiesSeed' },
+      { id: 'e-routeActivitiesSeed-destinationStopsSeed', source: 'routeActivitiesSeed', target: 'destinationStopsSeed' },
+      { id: 'e-destinationStopsSeed-pickDestInput', source: 'destinationStopsSeed', target: 'pickDestInput' },
+      { id: 'e-pickDestInput-pickDestAgent', source: 'pickDestInput', target: 'pickDestAgent' },
+      // Reuses planModel's AI Model block (a second edge from the same node) instead of
+      // another Model block on the canvas - one connected key can feed several blocks.
+      { id: 'e-planModel-pickDestAgent', source: 'planModel', target: 'pickDestAgent', targetHandle: 'model' },
+      { id: 'e-pickDestAgent-destinationAddress', source: 'pickDestAgent', target: 'destinationAddress' },
+      { id: 'e-destinationAddress-planInput', source: 'destinationAddress', target: 'planInput' },
       { id: 'e-planInput-planAgent', source: 'planInput', target: 'planAgent' },
       { id: 'e-planModel-planAgent', source: 'planModel', target: 'planAgent', targetHandle: 'model' },
       { id: 'e-planAgent-vacationPlan', source: 'planAgent', target: 'vacationPlan' },
@@ -265,6 +346,14 @@ export const TEMPLATES: WorkflowTemplate[] = [
       { id: 'e-suggestModel-suggestActivities', source: 'suggestModel', target: 'suggestActivities', targetHandle: 'model' },
       { id: 'e-suggestActivities-googleRoute', source: 'suggestActivities', target: 'googleRoute' },
       { id: 'e-googleRoute-appleRoute', source: 'googleRoute', target: 'appleRoute' },
+      // Chained after both routes (not run in parallel off suggestActivities) so it's
+      // guaranteed to start only once googleMapsRoute/appleMapsRoute are already saved -
+      // the Trip PDF block below needs both of those plus the cost breakdown to exist.
+      { id: 'e-appleRoute-costEstimate', source: 'appleRoute', target: 'costEstimate' },
+      // Reuses suggestModel's AI Model block (a second edge from the same node) instead
+      // of another Model block on the canvas - one connected key can feed several blocks.
+      { id: 'e-suggestModel-costEstimate', source: 'suggestModel', target: 'costEstimate', targetHandle: 'model' },
+      { id: 'e-costEstimate-tripSummary', source: 'costEstimate', target: 'tripSummary' },
     ],
   },
 ]

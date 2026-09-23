@@ -4,7 +4,9 @@ import {
   Calendar,
   CalendarDays,
   Circle,
+  ClipboardList,
   Diamond,
+  FileDown,
   FileSearch,
   FileText,
   GitFork,
@@ -22,6 +24,7 @@ import {
   MessageSquare,
   PenLine,
   Play,
+  Receipt,
   Reply,
   Sparkles,
   Tag,
@@ -72,9 +75,180 @@ export interface IfCondition {
   combinator?: 'and' | 'or'
 }
 
+/** One question on a Form Trigger block - becomes one input in the "fill in before
+ *  running" modal, and one variable (named `name`) once the form is submitted. */
+export interface FormField {
+  name: string
+  label: string
+  varType: VariableType
+  /** design-time default shown in the modal; overwritten with whatever the user typed once submitted */
+  value: string
+}
+
+export interface BlockNodeData {
+  label: string
+  status?: BlockStatus
+  /** formOverride is only set for a form-trigger block - carries the just-submitted field
+   *  values so the run uses them without waiting on a React state round-trip */
+  onTrigger?: (formOverride?: { nodeId: string; fields: FormField[] }) => void
+  onChange?: (patch: Partial<BlockNodeData>) => void
+  // if-block
+  conditions?: IfCondition[]
+  /** variables currently on the canvas, synced in by Canvas so the picker can suggest them */
+  availableVariables?: { name: string; varType: VariableType }[]
+  // app-trigger / app-action blocks - synced in by Canvas from /calendar/connections,
+  // keyed by app label (e.g. "Google Calendar"); missing keys read as not connected
+  appConnections?: Record<string, boolean>
+  /** opens Settings straight to Connected Apps - synced in by Canvas */
+  onOpenSettings?: (subPage?: 'connected-apps') => void
+  /** re-fetches appConnections after the in-canvas connect modal finishes - synced in by Canvas */
+  onAppConnected?: () => void
+  // variable-block
+  varType?: VariableType
+  value?: string
+  // log-block
+  message?: string
+  // task-block (adds a small to-do item to the signed-in user's dashboard when it runs)
+  title?: string
+  // choice-block
+  options?: string[]
+  // group-block
+  subgraph?: Subgraph
+  /** id of the saved custom block this instance was created from, if any - lets edits to that
+   *  saved block propagate to every instance stamped out from it */
+  sourceBlockId?: string
+  // ai-agent block
+  prompt?: string
+  // ai-model block (circular) - unlocked by picking one of the user's verified API keys
+  credentialId?: number | null
+  /** the linked credential's auto-detected provider - scopes which models can be chosen */
+  provider?: string
+  /** the chosen model id, e.g. "gpt-4o" - also what the AI Agent block reads as its model */
+  model?: string
+  // ai-input block reuses `value` (the text/expression fed into the agent)
+  // ai-output block reuses `label` as the variable name the result is saved into
+  // app-trigger block
+  sourceApp?: string
+  outputVariable?: string
+  /** sample sender address, e.g. for an email trigger - saved as "{outputVariable}From" so a
+   *  downstream App Action block can reply to whoever sent the original message */
+  fromAddress?: string
+  // app-trigger block reuses `value` for the sample incoming message/payload
+  // app-action block (does one action against another connected app - which action
+  // is available depends on targetApp, so the palette stays at one Trigger block and
+  // one Action block no matter how many apps get added later)
+  targetApp?: string
+  /** which action to run against targetApp - 'sendMessage' (Email/Slack/Teams/Webhook),
+   *  'aiCall' (targetApp = "AI" - no external account, calls a connected model instead),
+   *  or, for Google/Microsoft Calendar, 'fetchEvents' | 'createEvent' | 'deleteEvent' */
+  targetAction?: 'sendMessage' | 'aiCall' | 'fetchEvents' | 'createEvent' | 'deleteEvent'
+  to?: string
+  subject?: string
+  body?: string
+  // app-action block, targetApp = "AI" (targetAction "aiCall") - reuses `credentialId`/
+  // `provider`/`model` (same fields as an AI Model block) and `prompt` (same field as an
+  // AI Agent block); which quick-action template last filled `prompt`, purely so the
+  // picker can show it selected again when reopened
+  aiCallMode?: AiCallMode
+  // maps-action block (builds a real Google/Apple Maps directions URL - no API key needed)
+  mapsProvider?: 'google' | 'apple'
+  origin?: string
+  destination?: string
+  travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit'
+  /** extra stops between origin and destination - "|"-separated (not comma, so a stop name
+   *  can itself contain a comma), e.g. "{routeActivities}" or "Eiffel Tower|Louvre" */
+  waypoints?: string
+  // maps-action block reuses `outputVariable` for the variable name the built URL is saved into
+  // activity-suggestion block (AI suggests stops along a route - reuses `credentialId`/`model`
+  // via the "model" handle exactly like the AI Agent block for a real suggestion; falls back to
+  // a simulated one if no AI Model block is connected. Reuses `outputVariable` for the variable
+  // name the accepted ROUTE stops are saved into as a "|"-separated list, meant to be referenced
+  // from a downstream Maps Route block's Waypoints field, e.g. "{routeActivities}" - these are
+  // things passed on the way, not things to do once already at the destination
+  activityContext?: string
+  interests?: string
+  /** variable name the accepted DESTINATION activities are saved into (also "|"-separated) -
+   *  things to actually do once arrived, not waypoints on the way there */
+  destinationOutputVariable?: string
+  // cost-estimate block (AI looks up real prices via web search and totals them against a
+  // budget) - reuses `waypoints` for the "|"-separated ROUTE stops to price (e.g.
+  // "{routeActivities}", priced as category "route_activity"), `activityContext` for the
+  // destination context, `origin` for the starting point (transport line), `credentialId`/
+  // `model` via the "model" handle exactly like the AI Agent block, and `outputVariable` for
+  // the variable name the JSON breakdown is saved into
+  budget?: string
+  /** "|"-separated things to do ONCE AT the destination (e.g. "{destinationStops}") - priced
+   *  separately from `waypoints` as category "destination_activity", since they aren't stops
+   *  on the way there */
+  destinationStops?: string
+  /** every price is converted to this currency (default "EUR") - an item the AI couldn't
+   *  actually convert is flagged in its note rather than silently trusted */
+  currency?: string
+  /** accommodation/transport lines are only priced once these resolve to a real value -
+   *  left blank (or an unresolved "{var}") to skip that line entirely */
+  stayType?: string
+  transportMode?: string
+  checkInDate?: string
+  checkOutDate?: string
+  /** defaults to "{tripAdults}"/"{tripChildren}" in the template - every cost line is the
+   *  TOTAL for this many travelers, not a per-person price */
+  adults?: string
+  children?: string
+  // trip-summary block (renders a clean, downloadable PDF - itinerary + route links + cost
+  // table - server-side via reportlab) - reuses `activityContext` for the destination and
+  // `checkInDate`/`checkOutDate` for the date range shown at the top
+  /** itinerary text to render, e.g. "{vacationPlan}" - a light #/##/-/** markdown subset is understood */
+  itinerary?: string
+  googleMapsLink?: string
+  appleMapsLink?: string
+  /** the JSON string a Trip Cost block saved, e.g. "{tripCostEstimate}" */
+  costBreakdownData?: string
+  // app-action block, targetApp = "Google Calendar" | "Microsoft Calendar" (real OAuth
+  // account, connected from Settings - the provider is just targetApp, lowercased)
+  /** targetAction "fetchEvents": how many days ahead of now to fetch, e.g. "7" */
+  daysAhead?: string
+  /** targetAction "createEvent" */
+  eventTitle?: string
+  startTime?: string
+  endTime?: string
+  eventDescription?: string
+  /** targetAction "deleteEvent": the event id to remove - typically {a Create/Fetch block's outputVariable} */
+  eventId?: string
+  // "fetchEvents"/"createEvent" reuse `outputVariable` for the variable name the
+  // result (an event summary, or a newly-created event's id) is saved into
+  // form-trigger block - one question per field; running the workflow first pops up a
+  // modal built from these, and each field's answer is saved as a variable named `field.name`
+  fields?: FormField[]
+}
+
+/** One priced line in a Cost Estimate block's result - carried on the matching run step
+ *  (not on node data) so the console/summary card can render a real table instead of text. */
+export interface CostBreakdownItem {
+  name: string
+  category: 'route_activity' | 'destination_activity' | 'accommodation' | 'transport'
+  estimated_cost: number
+  currency: string
+  note: string
+}
+
+export interface CostBreakdown {
+  items: CostBreakdownItem[]
+  total: number
+  currency: string
+  budget: number | null
+  overBudget: boolean
+  searched: boolean
+  destination: string
+  /** true if any item's own currency didn't match `currency` - its number was likely not
+   *  actually converted, so the total may be off; check that item's note */
+  currencyWarning: boolean
+}
 export type BlockKind =
   | 'trigger'
   | 'appTrigger'
+  | 'formTrigger'
+  | 'costEstimate'
+  | 'tripSummary'
   | 'block'
   | 'ifOne'
   | 'if'
@@ -442,9 +616,12 @@ export const AI_QUICK_ACTIONS: AiQuickAction[] = [
 export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'trigger', label: 'Start Button', description: 'Starts the workflow', color: 'bg-purple-100 border-purple-400 dark:bg-purple-950 dark:border-purple-700', icon: Play, badgeClassName: 'bg-purple-600', category: 'core' },
   { kind: 'appTrigger', label: 'App Trigger', description: 'Starts the workflow from another app - click it to pick which one (Teams, Outlook, Google/Microsoft Calendar, ...)', color: 'bg-cyan-100 border-cyan-400 dark:bg-cyan-950 dark:border-cyan-700', icon: Zap, badgeClassName: 'bg-cyan-600', category: 'core' },
+  { kind: 'formTrigger', label: 'Form Trigger', description: 'Starts the workflow with a form - define the questions, and running it pops up a modal you fill in; each answer becomes a variable', color: 'bg-blue-100 border-blue-400 dark:bg-blue-950 dark:border-blue-700', icon: ClipboardList, badgeClassName: 'bg-blue-600', category: 'core' },
   { kind: 'appAction', label: 'App Action', description: 'Does one action in another app, or runs an AI call - click it to pick from the app list or the AI category', color: 'bg-emerald-100 border-emerald-400 dark:bg-emerald-950 dark:border-emerald-700', icon: Reply, badgeClassName: 'bg-emerald-600', category: 'core' },
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500 dark:bg-lime-950 dark:border-lime-700', icon: MapPin, badgeClassName: 'bg-lime-600', category: 'core' },
   { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-700', icon: Lightbulb, badgeClassName: 'bg-orange-600', category: 'agentic' },
+  { kind: 'costEstimate', label: 'Trip Cost', description: 'AI searches the web for real prices of your stops and totals them against your budget - connect an AI Model block', color: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-950 dark:border-yellow-700', icon: Receipt, badgeClassName: 'bg-yellow-600', category: 'agentic' },
+  { kind: 'tripSummary', label: 'Trip PDF', description: 'Builds a clean, downloadable PDF - itinerary, route links, and cost table - from earlier blocks in the flow', color: 'bg-slate-100 border-slate-400 dark:bg-slate-800 dark:border-slate-600', icon: FileDown, badgeClassName: 'bg-slate-600', category: 'core' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300 dark:bg-gray-800 dark:border-gray-600', icon: Circle, badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: Diamond, badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },

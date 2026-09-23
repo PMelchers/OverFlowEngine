@@ -48,8 +48,13 @@ import {
   saveCustomBlock,
   type CustomBlock,
 } from './customBlocks'
+import CostSummaryCard from './CostSummaryCard'
+import TripPdfCard, { type TripPdf } from './TripPdfCard'
 import FlowsPanel from './FlowsPanel'
 import AiAgentNode from './nodes/AiAgentNode'
+import CostEstimateNode from './nodes/CostEstimateNode'
+import FormTriggerNode from './nodes/FormTriggerNode'
+import TripSummaryNode from './nodes/TripSummaryNode'
 import AiInputNode from './nodes/AiInputNode'
 import AiModelNode from './nodes/AiModelNode'
 import AiOutputNode from './nodes/AiOutputNode'
@@ -73,6 +78,8 @@ import {
   type BlockDataPatch,
   type BlockKind,
   type BlockNodeData,
+  type CostBreakdown,
+  type FormField,
   type Subgraph,
   type SubgraphEdge,
   type SubgraphNode,
@@ -106,9 +113,12 @@ function withQuickAdd<T extends BlockNodeData>(NodeComponent: React.ComponentTyp
 const nodeTypes = {
   trigger: withQuickAdd(TriggerNode),
   appTrigger: withQuickAdd(AppTriggerNode),
+  formTrigger: withQuickAdd(FormTriggerNode),
   appAction: withQuickAdd(AppActionNode),
   mapsAction: withQuickAdd(MapsActionNode),
   activitySuggestion: withQuickAdd(ActivitySuggestionNode),
+  costEstimate: withQuickAdd(CostEstimateNode),
+  tripSummary: withQuickAdd(TripSummaryNode),
   block: withQuickAdd(BlockNode),
   ifOne: IfSingleNode,
   if: IfNode,
@@ -124,7 +134,7 @@ const nodeTypes = {
 }
 
 /** Blocks that can start a workflow run - React Flow's `type` field, not the BlockKind palette id. */
-const TRIGGER_NODE_TYPES = new Set(['trigger', 'appTrigger'])
+const TRIGGER_NODE_TYPES = new Set(['trigger', 'appTrigger', 'formTrigger'])
 
 /** Dashed lines shown while dragging a block that lines up with another block's edge/center. */
 function AlignmentGuideLines({ guides }: { guides: AlignmentGuides }) {
@@ -178,6 +188,8 @@ interface RunStep {
   message: string
   branch?: string
   options?: string[]
+  costBreakdown?: CostBreakdown | null
+  pdf?: TripPdf | null
 }
 
 interface StoredVariable {
@@ -240,6 +252,8 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { kind, label: 'Model', credentialId: null }
     case 'appTrigger':
       return { kind, label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
+    case 'formTrigger':
+      return { kind, label, fields: [] }
     case 'appAction':
       return { kind, label, to: '', subject: '', body: '' }
     case 'mapsAction':
@@ -261,6 +275,36 @@ function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { kind, label }
     case 'group':
       return { kind, label }
+    case 'costEstimate':
+      return {
+        kind,
+        label,
+        waypoints: '',
+        destinationStops: '',
+        origin: '',
+        activityContext: '',
+        stayType: '',
+        transportMode: '',
+        checkInDate: '',
+        checkOutDate: '',
+        adults: '',
+        children: '',
+        budget: '',
+        currency: 'EUR',
+        outputVariable: '',
+      }
+    case 'tripSummary':
+      return {
+        kind,
+        label,
+        activityContext: '',
+        checkInDate: '',
+        checkOutDate: '',
+        itinerary: '',
+        googleMapsLink: '',
+        appleMapsLink: '',
+        costBreakdownData: '',
+      }
   }
 }
 
@@ -346,6 +390,8 @@ function CanvasInner({
   const [nodes, setNodes, onNodesChange] = useNodesState<BlockNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [logs, setLogs] = useState<string[]>([])
+  const [costSummary, setCostSummary] = useState<CostBreakdown | null>(null)
+  const [tripPdf, setTripPdf] = useState<TripPdf | null>(null)
   const [running, setRunning] = useState(false)
   const [variables, setVariables] = useState<Record<string, StoredVariable>>({})
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
@@ -431,13 +477,24 @@ function CanvasInner({
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.data.kind === 'if' ||
-        n.data.kind === 'ifOne' ||
-        n.data.kind === 'log' ||
-        n.data.kind === 'task' ||
-        n.data.kind === 'appAction' ||
-        n.data.kind === 'mapsAction' ||
-        n.data.kind === 'activitySuggestion'
+        n.data?.kind === 'if' ||
+        n.data?.kind === 'ifOne' ||
+        n.data?.kind === 'log' ||
+        n.data?.kind === 'task' ||
+        n.data?.kind === 'appAction' ||
+        n.data?.kind === 'mapsAction' ||
+        n.data?.kind === 'activitySuggestion' ||
+        n.data?.kind === 'costEstimate' ||
+        n.data?.kind === 'tripSummary' ||
+        n.type === 'if' ||
+        n.type === 'ifOne' ||
+        n.type === 'log' ||
+        n.type === 'task' ||
+        n.type === 'appAction' ||
+        n.type === 'mapsAction' ||
+        n.type === 'activitySuggestion' ||
+        n.type === 'costEstimate' ||
+        n.type === 'tripSummary'
           ? { ...n, data: { ...n.data, availableVariables } }
           : n,
       ),
@@ -559,6 +616,8 @@ function CanvasInner({
           if (target) activateNode(target)
         }
         addLog(step.message)
+        if (step.costBreakdown) setCostSummary(step.costBreakdown)
+        if (step.pdf) setTripPdf(step.pdf)
         await sleep(450)
       }
 
@@ -579,46 +638,58 @@ function CanvasInner({
     [addLog, activateNode],
   )
 
-  const runWorkflow = useCallback(async () => {
-    if (running) return
-    setRunning(true)
+  const runWorkflow = useCallback(
+    async (formOverride?: { nodeId: string; fields: FormField[] }) => {
+      if (running) return
+      setRunning(true)
 
-    const currentNodes = nodesRef.current
-    const currentEdges = edgesRef.current
+      // Apply the just-submitted form values to a local copy of the node list rather than
+      // going through setNodes first - a state update wouldn't be reflected in nodesRef
+      // until after this render, so building the run payload from a fresh setNodes would
+      // race and send the *previous* field values.
+      const currentNodes = formOverride
+        ? nodesRef.current.map((n) =>
+            n.id === formOverride.nodeId ? { ...n, data: { ...n.data, fields: formOverride.fields } } : n,
+          )
+        : nodesRef.current
+      const currentEdges = edgesRef.current
+      if (formOverride) updateNodeData(formOverride.nodeId, { fields: formOverride.fields })
 
-    const { nodes: flatNodes, edges: flatEdges } = expandGraph(
-      currentNodes.map((n) => ({ id: n.id, type: n.type ?? 'block', data: n.data })),
-      currentEdges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle ?? null,
-        targetHandle: e.targetHandle ?? null,
-      })),
-    )
+      const { nodes: flatNodes, edges: flatEdges } = expandGraph(
+        currentNodes.map((n) => ({ id: n.id, type: n.type ?? 'block', data: n.data })),
+        currentEdges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
+        })),
+      )
 
-    let result: RunResult
-    try {
-      // authedFetch, not plain fetch - so a Task block can attribute the tasks it
-      // creates to the signed-in user. Anonymous runs still work fine (no header sent).
-      const res = await authedFetch('/workflows/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nodes: flatNodes.map((n) => ({ id: n.id, type: n.type, data: sanitizeData(n.data) })),
-          edges: flatEdges,
-        }),
-      })
-      if (!res.ok) throw new Error(`backend returned ${res.status}`)
-      result = await res.json()
-    } catch {
-      addLog('Error: could not reach backend at ' + API_BASE + ' - workflow was not run')
-      setRunning(false)
-      return
-    }
+      let result: RunResult
+      try {
+        // authedFetch, not plain fetch - so a Task block can attribute the tasks it
+        // creates to the signed-in user. Anonymous runs still work fine (no header sent).
+        const res = await authedFetch('/workflows/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodes: flatNodes.map((n) => ({ id: n.id, type: n.type, data: sanitizeData(n.data) })),
+            edges: flatEdges,
+          }),
+        })
+        if (!res.ok) throw new Error(`backend returned ${res.status}`)
+        result = await res.json()
+      } catch {
+        addLog('Error: could not reach backend at ' + API_BASE + ' - workflow was not run')
+        setRunning(false)
+        return
+      }
 
-    await playResult(result)
-  }, [running, addLog, playResult, authedFetch])
+      await playResult(result)
+    },
+    [running, addLog, playResult, authedFetch, updateNodeData],
+  )
 
   const resolveChoice = useCallback(
     async (option: string) => {
@@ -705,6 +776,8 @@ function CanvasInner({
       const label = ({
         trigger: 'Start',
         appTrigger: `App Trigger ${idCount}`,
+        formTrigger: `Form ${idCount}`,
+        costEstimate: `Trip Cost ${idCount}`,
         ifOne: `If ${idCount}`,
         aiAgent: `AI Agent ${idCount}`,
         aiInput: `AI Input ${idCount}`,
@@ -725,7 +798,9 @@ function CanvasInner({
           kind === 'task' ||
           kind === 'appAction' ||
           kind === 'mapsAction' ||
-          kind === 'activitySuggestion'
+          kind === 'activitySuggestion' ||
+          kind === 'costEstimate' ||
+          kind === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(kind === 'appTrigger' || kind === 'appAction'
@@ -818,7 +893,9 @@ function CanvasInner({
             n.type === 'task' ||
             n.type === 'appAction' ||
             n.type === 'mapsAction' ||
-            n.type === 'activitySuggestion'
+            n.type === 'activitySuggestion' ||
+            n.type === 'costEstimate' ||
+            n.type === 'tripSummary'
               ? { availableVariables: availableVariablesRef.current }
               : {}),
             ...(n.type === 'appTrigger' || n.type === 'appAction'
@@ -1022,7 +1099,9 @@ function CanvasInner({
           sn.type === 'task' ||
           sn.type === 'appAction' ||
           sn.type === 'mapsAction' ||
-          sn.type === 'activitySuggestion'
+          sn.type === 'activitySuggestion' ||
+          sn.type === 'costEstimate' ||
+          sn.type === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(sn.type === 'appTrigger' || sn.type === 'appAction'
@@ -1171,7 +1250,9 @@ function CanvasInner({
           n.type === 'task' ||
           n.type === 'appAction' ||
           n.type === 'mapsAction' ||
-          n.type === 'activitySuggestion'
+          n.type === 'activitySuggestion' ||
+          n.type === 'costEstimate' ||
+          n.type === 'tripSummary'
             ? { availableVariables: availableVariablesRef.current }
             : {}),
           ...(n.type === 'appTrigger' || n.type === 'appAction'
@@ -1587,6 +1668,9 @@ function CanvasInner({
               </div>
             )}
           </div>
+
+          {costSummary && <CostSummaryCard breakdown={costSummary} onClose={() => setCostSummary(null)} />}
+          {tripPdf && <TripPdfCard pdf={tripPdf} onClose={() => setTripPdf(null)} />}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
             <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-800">

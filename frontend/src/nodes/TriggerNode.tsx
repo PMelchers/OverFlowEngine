@@ -17,7 +17,7 @@ export default function TriggerNode({ data }: NodeProps<TriggerBlockData>) {
       <div className="flex justify-center">
         <button
           type="button"
-          onClick={data.onTrigger}
+          onClick={() => data.onTrigger?.()}
           className="flex items-center gap-1.5 rounded bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white transition-transform hover:bg-purple-700 active:scale-95 active:bg-purple-800"
         >
           <Play className="h-3.5 w-3.5" fill="currentColor" /> {data.label}

@@ -2,7 +2,10 @@ import anthropic
 import httpx
 
 _TIMEOUT = 6.0
-_CALL_TIMEOUT = 30.0
+# A large max_tokens generation (a long itinerary) or a web-search call (several
+# sequential searches before the final reply) can easily run past 30s - that showed up
+# as a hard timeout failure rather than just a slow-but-successful response.
+_CALL_TIMEOUT = 120.0
 
 
 class ModelCallError(Exception):
@@ -88,13 +91,15 @@ def call_model(
     model: str,
     system_prompt: str | None,
     user_message: str,
-    max_tokens: int = 1024,
+    max_tokens: int | None = None,
+    web_search: bool = False,
 ) -> str:
     """Sends one message to the given provider/model and returns the reply text.
 
     max_tokens caps the reply length - callers that want to keep usage small
     (e.g. a quick auto-reply) can pass a low value rather than always paying
-    for a full-length response.
+    for a full-length response. Web search adds provider-side search tool use,
+    so a larger cap is needed for the extra tool output and final answer.
 
     Raises ModelCallError with a step-log-safe message on any failure - bad
     key, rate limit, network error, or an unrecognized provider.
@@ -105,16 +110,31 @@ def call_model(
             # No real provider to call - mirrors the shape of a real reply so
             # the rest of the workflow (AI Output, downstream blocks) can be
             # exercised without a real API key.
-            return f'[test reply from {model}] responding to: "{user_message}"'
+            suffix = " [web search: simulated]" if web_search else ""
+            return f'[test reply from {model}] responding to: "{user_message}"{suffix}'
 
         if provider == "anthropic":
             client = anthropic.Anthropic(api_key=api_key, timeout=_CALL_TIMEOUT)
             response = client.messages.create(
                 model=model,
-                max_tokens=max_tokens,
+                # max_tokens is a ceiling, not a target - the model still stops naturally
+                # (end_turn) once it's done, so a generous cap costs nothing extra on a short
+                # reply. Web-search replies also spend budget on server_tool_use/
+                # web_search_tool_result blocks (the searches themselves), on top of the final
+                # text, so they get more room.
+                max_tokens=max_tokens or (16384 if web_search else 8192),
                 system=system_prompt or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": user_message}],
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}] if web_search else [],
+                system=system_prompt or anthropic.NOT_GIVEN,
+                messages=[{"role": "user", "content": user_message}],
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]
+                if web_search
+                else anthropic.NOT_GIVEN,
             )
+            # Only "text" blocks are joined - a web-search-enabled reply also carries
+            # server_tool_use/web_search_tool_result blocks (the search calls/results
+            # themselves), which are intentionally skipped here.
             text = "".join(block.text for block in response.content if block.type == "text")
             if not text:
                 raise ModelCallError(f"{provider} returned no text content")
@@ -125,10 +145,16 @@ def call_model(
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": user_message})
+            payload: dict = {"model": model, "messages": messages}
+            if web_search:
+                payload["web_search_options"] = {}
             resp = httpx.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json={
+                    **payload,
+                    "max_tokens": max_tokens or (16384 if web_search else 8192),
+                },
                 timeout=_CALL_TIMEOUT,
             )
             if resp.status_code != 200:
@@ -144,6 +170,8 @@ def call_model(
             payload: dict = {"contents": contents, "generationConfig": {"maxOutputTokens": max_tokens}}
             if system_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            if web_search:
+                payload["tools"] = [{"google_search": {}}]
             resp = httpx.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 params={"key": api_key},
