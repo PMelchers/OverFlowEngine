@@ -351,7 +351,7 @@ def _discord_await_reply(
         "actually type in chat."
     )
     # Give the model the message it's replying to, not just the reply in isolation -
-    # otherwise it has no idea what "it" refers to in something like "what about Sven?".
+    # otherwise it has no idea what "it" refers to in something like "what about this or him?".
     user_message = f'You said: "{outgoing_content}"\n\nThey replied: "{reply_content}"'
     try:
         reply_text = providers.call_model(
