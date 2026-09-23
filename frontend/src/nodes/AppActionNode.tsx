@@ -297,7 +297,7 @@ export default function AppActionNode({ data }: NodeProps<AppActionBlockData>) {
                     ref={replyInstructionsRef}
                     value={data.prompt ?? ''}
                     onChange={(e) => data.onChange?.({ prompt: e.target.value })}
-                    placeholder="e.g. Sven is a small player, but only mention that if asked. Answer in a friendly tone."
+                    placeholder="e.g. its actually amazing weather!"
                     rows={2}
                     className="nodrag w-full resize-none rounded border border-emerald-300 bg-white px-2 py-1 text-xs dark:border-emerald-700 dark:bg-gray-900 dark:text-gray-100"
                   />
