@@ -1,22 +1,16 @@
 import { Receipt } from 'lucide-react'
 import { useRef } from 'react'
-import { Handle, Position, useEdges, useNodeId, useNodes, type NodeProps } from 'reactflow'
+import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { CostEstimateBlockData } from './types'
+import { useConnectedModel } from './useConnectedModel'
 
-export default function CostEstimateNode({ data }: NodeProps<BlockNodeData>) {
+export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockData>) {
   const active = data.status === 'active'
   const availableVariables = data.availableVariables ?? []
   const stopsRef = useRef<HTMLInputElement>(null)
-  const nodeId = useNodeId()
-  const edges = useEdges()
-  const nodes = useNodes<BlockNodeData>()
-  const modelEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'model')
-  const modelNode = modelEdge ? nodes.find((n) => n.id === modelEdge.source) : undefined
-  const connectedModel = modelNode?.data.model
-    ? `${modelNode.data.model} (${modelNode.data.provider})`
-    : undefined
+  const connectedModel = useConnectedModel()
 
   const insertIntoStops = (name: string) => {
     if (!name) return

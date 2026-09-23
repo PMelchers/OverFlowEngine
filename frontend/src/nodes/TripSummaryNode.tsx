@@ -2,9 +2,9 @@ import { FileDown } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from './BlockHeader'
 import GridSnapBox from './GridSnapBox'
-import type { BlockNodeData } from './types'
+import type { TripSummaryBlockData } from './types'
 
-export default function TripSummaryNode({ data }: NodeProps<BlockNodeData>) {
+export default function TripSummaryNode({ data }: NodeProps<TripSummaryBlockData>) {
   const active = data.status === 'active'
 
   return (
