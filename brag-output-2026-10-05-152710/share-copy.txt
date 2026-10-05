@@ -1,0 +1,1 @@
+Bring your own model to OverFlowEngine: paste a key, it spots the provider, then wire one AI Model block into as many blocks as you like. The Trip Cost block uses it to search the web for real prices.

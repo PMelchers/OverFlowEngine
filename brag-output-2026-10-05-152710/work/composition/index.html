@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>OverFlowEngine Bring Your Own Model</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #ffffff; font-family: system-ui, sans-serif; color: #111827; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #ffffff;
+        background-image: radial-gradient(#d1d5db 2.5px, transparent 2.5px); background-size: 32px 32px; }
+      .label { position: absolute; left: 0; width: 1920px; text-align: center; top: 62px; font-size: 66px; font-weight: 800; letter-spacing: -0.02em; }
+      .label em { font-style: normal; color: #a21caf; }
+
+      .blk { position: absolute; box-sizing: border-box; border: 3px solid; border-radius: 16px; padding: 18px 22px; box-shadow: 0 6px 18px rgba(15,23,42,0.10); }
+      .head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+      .badge { font-size: 18px; font-weight: 800; color: #fff; padding: 4px 12px; border-radius: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+      .ttl { font-size: 28px; font-weight: 800; }
+      .fl { font-size: 17px; font-weight: 700; margin: 10px 0 6px; }
+      .fld { position: relative; height: 46px; }
+      .fld div { position: absolute; inset: 0; box-sizing: border-box; border-radius: 10px; display: flex; align-items: center; padding: 0 14px; font-size: 20px; }
+      .empty { border: 2px dashed #e879f9; background: #fdf4ff; color: #a21caf; }
+      .full { border: 2px solid #d946ef; background: #fff; color: #86198f; font-weight: 700; }
+      .ta { border: 2px solid #f0abfc; background: #fff; border-radius: 10px; padding: 10px 14px; font-size: 19px; line-height: 1.35; color: #374151; }
+
+      #agent { left: 330px; top: 210px; width: 520px; height: 330px; border-color: #e879f9; background: #fdf4ff; }
+      #agent .badge { background: #a21caf; } #agent .fl { color: #a21caf; }
+      #cost { left: 1070px; top: 210px; width: 520px; height: 520px; border-color: #eab308; background: #fefce8; }
+      #cost .badge { background: #a16207; } #cost .fl { color: #854d0e; }
+      #cost .ds { font-size: 18px; color: #4b5563; line-height: 1.35; }
+      #cost .empty { border-color: #eab308; background: #fefce8; color: #854d0e; }
+      .sr { display: flex; align-items: center; gap: 10px; font-size: 18px; color: #374151; height: 34px; }
+      .sr .ok { color: #15803d; font-weight: 800; margin-left: auto; }
+      .cr { display: flex; justify-content: space-between; font-size: 20px; height: 34px; align-items: center; border-bottom: 1px solid #fde68a; }
+      .cr b { color: #713f12; }
+      #total { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 21px; font-weight: 800; }
+      #total span:last-child { background: #dcfce7; color: #166534; border-radius: 999px; padding: 4px 12px; font-size: 17px; }
+      .hdl { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #d946ef; border: 3px solid #fff; box-shadow: 0 0 0 2px #e879f9; }
+
+      #circ { position: absolute; left: 875px; top: 815px; width: 170px; height: 170px; }
+      .cs { position: absolute; inset: 0; border-radius: 50%; border: 6px solid; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; }
+      #cLock { border-color: #9ca3af; background: #f3f4f6; color: #4b5563; }
+      #cDone { font-size: 16px; }
+      #cOpen, #cDone { border-color: #d946ef; background: #fae8ff; color: #86198f; }
+      #caption { position: absolute; left: 1080px; top: 870px; width: 520px; font-size: 22px; color: #4b5563; }
+      #caption b { color: #86198f; }
+
+      .pop { position: absolute; left: 1070px; top: 770px; width: 440px; background: #fff; border: 2px solid #d1d5db; border-radius: 14px; box-shadow: 0 16px 40px rgba(15,23,42,0.2); padding: 14px; box-sizing: border-box; }
+      .pop h4 { margin: 0 0 8px; font-size: 17px; color: #374151; }
+      .pr { height: 44px; display: flex; align-items: center; gap: 8px; font-size: 20px; padding: 0 10px; border-radius: 8px; }
+      .pr i { font-style: normal; color: #6b7280; }
+      .pr.sel { background: #fae8ff; color: #86198f; font-weight: 700; }
+      .pr.lk { color: #b91c1c; font-size: 18px; }
+
+      #kdim { position: absolute; inset: 0; background: rgba(17,24,39,0.5); opacity: 0; }
+      #kp { position: absolute; left: 560px; top: 300px; width: 800px; height: 430px; background: #fff; border-radius: 20px; box-shadow: 0 30px 70px rgba(15,23,42,0.35); padding: 32px 36px; box-sizing: border-box; }
+      #kp h2 { margin: 0 0 18px; font-size: 32px; font-weight: 800; }
+      #kp .fl { color: #374151; }
+      .in { height: 54px; border: 2px solid #d1d5db; border-radius: 10px; display: flex; align-items: center; padding: 0 16px; font-size: 22px; box-sizing: border-box; }
+      #kkey { border-color: #d946ef; font-family: monospace; }
+      .chips { display: flex; gap: 14px; margin-top: 22px; }
+      .chip { border-radius: 999px; padding: 8px 18px; font-size: 20px; font-weight: 700; }
+      #chD { background: #fae8ff; color: #86198f; } #chV { background: #dcfce7; color: #166534; }
+
+      #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; }
+      #wires { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+      #brand { position: absolute; left: 0; width: 1920px; text-align: center; top: 380px; font-size: 168px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; }
+      #brand span { color: #2563eb; }
+      #tag { position: absolute; left: 0; width: 1920px; text-align: center; top: 590px; font-size: 56px; font-weight: 600; color: #374151; }
+
+      /* layers revealed later */
+      #kdim, #kp, #chD, #chV, #cOpen, #cDone, #popA, #popB, .fill, #caption, .s, .k, .c, #total { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="20">
+      <div class="label" id="L1">Bring your <em>own model.</em></div>
+      <div class="label" id="L2">Paste a key. <em>It spots the provider.</em></div>
+      <div class="label" id="L3">Unlock it. <em>Pick the model.</em></div>
+      <div class="label" id="L4">Bind it to <em>any block.</em></div>
+      <div class="label" id="L5">Then it <em>searches the web</em> for real prices.</div>
+
+      <svg id="wires" viewBox="0 0 1920 1080" fill="none" stroke-linecap="round">
+        <path id="w1" d="M960 815 C 960 690, 590 690, 590 548" stroke="#d946ef" stroke-width="6" />
+        <path id="w2" d="M960 815 C 960 780, 1330 800, 1330 738" stroke="#d946ef" stroke-width="6" />
+      </svg>
+
+      <div class="blk" id="agent">
+        <div class="head"><span class="badge">AI Agent</span><span class="ttl">Pick Destination Agent</span></div>
+        <div class="fl">Model</div>
+        <div class="fld"><div class="empty" id="e1">Connect an AI Model block below ↓</div><div class="full fill" id="f1">claude-sonnet-5</div></div>
+        <div class="fl">Instructions</div>
+        <div class="ta">Name exactly one ideal specific destination - concise, no extra commentary.</div>
+      </div>
+      <div class="hdl" style="left:581px;top:531px"></div>
+
+      <div class="blk" id="cost">
+        <div class="head"><span class="badge">Trip Cost</span><span class="ttl">Trip Cost</span></div>
+        <div class="ds">AI searches the web for real prices of your stops and totals them against your budget</div>
+        <div class="fl">Model</div>
+        <div class="fld"><div class="empty" id="e2">Connect an AI Model block below ↓</div><div class="full fill" id="f2">claude-sonnet-5</div></div>
+        <div style="height:12px"></div>
+        <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Florence hotel, 9 nights, July<span class="ok k">✓</span></div>
+        <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Uffizi Gallery tickets, 2 adults<span class="ok k">✓</span></div>
+        <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Fuel, round trip by car<span class="ok k">✓</span></div>
+        <div style="height:8px"></div>
+        <div class="cr c"><span>Accommodation</span><b>€900</b></div>
+        <div class="cr c"><span>At the destination</span><b>€240</b></div>
+        <div class="cr c"><span>Transport</span><b>€320</b></div>
+        <div id="total"><span>Total €1,460</span><span>within 2000 EUR budget</span></div>
+      </div>
+      <div class="hdl" style="left:1321px;top:721px"></div>
+
+      <div id="circ">
+        <div class="cs" id="cLock"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Locked</div>
+        <div class="cs" id="cOpen" data-layout-allow-overlap><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#86198f" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>Pick a model</div>
+        <div class="cs" id="cDone" data-layout-allow-overlap><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#86198f" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>claude-sonnet-5</div>
+      </div>
+      <div id="caption"><b>One connected key</b> can feed several blocks.</div>
+
+      <div class="pop" id="popA">
+        <h4>Pick a verified API key</h4>
+        <div class="pr sel">✓ Personal key <i>(anthropic)</i></div>
+        <div class="pr">✓ Work key <i>(openai)</i></div>
+        <div class="pr">✓ Gemini key <i>(google)</i></div>
+      </div>
+      <div class="pop" id="popB">
+        <h4>Pick a model</h4>
+        <div class="pr sel">claude-sonnet-5</div>
+        <div class="pr">claude-opus-5</div>
+        <div class="pr">claude-haiku-4-5</div>
+        <div class="pr lk">🔒 Lock / change key</div>
+      </div>
+
+      <div id="kp">
+        <h2>Add an API key</h2>
+        <div class="fl">Label</div><div class="in">Personal key</div>
+        <div class="fl">API key</div><div class="in" id="kkey"></div>
+        <div class="chips"><span class="chip" id="chD">Detected: anthropic</span><span class="chip" id="chV">✓ Verified</span></div>
+      </div>
+
+      <div id="brand">Over<span>Flow</span>Engine</div>
+      <div id="tag">Your key. Your model. Any block.</div>
+
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L18 13 Z" fill="#111827" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+      <audio id="bgm" data-start="0" data-duration="20" data-track-index="10" data-volume="0.4" src="assets/music/bed.mp3"></audio>
+      <audio id="s1" data-start="0.5" data-duration="0.19" data-track-index="11" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="s2" data-start="1.05" data-duration="0.19" data-track-index="12" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="s3" data-start="4.32" data-duration="0.05" data-track-index="13" data-volume="0.35" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s4" data-start="4.87" data-duration="0.05" data-track-index="14" data-volume="0.35" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s5" data-start="5.95" data-duration="0.06" data-track-index="15" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="s6" data-start="7.04" data-duration="0.06" data-track-index="16" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="s7" data-start="8.13" data-duration="0.06" data-track-index="17" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="s8" data-start="8.68" data-duration="0.06" data-track-index="18" data-volume="0.3" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="s9" data-start="9.23" data-duration="0.06" data-track-index="19" data-volume="0.3" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="s10" data-start="11.96" data-duration="0.18" data-track-index="20" data-volume="0.4" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="s11" data-start="12.51" data-duration="0.05" data-track-index="21" data-volume="0.28" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s12" data-start="13.05" data-duration="0.05" data-track-index="22" data-volume="0.28" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s13" data-start="13.6" data-duration="0.05" data-track-index="23" data-volume="0.28" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s14" data-start="16.33" data-duration="0.11" data-track-index="24" data-volume="0.35" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="s15" data-start="17.68" data-duration="1.5" data-track-index="25" data-volume="0.45" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const IN = "power3.out";
+      const cur = (x, y) => ({ x: x - 5, y: y - 4 });
+      const lab = (id, a, b) => {
+        tl.fromTo(id, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, a);
+        tl.to(id, { opacity: 0, y: -26, duration: 0.3, ease: "power2.in" }, b);
+      };
+      const swap = (from, to, t) => { tl.to(from, { opacity: 0, duration: 0.01 }, t); tl.to(to, { opacity: 1, duration: 0.01 }, t); };
+
+      // typed key (deterministic split)
+      const kk = document.getElementById("kkey");
+      "sk-ant-api03-••••••••••••••••".split("").forEach((ch) => { const s = document.createElement("span"); s.className = "kc"; s.textContent = ch; kk.appendChild(s); });
+      // wire lengths measured once at build
+      ["#w1", "#w2"].forEach((id) => { const p = document.querySelector(id); const L = p.getTotalLength(); p.setAttribute("stroke-dasharray", L); p.setAttribute("stroke-dashoffset", L); p.dataset.len = L; });
+
+      // Scene 1: blocks land (beat-grid 0.5 / 1.05 / 1.59)
+      lab("#L1", 0.3, 2.5);
+      tl.fromTo("#agent", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 0.5);
+      tl.fromTo("#cost", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 1.05);
+      tl.fromTo(".hdl", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 1.2);
+      tl.fromTo("#circ", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)" }, 1.59);
+
+      // Scene 2: add a key, provider detected from its format
+      tl.to(["#agent", "#cost", "#circ", ".hdl"], { opacity: 0, duration: 0.25 }, 2.6);
+      tl.to(["#agent", "#cost", "#circ", ".hdl"], { opacity: 1, duration: 0.3 }, 5.65);
+      tl.fromTo("#kp", { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: IN }, 2.68);
+      lab("#L2", 2.9, 5.5);
+      tl.fromTo(".kc", { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.03 }, 3.1);
+      tl.fromTo("#chD", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, 4.32);
+      tl.fromTo("#chV", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, 4.87);
+      tl.to("#kp", { opacity: 0, duration: 0.3 }, 5.4);
+
+      // Scene 3: unlock the AI Model block, pick a model
+      tl.fromTo("#cursor", { opacity: 0, ...cur(1400, 1040) }, { opacity: 1, ...cur(965, 905), duration: 0.6, ease: "power2.inOut" }, 5.3);
+      lab("#L3", 6.0, 8.45);
+      tl.fromTo("#popA", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: IN }, 6.0);
+      tl.to("#cursor", { ...cur(1190, 852), duration: 0.5, ease: "power2.inOut" }, 6.45);
+      tl.to("#popA", { opacity: 0, duration: 0.1 }, 7.06);
+      swap("#cLock", "#cOpen", 7.06);
+      tl.fromTo("#popB", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: IN }, 7.12);
+      tl.to("#popB", { opacity: 0, duration: 0.15 }, 8.15);
+      swap("#cOpen", "#cDone", 8.15);
+      tl.to("#cursor", { opacity: 0, duration: 0.3 }, 8.35);
+
+      // Scene 4: bind to two blocks (beat-locked 8.68 strong cue, then 9.23)
+      lab("#L4", 8.7, 11.6);
+      tl.to("#w1", { strokeDashoffset: 0, duration: 0.4, ease: "power2.out" }, 8.68);
+      swap("#e1", "#f1", 9.05);
+      tl.to("#w2", { strokeDashoffset: 0, duration: 0.4, ease: "power2.out" }, 9.23);
+      swap("#e2", "#f2", 9.6);
+      tl.fromTo("#caption", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.4, ease: IN }, 9.9);
+
+      // Scene 5: Trip Cost runs a web search
+      tl.to("#caption", { opacity: 0, duration: 0.3 }, 11.6);
+      tl.fromTo("#cost", { boxShadow: "0 0 0 0 rgba(34,197,94,0.7)" }, { boxShadow: "0 0 0 28px rgba(34,197,94,0)", duration: 0.8, ease: "power2.out", immediateRender: false }, 11.96);
+      tl.to("#cost", { borderColor: "#22c55e", duration: 0.2 }, 11.96);
+      lab("#L5", 12.1, 16.95);
+      [12.51, 13.05, 13.6].forEach((t, i) => {
+        tl.fromTo(document.querySelectorAll(".s")[i], { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.3, ease: IN, immediateRender: false }, t);
+        tl.fromTo(document.querySelectorAll(".k")[i], { opacity: 0 }, { opacity: 1, duration: 0.2, immediateRender: false }, t + 0.4);
+      });
+      [14.69, 15.23, 15.78].forEach((t, i) =>
+        tl.fromTo(document.querySelectorAll(".c")[i], { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.3, ease: IN, immediateRender: false }, t));
+      tl.fromTo("#total", { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)", immediateRender: false }, 16.33);
+
+      // Outro (beat-locked 17.41 strong cue)
+      tl.to(["#agent", "#cost", "#circ", ".hdl", "#wires"], { opacity: 0, scale: 0.96, duration: 0.4, ease: "power2.in" }, 17.2);
+      tl.fromTo("#brand", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, 17.68);
+      tl.fromTo("#tag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 17.95);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
