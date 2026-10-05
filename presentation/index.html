@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OverFlowEngine - Draw the workflow. Run the workflow.</title>
+
+<!-- Fonts: Cabinet Grotesk (display) + General Sans (body) from Fontshare, JetBrains Mono (labels) from Google -->
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700&f[]=general-sans@400,500,600&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME - change these to restyle the whole deck
+   Palette is taken from the product itself: dark control-room
+   surface, with the green "pulse" that travels through a running flow.
+   =========================================== */
+:root {
+    --stage-bg: #05070d;          /* letterbox colour around the 16:9 stage */
+    --slide-bg: #080c16;
+    --ink-2: #0f1626;             /* raised surfaces (cards, nodes) */
+    --ink-3: #151e33;
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #eef1f7;
+    --muted: #8d97ae;
+    --pulse: #4dffa3;             /* the running-flow green */
+    --pulse-soft: rgba(77, 255, 163, 0.14);
+    --blue: #5b8cff;              /* block / wire blue from the canvas */
+
+    --font-display: 'Cabinet Grotesk', 'Segoe UI', sans-serif;
+    --font-body: 'General Sans', 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, monospace;
+
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE - MANDATORY BASE STYLES (viewport-base.css)
+   Slides are authored at 1920x1080 and scaled as a whole.
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide {
+        position: relative; display: block !important; visibility: visible !important;
+        opacity: 1 !important; pointer-events: auto !important;
+        width: 1920px; height: 1080px; break-after: page; page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+}
+
+/* ===========================================
+   SLIDE BASE - canvas dot grid + chrome row
+   =========================================== */
+.slide {
+    color: var(--text);
+    font-family: var(--font-body);
+    background:
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.07) 1.5px, transparent 1.6px) 0 0 / 48px 48px,
+        radial-gradient(ellipse 900px 600px at 85% -10%, rgba(91, 140, 255, 0.14), transparent 70%),
+        radial-gradient(ellipse 800px 500px at -5% 105%, rgba(77, 255, 163, 0.08), transparent 70%),
+        var(--slide-bg);
+}
+.chrome {
+    position: absolute; top: 52px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-mono); font-size: 20px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--muted);
+}
+.chrome .brand { display: flex; align-items: center; gap: 14px; }
+.chrome .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--pulse); box-shadow: 0 0 18px var(--pulse);
+}
+.body { position: absolute; left: 96px; right: 96px; top: 140px; bottom: 90px; }
+
+/* ===========================================
+   TYPE
+   =========================================== */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 80px; line-height: 1.02; }
+h2 em, h1 em { font-style: normal; color: var(--pulse); }
+.eyebrow {
+    font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--pulse); margin-bottom: 26px;
+}
+.lead { font-size: 36px; line-height: 1.4; color: var(--muted); font-weight: 400; }
+.note { font-size: 22px; line-height: 1.4; color: var(--muted); margin-top: 34px; font-family: var(--font-mono); }
+
+/* ===========================================
+   ANIMATION - .reveal children fade up when the slide becomes .visible
+   Stagger with style="--d:.2s"
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(34px);
+    transition: opacity 0.8s var(--ease-out-expo), transform 0.8s var(--ease-out-expo);
+    transition-delay: var(--d, 0s);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+
+/* ===========================================
+   VIDEO "SCREEN" - frames each brag like a live app window
+   =========================================== */
+.screen {
+    position: relative;
+    width: 1104px; height: 621px;
+    border-radius: 26px; overflow: hidden;
+    background: #000;
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.65), 0 0 90px rgba(77, 255, 163, 0.10);
+    cursor: pointer;
+}
+.screen.big { width: 1296px; height: 729px; }
+.screen video { display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
+.screen figcaption {
+    position: absolute; left: 22px; bottom: 20px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px; border-radius: 999px;
+    background: rgba(8, 12, 22, 0.78); backdrop-filter: blur(8px);
+    font-family: var(--font-mono); font-size: 19px; letter-spacing: 0.08em; color: var(--text);
+    opacity: 0; transition: opacity 0.3s;
+}
+.screen:hover figcaption, .screen.paused figcaption { opacity: 1; }
+.screen figcaption .rec { width: 10px; height: 10px; border-radius: 50%; background: var(--pulse); box-shadow: 0 0 12px var(--pulse); }
+.snd {
+    position: absolute; right: 22px; bottom: 20px;
+    padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line);
+    background: rgba(8, 12, 22, 0.78); color: var(--text); cursor: pointer;
+    font-family: var(--font-mono); font-size: 19px; letter-spacing: 0.08em;
+    opacity: 0; transition: opacity 0.3s;
+}
+.screen:hover .snd, .snd.off { opacity: 1; }
+.snd.off { color: #0a0f1c; background: var(--pulse); border-color: var(--pulse); }
+
+/* ===========================================
+   LAYOUT: SPLIT (text left, video right)
+   =========================================== */
+.split { display: grid; grid-template-columns: 560px 1104px; column-gap: 64px; align-items: center; height: 100%; }
+.points { list-style: none; display: grid; gap: 30px; margin-top: 40px; }
+.points li {
+    font-size: 33px; line-height: 1.35; padding-left: 44px; position: relative; color: var(--text);
+}
+.points li::before {
+    content: ""; position: absolute; left: 0; top: 14px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--pulse); box-shadow: 0 0 16px var(--pulse);
+}
+.points li b { color: var(--pulse); font-weight: 600; }
+.tagline { margin-top: 44px; font-family: var(--font-display); font-weight: 800; font-size: 40px; letter-spacing: -0.01em; color: var(--blue); }
+
+/* ===========================================
+   LAYOUT: STACK (headline over a big video)
+   =========================================== */
+.stack { display: flex; flex-direction: column; align-items: center; height: 100%; }
+.stack .head { width: 100%; display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
+.stack h2 { font-size: 68px; }
+.stack .hint { font-family: var(--font-mono); font-size: 20px; color: var(--muted); letter-spacing: 0.08em; padding-bottom: 10px; }
+
+/* ===========================================
+   CARDS
+   =========================================== */
+.cards { display: grid; gap: 40px; }
+.cards.three { grid-template-columns: repeat(3, 1fr); }
+.cards.four { grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.card {
+    background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+    border: 1px solid var(--line); border-radius: 28px; padding: 48px 44px;
+}
+.card .k { font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.16em; color: var(--pulse); margin-bottom: 30px; }
+.card h3 { font-size: 54px; line-height: 1.04; margin-bottom: 22px; }
+.card p { font-size: 29px; line-height: 1.42; color: var(--muted); }
+.cards.four .card { padding: 40px 34px; }
+.cards.four .card h3 { font-size: 46px; }
+.cards.four .card p { font-size: 26px; }
+
+/* chips (block palette) */
+.chip-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.chip-label { font-family: var(--font-mono); font-size: 19px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+.chip {
+    font-family: var(--font-mono); font-size: 24px; padding: 12px 22px; border-radius: 14px;
+    background: var(--ink-2); border: 1px solid var(--line); color: var(--text);
+}
+.chip.core { border-color: rgba(91, 140, 255, 0.55); }
+.chip.agent { border-color: rgba(77, 255, 163, 0.55); color: var(--pulse); }
+.chip.app { border-color: rgba(255, 207, 92, 0.5); color: #ffcf5c; }
+
+/* ===========================================
+   TITLE SLIDE
+   =========================================== */
+.title-slide h1 { font-size: 196px; line-height: 0.92; margin-top: 18px; }
+.title-slide .tag { font-family: var(--font-display); font-weight: 700; font-size: 58px; letter-spacing: -0.01em; margin-top: 38px; }
+.title-slide .tag em { font-style: normal; color: var(--pulse); }
+.title-slide .sub { font-size: 34px; line-height: 1.4; color: var(--muted); max-width: 1000px; margin-top: 26px; }
+.flow-art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; max-width: none; max-height: none; }
+.flow-art .node { fill: #0f1626; stroke: rgba(255, 255, 255, 0.16); stroke-width: 2; animation: fire 6s linear infinite; }
+.flow-art .n1 { animation-delay: 0.33s; } .flow-art .n2 { animation-delay: 1.94s; }
+.flow-art .n3 { animation-delay: 3.55s; } .flow-art .n4 { animation-delay: 5.15s; }
+@keyframes fire {
+    0%   { stroke: #4dffa3; fill: #12281f; }
+    14%  { stroke: rgba(255, 255, 255, 0.16); fill: #0f1626; }
+    100% { stroke: rgba(255, 255, 255, 0.16); fill: #0f1626; }
+}
+.flow-art text { font-family: var(--font-mono); fill: #8d97ae; font-size: 20px; letter-spacing: 0.14em; }
+.flow-art text.t { font-family: var(--font-display); font-weight: 800; fill: #eef1f7; font-size: 40px; letter-spacing: -0.01em; }
+
+/* ===========================================
+   HOW IT WORKS - animated pipeline pulse
+   =========================================== */
+.pipe { position: relative; }
+.pipe::before {
+    content: ""; position: absolute; left: 60px; right: 60px; top: 32px; height: 2px; background: var(--line);
+}
+.pipe::after {
+    content: ""; position: absolute; top: 25px; left: 60px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--pulse); box-shadow: 0 0 22px var(--pulse);
+    animation: travel 5s ease-in-out infinite;
+}
+@keyframes travel { 0% { left: 60px; } 100% { left: calc(100% - 76px); } }
+.pipe .card { margin-top: 64px; padding: 36px 32px; }
+.pipe .card h3 { font-size: 46px; }
+.pipe .card p { font-size: 26px; }
+
+/* ===========================================
+   CLOSING
+   =========================================== */
+.code {
+    display: inline-block; margin-top: 56px; padding: 26px 40px; border-radius: 20px;
+    background: var(--ink-2); border: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 32px; color: var(--text);
+}
+.code .p { color: var(--pulse); }
+.code .c { color: var(--muted); }
+
+/* ===========================================
+   DECK CHROME (outside the stage): progress bar + hints + edit toggle
+   =========================================== */
+.deck-progress { position: fixed; top: 0; left: 0; height: 4px; width: 0; background: var(--pulse); box-shadow: 0 0 12px var(--pulse); z-index: 1200; transition: width 0.4s var(--ease-out-expo); }
+.deck-controls {
+    font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.35); white-space: nowrap; transition: opacity 0.6s;
+}
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle {
+    position: fixed; top: 14px; left: 14px; z-index: 10001; padding: 8px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: #0f1626; color: #eef1f7; cursor: pointer;
+    font-family: 'JetBrains Mono', Consolas, monospace; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.editing [contenteditable="true"] { outline: 1px dashed rgba(77, 255, 163, 0.55); outline-offset: 4px; cursor: text; }
+</style>
+</head>
+
+<body>
+<div class="deck-progress" id="progress"></div>
+
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+    <!-- ===== 01 TITLE ===== -->
+    <section class="slide title-slide active" data-title="Title">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+
+        <!-- Decorative flow: a green pulse travels the chain and lights each block as it passes -->
+        <svg class="flow-art" viewBox="0 0 1920 1080" aria-hidden="true">
+            <path d="M96 840 H1824" stroke="rgba(91,140,255,0.55)" stroke-width="3" fill="none"/>
+            <circle r="30" fill="rgba(77,255,163,0.22)"><animateMotion dur="6s" repeatCount="indefinite" path="M96 840 H1824"/></circle>
+            <circle r="11" fill="#4dffa3"><animateMotion dur="6s" repeatCount="indefinite" path="M96 840 H1824"/></circle>
+            <rect class="node n1" x="96"   y="770" width="336" height="140" rx="22"/>
+            <rect class="node n2" x="560"  y="770" width="336" height="140" rx="22"/>
+            <rect class="node n3" x="1024" y="770" width="336" height="140" rx="22"/>
+            <rect class="node n4" x="1488" y="770" width="336" height="140" rx="22"/>
+            <text x="128"  y="822">FORM</text>      <text class="t" x="128"  y="872">Plan My Trip</text>
+            <text x="592"  y="822">AI AGENT</text>  <text class="t" x="592"  y="872">Pick Destination</text>
+            <text x="1056" y="822">TRIP COST</text> <text class="t" x="1056" y="872">Searches the web</text>
+            <text x="1520" y="822">OUTPUT</text>    <text class="t" x="1520" y="872">Trip PDF</text>
+        </svg>
+
+        <div class="body" style="top:190px;">
+            <div class="eyebrow reveal">A visual workflow builder</div>
+            <h1 class="reveal" style="--d:.1s">OverFlow<em>Engine</em></h1>
+            <p class="tag reveal" style="--d:.25s">Draw the workflow. <em>Run the workflow.</em></p>
+            <p class="sub reveal" style="--d:.4s">Drag blocks onto a canvas, wire them together, hit Run. AI agents are just another block.</p>
+        </div>
+    </section>
+
+    <!-- ===== 02 WHAT IT IS ===== -->
+    <section class="slide" data-title="What it is">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body">
+            <div class="eyebrow reveal">What it is</div>
+            <h2 class="reveal" style="--d:.1s;max-width:1500px">A canvas where AI agents are <em>just another block.</em></h2>
+            <div class="cards three" style="margin-top:70px">
+                <div class="card reveal" style="--d:.3s">
+                    <div class="k">01</div><h3>Draw it</h3>
+                    <p>Drag blocks onto the canvas, snap them to the grid, wire them together.</p>
+                </div>
+                <div class="card reveal" style="--d:.45s">
+                    <div class="k">02</div><h3>Run it</h3>
+                    <p>The server executes the flow: real variables, branching and logging.</p>
+                </div>
+                <div class="card reveal" style="--d:.6s">
+                    <div class="k">03</div><h3>Grow it</h3>
+                    <p>AI agents, your own models, real apps and shared flows all plug in as blocks.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 03 OVERVIEW VIDEO ===== -->
+    <section class="slide" data-title="In 20 seconds">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="stack">
+            <div class="head reveal">
+                <div><div class="eyebrow" style="margin-bottom:14px">In 20 seconds</div><h2>Draw it. Run it.</h2></div>
+                <div class="hint">click video to pause · M for sound</div>
+            </div>
+            <figure class="screen big reveal" style="--d:.2s">
+                <video src="videos/Product_Overview.mp4" poster="videos/Product_Overview.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Product overview · 0:20</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 04 HOW IT WORKS ===== -->
+    <section class="slide" data-title="How it works">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body">
+            <div class="eyebrow reveal">How it works</div>
+            <h2 class="reveal" style="--d:.1s">Drag. Wire. Run. <em>Watch.</em></h2>
+            <div class="pipe cards four reveal" style="--d:.3s;margin-top:56px">
+                <div class="card"><div class="k">01 · DRAG</div><h3>Place blocks</h3><p>Pick from the palette. Grid snapping and alignment guides keep it tidy.</p></div>
+                <div class="card"><div class="k">02 · WIRE</div><h3>Connect them</h3><p>Link outputs to inputs. Group blocks into a reusable saved block.</p></div>
+                <div class="card"><div class="k">03 · RUN</div><h3>Server-side</h3><p>Variables persist and conditions are evaluated safely, never with arbitrary eval.</p></div>
+                <div class="card"><div class="k">04 · WATCH</div><h3>Console + runs</h3><p>Follow each block in the console. Every run is recorded.</p></div>
+            </div>
+            <div style="margin-top:52px;display:grid;grid-template-columns:1.1fr 1.1fr 0.8fr;gap:44px" class="reveal">
+                <div><p class="chip-label">Core blocks</p><div class="chip-row">
+                    <span class="chip core">Trigger</span><span class="chip core">Variable</span><span class="chip core">If</span><span class="chip core">Choice</span><span class="chip core">Log</span><span class="chip core">App Trigger</span></div></div>
+                <div><p class="chip-label">Agentic blocks</p><div class="chip-row">
+                    <span class="chip agent">AI Agent</span><span class="chip agent">AI Input</span><span class="chip agent">AI Output</span><span class="chip agent">AI Model</span><span class="chip agent">Trip Cost</span></div></div>
+                <div><p class="chip-label">Apps and tasks</p><div class="chip-row">
+                    <span class="chip app">App Action</span><span class="chip app">Task</span></div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 05 FULL TOUR ===== -->
+    <section class="slide" data-title="Full tour">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="stack">
+            <div class="head reveal">
+                <div><div class="eyebrow" style="margin-bottom:14px">The full tour · 46 seconds</div><h2>From dashboard to a shared flow.</h2></div>
+                <div class="hint">click video to pause · M for sound</div>
+            </div>
+            <figure class="screen big reveal" style="--d:.2s">
+                <video src="videos/Product_Tour.mp4" poster="videos/Product_Tour.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Full tour · 0:46</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 06 BRING YOUR OWN MODEL ===== -->
+    <section class="slide" data-title="Bring your own model">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="split">
+            <div>
+                <div class="eyebrow reveal">Feature · Models</div>
+                <h2 class="reveal" style="--d:.1s">Bring your own <em>model.</em></h2>
+                <ul class="points">
+                    <li class="reveal" style="--d:.3s">Paste an <b>OpenAI, Anthropic or Google</b> key. It recognises the provider.</li>
+                    <li class="reveal" style="--d:.45s">Unlock one <b>AI Model</b> block and pick the model.</li>
+                    <li class="reveal" style="--d:.6s">Wire it into as many blocks as you like.</li>
+                </ul>
+                <p class="tagline reveal" style="--d:.75s">Your key. Your model. Any block.</p>
+            </div>
+            <figure class="screen reveal" style="--d:.25s">
+                <video src="videos/Bring_Your_Own_Model.mp4" poster="videos/Bring_Your_Own_Model.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Bring your own model · 0:20</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 07 VACATION PLANNER ===== -->
+    <section class="slide" data-title="Vacation Planner">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="split">
+            <div>
+                <div class="eyebrow reveal">Feature · Agents</div>
+                <h2 class="reveal" style="--d:.1s">One form in. <em>A whole trip out.</em></h2>
+                <ul class="points">
+                    <li class="reveal" style="--d:.3s">One agent <b>picks the place</b>, another <b>writes the itinerary</b>.</li>
+                    <li class="reveal" style="--d:.45s">Real <b>Google + Apple Maps</b> routes for the stops.</li>
+                    <li class="reveal" style="--d:.6s"><b>Trip Cost</b> searches the web for prices, then a <b>Trip PDF</b> comes out.</li>
+                </ul>
+                <p class="note reveal" style="--d:.75s">Demo data in the video is illustrative.</p>
+            </div>
+            <figure class="screen reveal" style="--d:.25s">
+                <video src="videos/Vacation_Planner.mp4" poster="videos/Vacation_Planner.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Vacation Planner flow · 0:20</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 08 DISCORD / APPS ===== -->
+    <section class="slide" data-title="Talks to your apps">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="split">
+            <div>
+                <div class="eyebrow reveal">Feature · Apps</div>
+                <h2 class="reveal" style="--d:.1s">Your flow can <em>talk in Discord.</em></h2>
+                <ul class="points">
+                    <li class="reveal" style="--d:.3s">Link <b>your own bot</b> once.</li>
+                    <li class="reveal" style="--d:.45s">Drop an <b>App Action</b> block in a flow: pick the bot, channel and message.</li>
+                    <li class="reveal" style="--d:.6s">It posts, <b>waits for the first reply</b>, and answers it with AI.</li>
+                </ul>
+                <p class="note reveal" style="--d:.75s">Google and Microsoft Calendar actions sit alongside it. Bot, token and chat in the video are stand-ins.</p>
+            </div>
+            <figure class="screen reveal" style="--d:.25s">
+                <video src="videos/Discord_Flow.mp4" poster="videos/Discord_Flow.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Discord flow · 0:20</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 09 MARKETPLACE ===== -->
+    <section class="slide" data-title="Marketplace">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body"><div class="split">
+            <div>
+                <div class="eyebrow reveal">Feature · Marketplace</div>
+                <h2 class="reveal" style="--d:.1s">Share a flow. <em>Copy anyone's.</em></h2>
+                <ul class="points">
+                    <li class="reveal" style="--d:.3s"><b>Publish</b> a saved flow in one click.</li>
+                    <li class="reveal" style="--d:.45s">Anyone can <b>copy it</b> into their own account.</li>
+                    <li class="reveal" style="--d:.6s">AI Model blocks are <b>never shared</b>. Copiers link their own key.</li>
+                </ul>
+                <p class="note reveal" style="--d:.75s">Usernames and listings in the video are illustrative.</p>
+            </div>
+            <figure class="screen reveal" style="--d:.25s">
+                <video src="videos/Marketplace_Publish_And_Copy.mp4" poster="videos/Marketplace_Publish_And_Copy.jpg" preload="metadata" playsinline></video>
+                <figcaption><span class="rec"></span>Marketplace · 0:20</figcaption>
+                <button class="snd" type="button">SOUND ON</button>
+            </figure>
+        </div></div>
+    </section>
+
+    <!-- ===== 10 UNDER THE HOOD ===== -->
+    <section class="slide" data-title="Under the hood">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body">
+            <div class="eyebrow reveal">Under the hood</div>
+            <h2 class="reveal" style="--d:.1s">Built to grow into an <em>agentic platform.</em></h2>
+            <div class="cards four" style="margin-top:70px">
+                <div class="card reveal" style="--d:.3s"><div class="k">CANVAS</div><h3>React Flow</h3><p>A React canvas with grid snapping and node-to-node alignment guides.</p></div>
+                <div class="card reveal" style="--d:.42s"><div class="k">ENGINE</div><h3>FastAPI</h3><p>Runs flows server-side: variables, branching, logging, persistence.</p></div>
+                <div class="card reveal" style="--d:.54s"><div class="k">DATA</div><h3>Postgres + Redis</h3><p>Started through Docker by the project's start script. Runs are recorded.</p></div>
+                <div class="card reveal" style="--d:.66s"><div class="k">APPS</div><h3>MCP + keys</h3><p>Discord through an MCP server, and models run on keys you bring.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 11 CLOSING ===== -->
+    <section class="slide title-slide" data-title="Close">
+        <div class="chrome"><span class="brand"><span class="dot"></span>OverFlowEngine</span><span class="pg"></span></div>
+        <div class="body" style="top:230px;">
+            <div class="eyebrow reveal">Try it</div>
+            <h2 class="reveal" style="--d:.1s;font-size:150px;line-height:0.98">Draw the workflow.<br><em>Run the workflow.</em></h2>
+            <div class="code reveal" style="--d:.35s"><span class="p">PS&gt;</span> .\start.ps1 <span class="c">&nbsp;&nbsp;# then open</span> localhost:5173</div>
+        </div>
+    </section>
+
+</main>
+</div>
+
+<div class="deck-controls" id="hint">← → navigate · P play/pause · M sound · E edit</div>
+<div class="edit-hotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">Edit text</button>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   - scales the 1920x1080 stage to the window
+   - keyboard / touch / wheel navigation, URL hash (#3 = slide 3)
+   - autoplays the video on the active slide, resets it when you leave
+   - inline text editing (E), Ctrl+S saves an edited copy
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = [...document.querySelectorAll('.slide')];
+        this.stage = document.getElementById('deckStage');
+        this.progress = document.getElementById('progress');
+        this.muted = false;          /* sound starts on; falls back to muted if the browser blocks it */
+        this.editing = false;
+        this.playTimer = null;
+        this.lastWheel = 0;
+        this.i = 0;
+
+        this.slides.forEach((s, k) => {
+            const pg = s.querySelector('.pg');
+            if (pg) pg.textContent = String(k + 1).padStart(2, '0') + ' / ' + String(this.slides.length).padStart(2, '0');
+        });
+
+        this.setupStageScale();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupWheelNav();
+        this.setupVideos();
+        this.setupEditing();
+
+        const start = parseInt(location.hash.slice(1), 10);
+        this.showSlide(Number.isFinite(start) ? start - 1 : 0);
+        setTimeout(() => { document.getElementById('hint').style.opacity = '0.0'; }, 6000);
+    }
+
+    /* --- scale the whole stage uniformly, letterbox as needed --- */
+    setupStageScale() {
+        const scale = () => {
+            const f = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            const x = (window.innerWidth - 1920 * f) / 2;
+            const y = (window.innerHeight - 1080 * f) / 2;
+            this.stage.style.transform = `translate(${x}px, ${y}px) scale(${f})`;
+        };
+        scale();
+        window.addEventListener('resize', scale);
+    }
+
+    /* --- keyboard --- */
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            if (e.target.isContentEditable) return;           /* typing in edit mode */
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveCopy(); return; }
+            switch (e.key) {
+                case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': e.preventDefault(); this.next(); break;
+                case 'ArrowLeft': case 'ArrowUp': case 'PageUp': e.preventDefault(); this.prev(); break;
+                case 'Home': this.showSlide(0); break;
+                case 'End': this.showSlide(this.slides.length - 1); break;
+                case 'p': case 'P': this.togglePlay(this.currentVideo()); break;
+                case 'm': case 'M': this.toggleMute(); break;
+                case 'e': case 'E': this.toggleEdit(); break;
+            }
+        });
+    }
+
+    /* --- touch swipe --- */
+    setupTouchNav() {
+        let sx = 0, sy = 0;
+        document.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) dx < 0 ? this.next() : this.prev();
+        }, { passive: true });
+    }
+
+    /* --- mouse wheel (throttled) --- */
+    setupWheelNav() {
+        document.addEventListener('wheel', (e) => {
+            if (this.editing || Math.abs(e.deltaY) < 30 || Date.now() - this.lastWheel < 800) return;
+            this.lastWheel = Date.now();
+            e.deltaY > 0 ? this.next() : this.prev();
+        }, { passive: true });
+    }
+
+    /* --- video helpers --- */
+    currentVideo() { return this.slides[this.i].querySelector('video'); }
+
+    setupVideos() {
+        document.querySelectorAll('.screen').forEach((fig) => {
+            const v = fig.querySelector('video');
+            const snd = fig.querySelector('.snd');
+            fig.addEventListener('click', (e) => {
+                if (e.target === snd) { this.toggleMute(); return; }
+                this.togglePlay(v);
+            });
+            v.addEventListener('pause', () => fig.classList.add('paused'));
+            v.addEventListener('play', () => fig.classList.remove('paused'));
+        });
+    }
+
+    play(v) {
+        if (!v) return;
+        v.muted = this.muted;
+        const p = v.play();
+        if (p) p.catch(() => {                  /* autoplay with sound blocked: play muted, offer a sound button */
+            this.muted = true; v.muted = true; v.play().catch(() => {}); this.syncSound();
+        });
+        this.syncSound();
+    }
+
+    togglePlay(v) {
+        if (!v) return;
+        if (v.ended) { v.currentTime = 0; this.play(v); }
+        else if (v.paused) this.play(v);
+        else v.pause();
+    }
+
+    toggleMute() {
+        this.muted = !this.muted;
+        document.querySelectorAll('video').forEach((v) => { v.muted = this.muted; });
+        this.syncSound();
+    }
+
+    syncSound() {
+        document.querySelectorAll('.snd').forEach((b) => {
+            b.textContent = this.muted ? 'MUTED · CLICK FOR SOUND' : 'SOUND ON';
+            b.classList.toggle('off', this.muted);
+        });
+    }
+
+    /* --- navigation --- */
+    next() { this.showSlide(this.i + 1); }
+    prev() { this.showSlide(this.i - 1); }
+
+    showSlide(index) {
+        this.i = Math.max(0, Math.min(index, this.slides.length - 1));
+        this.slides.forEach((s, k) => {
+            const on = k === this.i;
+            s.classList.toggle('active', on);
+            s.classList.toggle('visible', on);
+            if (!on) s.querySelectorAll('video').forEach((v) => { v.pause(); try { v.currentTime = 0; } catch (e) {} });
+        });
+        clearTimeout(this.playTimer);
+        const v = this.currentVideo();
+        if (v) this.playTimer = setTimeout(() => this.play(v), 900);   /* let the slide reveal first */
+        this.progress.style.width = ((this.i + 1) / this.slides.length * 100) + '%';
+        history.replaceState(null, '', '#' + (this.i + 1));
+    }
+
+    /* --- inline editing --- */
+    setupEditing() {
+        const toggle = document.getElementById('editToggle');
+        const hot = document.querySelector('.edit-hotzone');
+        let hideTimeout = null;
+        const show = () => { clearTimeout(hideTimeout); toggle.classList.add('show'); };
+        const hide = () => { hideTimeout = setTimeout(() => { if (!this.editing) toggle.classList.remove('show'); }, 400); };
+        hot.addEventListener('mouseenter', show); hot.addEventListener('mouseleave', hide);
+        toggle.addEventListener('mouseenter', show); toggle.addEventListener('mouseleave', hide);
+        toggle.addEventListener('click', () => this.toggleEdit());
+        hot.addEventListener('click', () => this.toggleEdit());
+    }
+
+    toggleEdit() {
+        this.editing = !this.editing;
+        document.body.classList.toggle('editing', this.editing);
+        const toggle = document.getElementById('editToggle');
+        toggle.classList.toggle('active', this.editing);
+        toggle.textContent = this.editing ? 'Editing - Ctrl+S saves' : 'Edit text';
+        this.stage.querySelectorAll('h1,h2,h3,p,li,.chip,.k,.tagline').forEach((el) => {
+            if (this.editing) el.setAttribute('contenteditable', 'true'); else el.removeAttribute('contenteditable');
+        });
+    }
+
+    saveCopy() {
+        const wasEditing = this.editing;
+        if (wasEditing) this.toggleEdit();                  /* strip contenteditable before serialising */
+        const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        a.download = 'index-edited.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (wasEditing) this.toggleEdit();
+    }
+}
+new SlidePresentation();
+</script>
+</body>
+</html>
