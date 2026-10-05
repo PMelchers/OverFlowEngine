@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>OverFlowEngine Brag</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #ffffff; font-family: system-ui, sans-serif; color: #111827; }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        background-color: #ffffff;
+        background-image: radial-gradient(#d1d5db 2.5px, transparent 2.5px);
+        background-size: 32px 32px;
+      }
+      #stage { position: absolute; inset: 0; }
+      #wires { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+      .node {
+        position: absolute; top: 380px; width: 270px; height: 170px; box-sizing: border-box;
+        border-radius: 14px; border: 3px solid; padding: 16px 18px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+      }
+      .node .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .badge { font-size: 14px; font-weight: 700; color: #fff; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+      .node .title { font-size: 26px; font-weight: 700; line-height: 1.15; }
+      .node .sub { font-size: 18px; color: #4b5563; margin-top: 8px; }
+      .handle { position: absolute; top: 76px; width: 14px; height: 14px; border-radius: 50%; border: 3px solid #fff; background: #2563eb; }
+      .handle.l { left: -10px; } .handle.r { right: -10px; }
+      .n-trigger { left: 330px; border-color: #16a34a; background: #f0fdf4; } .n-trigger .badge { background: #15803d; }
+      .n-extract { left: 670px; border-color: #2563eb; background: #eff6ff; } .n-extract .badge { background: #2563eb; }
+      .n-draft { left: 1010px; border-color: #2563eb; background: #eff6ff; } .n-draft .badge { background: #2563eb; }
+      .n-send { left: 1350px; border-color: #ea580c; background: #fff7ed; } .n-send .badge { background: #c2410c; }
+      .chip { margin-left: auto; font-size: 13px; font-weight: 600; background: #fff; border: 2px solid #93c5fd; color: #1d4ed8; border-radius: 999px; padding: 2px 10px; }
+      .check { margin-left: auto; font-size: 22px; color: #16a34a; font-weight: 800; }
+      #reply { font-size: 21px; line-height: 1.3; color: #1f2937; margin-top: 2px; min-height: 80px; }
+      #guide { position: absolute; left: 300px; top: 465px; width: 1380px; height: 0; border-top: 3px dashed #ec4899; }
+      #palette { position: absolute; left: 0; top: 0; width: 260px; height: 1080px; box-sizing: border-box; background: #f9fafb; border-right: 2px solid #e5e7eb; padding: 44px 20px; }
+      #palette h4 { margin: 26px 0 12px; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; }
+      #palette h4:first-child { margin-top: 0; }
+      .pi { background: #fff; border: 2px solid #d1d5db; border-radius: 10px; padding: 10px 14px; font-size: 20px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+      .pi.ag { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+      #runbtn { position: absolute; left: 1700px; top: 44px; width: 150px; height: 56px; border-radius: 12px; background: #eff6ff; border: 2px solid #bfdbfe; color: #1d4ed8; font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(15,23,42,0.12); }
+      #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; }
+      .label { position: absolute; left: 0; width: 1920px; text-align: center; top: 150px; font-size: 80px; font-weight: 800; letter-spacing: -0.02em; color: #111827; }
+      .label em { font-style: normal; color: #2563eb; }
+      #console { position: absolute; left: 330px; top: 800px; width: 1290px; height: 240px; box-sizing: border-box; border-radius: 14px; background: #0f172a; box-shadow: 0 10px 30px rgba(15,23,42,0.35); padding: 16px 24px; overflow: hidden; }
+      #console .bar { display: flex; justify-content: space-between; align-items: center; color: #94a3b8; font-size: 18px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+      #console .clear { border: 2px solid #475569; border-radius: 8px; padding: 2px 14px; font-size: 16px; color: #cbd5e1; text-transform: none; letter-spacing: 0; }
+      #console .ln { font-family: monospace; font-size: 24px; color: #86efac; line-height: 1.45; }
+      #console .ln b { color: #94a3b8; font-weight: 400; margin-right: 14px; }
+      #group { position: absolute; left: 780px; top: 330px; width: 360px; height: 170px; box-sizing: border-box; border-radius: 16px; border: 3px solid #818cf8; background: #eef2ff; padding: 18px 22px; box-shadow: 0 8px 24px rgba(79,70,229,0.25); }
+      #group .badge { background: #4f46e5; }
+      #group .title { font-size: 40px; font-weight: 800; margin-top: 8px; color: #312e81; }
+      #group .sub { font-size: 20px; color: #4b5563; margin-top: 6px; }
+      #brand { position: absolute; left: 0; width: 1920px; text-align: center; top: 560px; font-size: 168px; font-weight: 900; letter-spacing: -0.04em; color: #111827; line-height: 1; }
+      #brand span { color: #2563eb; }
+      #tag { position: absolute; left: 0; width: 1920px; text-align: center; top: 770px; font-size: 56px; font-weight: 600; color: #374151; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="20">
+      <div id="stage">
+        <svg id="wires" viewBox="0 0 1920 1080">
+          <g stroke-linecap="round" stroke-width="5" fill="none">
+            <line class="w-gray" x1="600" y1="465" x2="670" y2="465" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70" />
+            <line class="w-gray" x1="940" y1="465" x2="1010" y2="465" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70" />
+            <line class="w-gray" x1="1280" y1="465" x2="1350" y2="465" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70" />
+            <line class="w-green" x1="600" y1="465" x2="670" y2="465" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70" />
+            <line class="w-green" x1="940" y1="465" x2="1010" y2="465" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70" />
+            <line class="w-green" x1="1280" y1="465" x2="1350" y2="465" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70" />
+          </g>
+        </svg>
+        <div id="guide"></div>
+        <div class="node n-trigger" id="n1">
+          <div class="head"><span class="badge">Trigger</span><span class="check" id="ck1" style="opacity:0">✓</span></div>
+          <div class="title">Email Trigger</div><div class="sub">Starts the workflow</div>
+          <div class="handle r"></div>
+        </div>
+        <div class="node n-extract" id="n2">
+          <div class="head"><span class="badge">AI Agent</span><span class="chip">Model</span></div>
+          <div class="title">Extract Instructions</div><div class="sub">Reads the email</div>
+          <div class="handle l"></div><div class="handle r"></div>
+        </div>
+        <div class="node n-draft" id="n3">
+          <div class="head"><span class="badge">AI Agent</span><span class="chip">Model</span></div>
+          <div class="title">Draft Reply</div><div id="reply"></div>
+          <div class="handle l"></div><div class="handle r"></div>
+        </div>
+        <div class="node n-send" id="n4">
+          <div class="head"><span class="badge">App Action</span></div>
+          <div class="title">Send Reply</div><div class="sub">Delivers the draft</div>
+          <div class="handle l"></div>
+        </div>
+        <div id="group">
+          <div class="badge" style="display:inline-block">Group</div>
+          <div class="title">my whole job</div><div class="sub">4 blocks · one reusable block</div>
+        </div>
+      </div>
+
+      <div id="palette">
+        <h4>Core Blocks</h4>
+        <div class="pi">Trigger</div><div class="pi">Variable</div><div class="pi">If</div><div class="pi">Choice</div><div class="pi">Log</div>
+        <h4>Agentic Blocks</h4>
+        <div class="pi ag">AI Agent</div><div class="pi ag">AI Input</div><div class="pi ag">AI Output</div>
+      </div>
+
+      <div id="runbtn">▶ Run</div>
+
+      <div class="label" id="lab1">Automation, <em>but you draw it.</em></div>
+      <div class="label" id="lab2">Drag. Snap. Wire.</div>
+      <div class="label" id="lab3">Run it. <em>Server-side.</em></div>
+      <div class="label" id="lab4">Blocks that <em>think.</em></div>
+
+      <div id="console">
+        <div class="bar"><span>Console</span><span class="clear">Clear</span></div>
+        <div class="ln" id="cl1"><b>›</b>Email Trigger fired</div>
+        <div class="ln" id="cl2"><b>›</b>Extract Instructions ✓</div>
+        <div class="ln" id="cl3"><b>›</b>Draft Reply ✓</div>
+        <div class="ln" id="cl4"><b>›</b>Send Reply ✓ — run complete</div>
+      </div>
+
+      <div id="brand">Over<span>Flow</span>Engine</div>
+      <div id="tag">Draw the workflow. Run the workflow.</div>
+
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L18 13 Z" fill="#111827" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+      <audio id="bgm" data-start="0" data-duration="20" data-track-index="10" data-volume="0.35" src="assets/music/bed.mp3"></audio>
+      <audio id="sfx-drop1" data-start="0.45" data-duration="0.11" data-track-index="11" data-volume="0.8" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx-drop2" data-start="3.95" data-duration="0.19" data-track-index="12" data-volume="0.7" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx-drop3" data-start="4.95" data-duration="0.19" data-track-index="13" data-volume="0.7" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx-drop4" data-start="5.95" data-duration="0.19" data-track-index="14" data-volume="0.7" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx-w1" data-start="4.5" data-duration="0.06" data-track-index="15" data-volume="0.55" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="sfx-w2" data-start="5.5" data-duration="0.06" data-track-index="16" data-volume="0.55" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="sfx-w3" data-start="6.5" data-duration="0.06" data-track-index="17" data-volume="0.55" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="sfx-click" data-start="8.98" data-duration="0.06" data-track-index="18" data-volume="0.85" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="sfx-p1" data-start="9.5" data-duration="0.05" data-track-index="19" data-volume="0.6" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="sfx-p2" data-start="10.5" data-duration="0.05" data-track-index="20" data-volume="0.6" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="sfx-p3" data-start="11.5" data-duration="0.05" data-track-index="21" data-volume="0.6" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="sfx-p4" data-start="12.5" data-duration="0.05" data-track-index="22" data-volume="0.6" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="sfx-group" data-start="17.8" data-duration="0.18" data-track-index="23" data-volume="0.7" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-logo" data-start="18.48" data-duration="1.5" data-track-index="24" data-volume="0.7" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const lefts = { n1: 330, n2: 670, n3: 1010, n4: 1350 };
+      const IN = "power3.out";
+
+      // typed reply characters (deterministic: split once at build, words kept whole)
+      const replyText = "Hi! Thanks for reaching out. Happy to help.";
+      const reply = document.getElementById("reply");
+      replyText.split(" ").forEach((word, wi, arr) => {
+        const w = document.createElement("span");
+        w.style.display = "inline-block";
+        word.split("").forEach((ch) => {
+          const s = document.createElement("span");
+          s.className = "rc"; s.textContent = ch;
+          w.appendChild(s);
+        });
+        reply.appendChild(w);
+        if (wi < arr.length - 1) reply.appendChild(document.createTextNode(" "));
+      });
+
+      // ---- Scene 1: hook (0-3) ----
+      tl.fromTo("#lab1", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: IN }, 0.3);
+      tl.fromTo("#n1", { opacity: 0, y: -260 }, { opacity: 1, y: 0, duration: 0.55, ease: "back.out(1.6)" }, 0.5); // beat-grid 0.5
+      tl.to("#lab1", { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 2.8);
+
+      // palette + build (3-8.5)
+      tl.fromTo("#palette", { x: -270 }, { x: 0, duration: 0.5, ease: IN }, 3.0); // beat-grid 3.0
+      tl.fromTo("#lab2", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 3.3);
+      const drop = (id, left, t) =>
+        tl.fromTo(id, { opacity: 0, x: 90 - left, y: 80, scale: 0.55 }, { opacity: 1, x: 0, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, t);
+      drop("#n2", lefts.n2, 4.0); // beat-grid 4.0
+      drop("#n3", lefts.n3, 5.0); // beat-grid 5.0
+      drop("#n4", lefts.n4, 6.0); // beat-grid 6.0
+      const wires = document.querySelectorAll(".w-gray");
+      [4.5, 5.5, 6.5].forEach((t, i) => tl.fromTo(wires[i], { strokeDashoffset: 70 }, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out", immediateRender: i === 0 }, t));
+      // alignment guide flash while Send Reply snaps in
+      tl.fromTo("#guide", { opacity: 0 }, { opacity: 0.9, duration: 0.15 }, 6.3);
+      tl.to("#guide", { opacity: 0, duration: 0.25 }, 6.9);
+      tl.to("#palette", { x: -270, duration: 0.5, ease: "power2.in" }, 8.0);
+      tl.to("#lab2", { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 8.4);
+
+      // ---- Scene 3: run (8.2-14.5) ----
+      tl.fromTo("#cursor", { opacity: 0, x: 1400, y: 360 }, { opacity: 1, x: 1708, y: 76, duration: 0.8, ease: "power2.inOut" }, 8.2);
+      tl.to("#runbtn", { scale: 0.93, duration: 0.08, ease: "power1.in" }, 8.98); // click at 9.0
+      tl.to("#runbtn", { scale: 1, duration: 0.2, ease: "power2.out" }, 9.06);
+      tl.to("#cursor", { opacity: 0, duration: 0.3 }, 9.5);
+      tl.fromTo("#lab3", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 9.2);
+      tl.fromTo("#console", { y: 300 }, { y: 0, duration: 0.45, ease: IN }, 9.2);
+      ["#cl1", "#cl2", "#cl3", "#cl4"].forEach((s, i) => tl.fromTo(s, { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25, ease: IN }, 9.5 + i)); // beat-grid 9.5/10.5/11.5/12.5
+      const green = document.querySelectorAll(".w-green");
+      ["#n1", "#n2", "#n3", "#n4"].forEach((s, i) => {
+        const t = 9.5 + i;
+        tl.fromTo(s, { boxShadow: "0 0 0 0 rgba(34,197,94,0.7)" }, { boxShadow: "0 0 0 22px rgba(34,197,94,0)", duration: 0.7, ease: "power2.out" }, t);
+        tl.to(s, { borderColor: "#22c55e", duration: 0.2 }, t);
+        if (i < 3) tl.fromTo(green[i], { strokeDashoffset: 70 }, { strokeDashoffset: 0, duration: 0.35, ease: "power2.out", immediateRender: i === 0 }, t + 0.35);
+      });
+      tl.to("#ck1", { opacity: 1, duration: 0.2 }, 9.7);
+      tl.to("#lab3", { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 14.1);
+      tl.to("#console", { y: 300, duration: 0.35, ease: "power2.in" }, 14.1);
+
+      // ---- Scene 4: agent drafts (14.5-17.5) ----
+      tl.fromTo("#stage", { scale: 1, transformOrigin: "1145px 465px" }, { scale: 1.75, duration: 0.7, ease: "power3.inOut" }, 14.5); // beat-locked: 14.5
+      tl.fromTo("#lab4", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 14.9);
+      tl.fromTo(".rc", { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.034 }, 15.4);
+      tl.to("#lab4", { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 17.2);
+
+      // ---- Scene 5: collapse + punchline (17.5-20) ----
+      tl.to("#stage", { scale: 1, duration: 0.5, ease: "power3.inOut" }, 17.5); // beat-locked: 17.5
+      tl.to(".w-gray, .w-green", { opacity: 0, duration: 0.2 }, 17.7);
+      ["n1", "n2", "n3", "n4"].forEach((id) => {
+        tl.to("#" + id, { x: 960 - 135 - lefts[id], y: 335 - 380 + 0, scale: 0.4, opacity: 0, duration: 0.5, ease: "power3.in" }, 17.8);
+      });
+      tl.fromTo("#group", { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)", immediateRender: false }, 18.2);
+      tl.fromTo("#brand", { opacity: 0, y: 50, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, 18.5); // beat-locked: 18.5
+      tl.fromTo("#tag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 18.8);
+
+      // clean initial hidden states for elements first shown later
+      tl.set("#group", { opacity: 0 }, 0);
+      tl.set("#brand", { opacity: 0 }, 0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
