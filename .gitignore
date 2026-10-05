@@ -18,3 +18,6 @@ frontend/dist/
 # Editors
 .vscode/
 .idea/
+
+# HyperFrames QC snapshots (brag video compositions)
+**/snapshots/
