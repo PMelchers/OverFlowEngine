@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import Canvas from './Canvas'
+import Canvas from './canvas/Canvas'
 import Dashboard from './Dashboard'
 import Marketplace from './Marketplace'
 import OAuthPopupBridge from './OAuthPopupBridge'
