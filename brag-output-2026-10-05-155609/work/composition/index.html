@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>OverFlowEngine Tour</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #ffffff; font-family: system-ui, sans-serif; color: #111827; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #ffffff;
+        background-image: radial-gradient(#d1d5db 2.5px, transparent 2.5px); background-size: 32px 32px; }
+      .scene { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+      .label { position: absolute; left: 0; width: 1920px; text-align: center; top: 62px; font-size: 68px; font-weight: 800; letter-spacing: -0.02em; }
+      .label em { font-style: normal; color: #2563eb; }
+      .label.fx em { color: #a21caf; } .label.dc em { color: #4338ca; }
+      #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; }
+
+      /* generic block */
+      .blk { position: absolute; box-sizing: border-box; border: 3px solid; border-radius: 16px; padding: 16px 20px; box-shadow: 0 6px 18px rgba(15,23,42,0.10); }
+      .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .badge { font-size: 15px; font-weight: 800; color: #fff; padding: 4px 10px; border-radius: 7px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .ttl { font-size: 25px; font-weight: 800; line-height: 1.15; }
+      .sub { font-size: 18px; color: #4b5563; margin-top: 6px; line-height: 1.3; }
+      .chip { margin-left: auto; font-size: 13px; font-weight: 700; background: #fff; border: 2px solid #93c5fd; color: #1d4ed8; border-radius: 999px; padding: 2px 10px; }
+      .ck { margin-left: auto; font-size: 22px; font-weight: 800; color: #15803d; }
+      .hd { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 3px solid #fff; background: #2563eb; top: 50%; margin-top: -8px; }
+      .hl { left: -10px; } .hr { right: -10px; }
+      .g { border-color: #16a34a; background: #f0fdf4; } .g .badge { background: #15803d; }
+      .b { border-color: #2563eb; background: #eff6ff; } .b .badge { background: #2563eb; }
+      .o { border-color: #ea580c; background: #fff7ed; } .o .badge { background: #c2410c; }
+      .f { border-color: #e879f9; background: #fdf4ff; } .f .badge { background: #a21caf; }
+      .y { border-color: #eab308; background: #fefce8; } .y .badge { background: #a16207; }
+      .r { border-color: #e11d48; background: #fff1f2; } .r .badge { background: #be123c; }
+      .e { border-color: #34d399; background: #ecfdf5; } .e .badge { background: #047857; }
+
+      /* S1 dashboard */
+      #dash { position: absolute; left: 410px; top: 230px; width: 1100px; height: 520px; background: #fff; border: 2px solid #e5e7eb; border-radius: 22px; box-shadow: 0 24px 60px rgba(15,23,42,0.14); }
+      #dash h1 { position: absolute; left: 0; width: 1100px; top: 44px; margin: 0; text-align: center; font-size: 46px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 14px; }
+      #startBtn { position: absolute; left: 100px; top: 160px; width: 900px; height: 120px; box-sizing: border-box; border: 2px solid #e5e7eb; background: #f9fafb; border-radius: 20px; display: flex; align-items: center; gap: 22px; padding: 0 28px; }
+      .plus { width: 66px; height: 66px; border-radius: 16px; background: #2563eb; color: #fff; font-size: 44px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+      #startBtn b { display: block; font-size: 30px; } #startBtn span span { display: block; font-size: 22px; color: #4b5563; margin-top: 4px; }
+      .pills { position: absolute; left: 0; width: 1100px; top: 330px; display: flex; justify-content: center; gap: 16px; }
+      .pill { border: 2px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 10px 22px; font-size: 22px; font-weight: 600; color: #374151; }
+
+      /* S2/3 canvas */
+      #palette { position: absolute; left: 0; top: 0; width: 260px; height: 1080px; box-sizing: border-box; background: #f9fafb; border-right: 2px solid #e5e7eb; padding: 200px 20px 0; }
+      #palette h4 { margin: 22px 0 12px; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: #4b5563; }
+      .pi { background: #fff; border: 2px solid #d1d5db; border-radius: 10px; padding: 10px 14px; font-size: 20px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+      .pi.ag { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+      .cn { top: 420px; width: 270px; height: 170px; }
+      #guide { position: absolute; left: 350px; top: 505px; width: 1380px; height: 0; border-top: 3px dashed #ec4899; opacity: 0; }
+      #runbtn { position: absolute; left: 1700px; top: 44px; width: 150px; height: 56px; border-radius: 12px; background: #eff6ff; border: 2px solid #bfdbfe; color: #1d4ed8; font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+      #console { position: absolute; left: 380px; top: 700px; width: 1290px; height: 240px; box-sizing: border-box; border-radius: 14px; background: #0f172a; box-shadow: 0 10px 30px rgba(15,23,42,0.35); padding: 16px 24px; }
+      #console .bar { display: flex; justify-content: space-between; color: #94a3b8; font-size: 18px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+      #console .clr { border: 2px solid #475569; border-radius: 8px; padding: 0 14px; color: #cbd5e1; text-transform: none; letter-spacing: 0; }
+      .cl { font-family: monospace; font-size: 24px; color: #86efac; line-height: 1.45; }
+      .cl i { color: #94a3b8; font-style: normal; margin-right: 14px; }
+
+      /* S4 models */
+      .fl { font-size: 17px; font-weight: 700; margin: 10px 0 6px; color: #a21caf; }
+      .fld { position: relative; height: 46px; }
+      .fld div { position: absolute; inset: 0; box-sizing: border-box; border-radius: 10px; display: flex; align-items: center; padding: 0 14px; font-size: 20px; }
+      .empty { border: 2px dashed #e879f9; background: #fdf4ff; color: #a21caf; }
+      .full { border: 2px solid #d946ef; background: #fff; color: #86198f; font-weight: 700; }
+      .ta { border: 2px solid #f0abfc; background: #fff; border-radius: 10px; padding: 10px 14px; font-size: 19px; line-height: 1.35; color: #374151; }
+      #circ { position: absolute; left: 875px; top: 735px; width: 170px; height: 170px; }
+      .cs { position: absolute; inset: 0; border-radius: 50%; border: 6px solid; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; }
+      #cLock { border-color: #9ca3af; background: #f3f4f6; color: #4b5563; }
+      #cOpen, #cDone { border-color: #d946ef; background: #fae8ff; color: #86198f; } #cDone { font-size: 16px; }
+      .pop { position: absolute; left: 1070px; top: 700px; width: 440px; background: #fff; border: 2px solid #d1d5db; border-radius: 14px; box-shadow: 0 16px 40px rgba(15,23,42,0.2); padding: 14px; box-sizing: border-box; }
+      .pop h4 { margin: 0 0 8px; font-size: 17px; color: #374151; }
+      .pr { height: 44px; display: flex; align-items: center; gap: 8px; font-size: 20px; padding: 0 10px; border-radius: 8px; }
+      .pr i { font-style: normal; color: #6b7280; } .pr.sel { background: #fae8ff; color: #86198f; font-weight: 700; }
+      #mcap { position: absolute; left: 0; width: 1920px; top: 950px; text-align: center; font-size: 26px; color: #374151; }
+      #mcap b { color: #86198f; }
+
+      /* S5 trip */
+      .tn { top: 330px; width: 380px; }
+      .field { display: flex; justify-content: space-between; gap: 10px; font-size: 19px; padding: 6px 0; border-bottom: 1px solid #d1fae5; }
+      .field span:first-child { color: #4b5563; } .field span:last-child { font-weight: 700; text-align: right; }
+      .outbox { margin-top: 12px; border: 2px solid #c4b5fd; background: #f5f3ff; border-radius: 10px; padding: 10px 14px; }
+      .outbox small { font-size: 15px; color: #6d28d9; font-weight: 700; font-family: monospace; }
+      .big { font-size: 36px; font-weight: 900; color: #4c1d95; margin-top: 2px; }
+      .sr { display: flex; align-items: center; gap: 10px; font-size: 18px; color: #374151; height: 34px; }
+      .sr .ok { color: #15803d; font-weight: 800; margin-left: auto; }
+      .tot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 22px; font-weight: 800; }
+      .tot span:last-child { background: #dcfce7; color: #166534; border-radius: 999px; padding: 4px 12px; font-size: 16px; }
+      .doc { background: #fff; border: 2px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; margin-top: 6px; }
+      .doc .dt { font-size: 24px; font-weight: 800; } .doc .dl { font-size: 18px; color: #374151; padding: 3px 0; }
+
+      /* S6 apps */
+      .fr .fk { font-size: 15px; font-weight: 700; color: #047857; margin: 6px 0 4px; }
+      .fr .fv { height: 40px; border: 2px solid #6ee7b7; background: #fff; border-radius: 9px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 19px; box-sizing: border-box; }
+      .mcp { margin-left: auto; font-size: 14px; font-weight: 700; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 4px 10px; }
+      .apc { position: absolute; display: flex; align-items: center; gap: 12px; border: 2px solid #e5e7eb; background: #fff; border-radius: 14px; padding: 14px 20px; font-size: 22px; font-weight: 700; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+      .apc span { font-size: 17px; font-weight: 600; color: #4b5563; }
+      #chat { position: absolute; left: 1040px; top: 200px; width: 780px; height: 760px; background: #1f2937; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(15,23,42,0.30); }
+      .ch { height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 2px solid #374151; color: #f9fafb; font-size: 24px; font-weight: 800; }
+      .ch span { font-size: 17px; font-weight: 600; color: #9ca3af; }
+      .msg { position: absolute; left: 24px; width: 720px; display: flex; gap: 16px; }
+      .av { width: 52px; height: 52px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 22px; }
+      .mn { font-size: 21px; font-weight: 800; color: #f9fafb; display: flex; align-items: center; gap: 10px; }
+      .bt { font-size: 13px; background: #4f46e5; color: #fff; border-radius: 4px; padding: 2px 6px; }
+      .tm { font-size: 15px; color: #9ca3af; font-weight: 500; }
+      .mt { font-size: 22px; color: #e5e7eb; margin-top: 4px; line-height: 1.35; }
+
+      /* S7 marketplace */
+      #win { position: absolute; left: 310px; top: 230px; width: 1300px; height: 540px; border-radius: 18px; overflow: hidden; background: #f9fafb; border: 2px solid #e5e7eb; box-shadow: 0 24px 60px rgba(15,23,42,0.18); }
+      .whdr { height: 64px; background: #fff; border-bottom: 2px solid #e5e7eb; display: flex; align-items: center; gap: 10px; padding: 0 24px; font-size: 22px; font-weight: 800; }
+      .tabs { position: absolute; left: 40px; top: 90px; width: 1220px; height: 50px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden; display: flex; font-size: 20px; font-weight: 700; background: #fff; color: #4b5563; }
+      .tabs div { flex: 1; display: flex; align-items: center; justify-content: center; } .tabs .on { background: #2563eb; color: #fff; }
+      .grid { position: absolute; left: 40px; top: 160px; display: grid; grid-template-columns: 602px 602px; gap: 16px; }
+      .card { position: relative; height: 230px; background: #fff; border: 2px solid #e5e7eb; border-radius: 14px; box-sizing: border-box; padding: 16px 18px; }
+      .card .nm { font-size: 24px; font-weight: 800; } .card .ds { font-size: 17px; color: #4b5563; margin-top: 6px; line-height: 1.35; }
+      .card .au { font-size: 15px; color: #6b7280; margin-top: 8px; }
+      .cb { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 46px; border-radius: 10px; background: #2563eb; color: #fff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+      #kcap { position: absolute; left: 0; width: 1300px; top: 440px; text-align: center; font-size: 24px; color: #374151; }
+      #kcap b { color: #a21caf; }
+
+      /* S8 tasks */
+      #tasks { position: absolute; left: 560px; top: 240px; width: 800px; height: 470px; background: #fff; border: 2px solid #e5e7eb; border-radius: 18px; box-shadow: 0 20px 50px rgba(15,23,42,0.12); padding: 30px 34px; box-sizing: border-box; }
+      #tasks h2 { margin: 0; font-size: 32px; display: flex; align-items: center; gap: 10px; }
+      #tasks .ds { font-size: 19px; color: #4b5563; margin-top: 8px; line-height: 1.4; }
+      .tin { display: flex; gap: 10px; margin: 20px 0 14px; } .tin div:first-child { flex: 1; height: 50px; border: 2px solid #d1d5db; border-radius: 10px; display: flex; align-items: center; padding: 0 14px; font-size: 20px; color: #6b7280; }
+      .tin div:last-child { width: 54px; height: 50px; border-radius: 10px; background: #2563eb; color: #fff; font-size: 30px; display: flex; align-items: center; justify-content: center; }
+      .trow { display: flex; align-items: center; gap: 14px; height: 64px; border: 2px solid #e5e7eb; border-radius: 12px; padding: 0 16px; margin-bottom: 10px; font-size: 22px; font-weight: 600; }
+      .box { width: 22px; height: 22px; border: 2px solid #9ca3af; border-radius: 5px; flex: none; }
+      .from { margin-left: auto; font-size: 15px; font-weight: 700; color: #be123c; background: #ffe4e6; border-radius: 999px; padding: 4px 10px; }
+
+      /* outro */
+      #brand { position: absolute; left: 0; width: 1920px; text-align: center; top: 330px; font-size: 168px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; }
+      #brand span { color: #2563eb; }
+      #tag { position: absolute; left: 0; width: 1920px; text-align: center; top: 540px; font-size: 56px; font-weight: 600; color: #374151; }
+      #feat { position: absolute; left: 0; width: 1920px; top: 660px; display: flex; justify-content: center; gap: 18px; }
+      #feat span { border: 2px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 10px 22px; font-size: 24px; font-weight: 700; color: #374151; }
+
+      /* layers revealed later in the timeline */
+      #scC, #scM, #scT, #scA, #scK, #scD, #brand, #tag, #feat, #cOpen, #cDone, #popA, #popB, #f1, #mcap,
+      .s, .k, #tot, .doc, #flor, #m1, #m2, #m3, #typing, #cb1b, #cb1c, #kcap, .trow, .q { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="46">
+
+      <!-- S1: dashboard hook -->
+      <div class="scene" id="scH">
+        <div class="label" id="L1">Automation, <em>but you draw it.</em></div>
+        <div id="dash">
+          <h1><svg width="40" height="40" viewBox="0 0 24 24" fill="#2563eb"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Welcome to OverFlowEngine</h1>
+          <div id="startBtn"><div class="plus">+</div><span><b>Start a new workflow</b><span>Open a blank canvas and drag blocks onto it</span></span></div>
+          <div class="pills"><div class="pill pp">▦ Email Auto-Reply</div><div class="pill pp">▦ Vacation Planner</div></div>
+        </div>
+      </div>
+
+      <!-- S2+S3: build and run on the canvas -->
+      <div class="scene" id="scC">
+        <div class="label" id="L2">Drag. Snap. <em>Wire.</em></div>
+        <div class="label" id="L3">Run it. <em>Server-side.</em></div>
+        <svg width="1920" height="1080" style="position:absolute;left:0;top:0" fill="none" stroke-linecap="round" stroke-width="5">
+          <line class="wg" x1="650" y1="505" x2="720" y2="505" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70"/>
+          <line class="wg" x1="990" y1="505" x2="1060" y2="505" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70"/>
+          <line class="wg" x1="1330" y1="505" x2="1400" y2="505" stroke="#9ca3af" stroke-dasharray="70" stroke-dashoffset="70"/>
+          <line class="wn" x1="650" y1="505" x2="720" y2="505" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70"/>
+          <line class="wn" x1="990" y1="505" x2="1060" y2="505" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70"/>
+          <line class="wn" x1="1330" y1="505" x2="1400" y2="505" stroke="#22c55e" stroke-dasharray="70" stroke-dashoffset="70"/>
+        </svg>
+        <div id="guide"></div>
+        <div class="blk cn g" id="c1" style="left:380px"><div class="head"><span class="badge">Trigger</span></div><div class="ttl">Email Trigger</div><div class="sub">Starts the workflow</div><div class="hd hr"></div></div>
+        <div class="blk cn b" id="c2" style="left:720px"><div class="head"><span class="badge">AI Agent</span><span class="chip">Model</span></div><div class="ttl">Extract Instructions</div><div class="sub">Reads the email</div><div class="hd hl"></div><div class="hd hr"></div></div>
+        <div class="blk cn b" id="c3" style="left:1060px"><div class="head"><span class="badge">AI Agent</span><span class="chip">Model</span></div><div class="ttl">Draft Reply</div><div class="sub">Writes the answer</div><div class="hd hl"></div><div class="hd hr"></div></div>
+        <div class="blk cn o" id="c4" style="left:1400px"><div class="head"><span class="badge">App Action</span></div><div class="ttl">Send Reply</div><div class="sub">Delivers the draft</div><div class="hd hl"></div></div>
+        <div id="palette">
+          <h4>Core Blocks</h4><div class="pi">Trigger</div><div class="pi">Variable</div><div class="pi">If</div><div class="pi">Choice</div><div class="pi">Log</div>
+          <h4>Agentic Blocks</h4><div class="pi ag">AI Agent</div><div class="pi ag">AI Input</div><div class="pi ag">AI Output</div>
+        </div>
+        <div id="runbtn">▶ Run</div>
+        <div id="console">
+          <div class="bar"><span>Console</span><span class="clr">Clear</span></div>
+          <div class="cl q"><i>›</i>Email Trigger fired</div>
+          <div class="cl q"><i>›</i>Extract Instructions ✓</div>
+          <div class="cl q"><i>›</i>Draft Reply ✓</div>
+          <div class="cl q"><i>›</i>Send Reply ✓ — run complete</div>
+        </div>
+      </div>
+
+      <!-- S4: bring your own model -->
+      <div class="scene" id="scM">
+        <div class="label fx" id="L4">Bring <em>your own model.</em></div>
+        <svg width="1920" height="1080" style="position:absolute;left:0;top:0" fill="none" stroke-linecap="round"><path id="wm" d="M960 735 L960 530" stroke="#d946ef" stroke-width="6" stroke-dasharray="205" stroke-dashoffset="205"/></svg>
+        <div class="blk f" id="agent" style="left:700px;top:220px;width:520px;height:300px">
+          <div class="head"><span class="badge">AI Agent</span><span class="ttl">Pick Destination Agent</span></div>
+          <div class="fl">Model</div>
+          <div class="fld"><div class="empty" id="e1">Connect an AI Model block below ↓</div><div class="full" id="f1">claude-sonnet-5</div></div>
+          <div class="fl">Instructions</div>
+          <div class="ta">Name exactly one ideal specific destination - concise, no extra commentary.</div>
+        </div>
+        <div id="circ">
+          <div class="cs" id="cLock"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Locked</div>
+          <div class="cs" id="cOpen"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#86198f" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>Pick a model</div>
+          <div class="cs" id="cDone"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#86198f" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>claude-sonnet-5</div>
+        </div>
+        <div class="pop" id="popA"><h4>Pick a verified API key</h4>
+          <div class="pr sel">✓ Personal key <i>(anthropic)</i></div><div class="pr">✓ Work key <i>(openai)</i></div><div class="pr">✓ Gemini key <i>(google)</i></div></div>
+        <div class="pop" id="popB"><h4>Pick a model</h4>
+          <div class="pr sel">claude-sonnet-5</div><div class="pr">claude-opus-5</div><div class="pr">claude-haiku-4-5</div></div>
+        <div id="mcap">Paste an <b>OpenAI</b>, <b>Anthropic</b> or <b>Google</b> key: it recognizes which one.</div>
+      </div>
+
+      <!-- S5: the Vacation Planner template -->
+      <div class="scene" id="scT">
+        <div class="label" id="L5">One form in. <em>A whole trip out.</em></div>
+        <div class="label fx" id="L6">It even <em>searches the web</em> for prices.</div>
+        <svg width="1920" height="1080" style="position:absolute;left:0;top:0" fill="none" stroke-linecap="round" stroke-width="6">
+          <line x1="490" y1="480" x2="550" y2="480" stroke="#9ca3af"/><line x1="930" y1="480" x2="990" y2="480" stroke="#9ca3af"/><line x1="1370" y1="480" x2="1430" y2="480" stroke="#9ca3af"/>
+          <line class="tw" x1="490" y1="480" x2="550" y2="480" stroke="#22c55e" stroke-dasharray="60" stroke-dashoffset="60"/>
+          <line class="tw" x1="930" y1="480" x2="990" y2="480" stroke="#22c55e" stroke-dasharray="60" stroke-dashoffset="60"/>
+          <line class="tw" x1="1370" y1="480" x2="1430" y2="480" stroke="#22c55e" stroke-dasharray="60" stroke-dashoffset="60"/>
+        </svg>
+        <div class="blk tn g" id="t0" style="left:110px;height:330px"><div class="head"><span class="badge">Form Trigger</span></div><div class="ttl">Plan My Trip</div>
+          <div class="field"><span>Destination country</span><span>Italy</span></div><div class="field"><span>Interests</span><span>hiking, museums</span></div>
+          <div class="field"><span>Accommodation</span><span>hotel</span></div><div class="field"><span>Budget</span><span>2000 EUR</span></div><div class="hd hr"></div></div>
+        <div class="blk tn b" id="t1" style="left:550px;height:300px"><div class="head"><span class="badge">AI Agent</span><span class="chip">Model</span></div><div class="ttl">Pick Destination Agent</div>
+          <div class="outbox"><small>destinationAddress</small><div class="big" id="flor">Florence, Italy</div></div><div class="hd hl"></div><div class="hd hr"></div></div>
+        <div class="blk tn y" id="t2" style="left:990px;height:380px"><div class="head"><span class="badge">Trip Cost</span></div><div class="ttl">Trip Cost</div>
+          <div class="sub">AI searches the web for real prices of your stops and totals them against your budget</div>
+          <div style="height:8px"></div>
+          <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Florence hotel, 9 nights<span class="ok k">✓</span></div>
+          <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Uffizi Gallery tickets<span class="ok k">✓</span></div>
+          <div class="sr s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#854d0e" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Fuel, round trip by car<span class="ok k">✓</span></div>
+          <div class="tot" id="tot"><span>Total €1,460</span><span>within budget</span></div><div class="hd hl"></div><div class="hd hr"></div></div>
+        <div class="blk tn r" id="t3" style="left:1430px;height:320px"><div class="head"><span class="badge">Trip PDF</span></div>
+          <div class="doc"><div class="dt">Florence, Italy</div><div class="dl">Itinerary · day by day</div><div class="dl">Google + Apple Maps links</div><div class="dl">Cost breakdown</div></div><div class="hd hl"></div></div>
+      </div>
+
+      <!-- S6: apps -->
+      <div class="scene" id="scA">
+        <div class="label dc" id="L7">Talks to <em>your apps.</em></div>
+        <div class="blk e" id="act" style="left:120px;top:220px;width:820px;height:320px">
+          <div class="head"><span class="badge">App Action</span><span class="ttl">Weekend update</span><span class="mcp">via Discord MCP</span></div>
+          <div class="fr"><div class="fk">App</div><div class="fv">Discord</div></div>
+          <div class="fr"><div class="fk">Action</div><div class="fv">Send, then auto-reply to one response</div></div>
+          <div class="fr"><div class="fk">Message</div><div class="fv" style="font-family:monospace">{agentReply}</div></div>
+        </div>
+        <div class="apc ap" style="left:120px;top:600px">📅 Google Calendar <span>Fetch Events · Create Event · Delete Event</span></div>
+        <div class="apc ap" style="left:120px;top:700px">📅 Microsoft Calendar <span>connect your own account</span></div>
+        <div id="chat">
+          <div class="ch"># general <span>Team server</span></div>
+          <div class="msg" id="m1" style="top:100px"><div class="av" style="background:#4f46e5">T</div><div><div class="mn">Team server bot <span class="bt">BOT</span><span class="tm">Today at 09:00</span></div><div class="mt">Weekend forecast for the team trip: sunny and 24°C both days.</div></div></div>
+          <div class="msg" id="m2" style="top:250px"><div class="av" style="background:#0f766e">A</div><div><div class="mn">alex <span class="tm">Today at 09:01</span></div><div class="mt">wait, really??</div></div></div>
+          <div class="msg" id="m3" style="top:360px"><div class="av" style="background:#4f46e5">T</div><div><div class="mn">Team server bot <span class="bt">BOT</span><span class="tm">Today at 09:01</span></div><div class="mt">It's actually amazing weather! Clear skies all weekend.</div></div></div>
+          <div id="typing" style="position:absolute;left:28px;bottom:26px;font-size:18px;color:#d1d5db;font-style:italic">alex is typing…</div>
+        </div>
+      </div>
+
+      <!-- S7: marketplace -->
+      <div class="scene" id="scK">
+        <div class="label" id="L8">Share flows. <em>Copy anyone's.</em></div>
+        <div id="win">
+          <div class="whdr"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/></svg>Marketplace</div>
+          <div class="tabs"><div class="on">Browse</div><div>Publish a Flow</div></div>
+          <div class="grid">
+            <div class="card kc"><div class="nm">Vacation Planner</div><div class="ds">One form in, a whole trip out: destination, itinerary, routes and costs.</div><div class="au">maya · 2 days ago</div>
+              <div class="cb" id="cb1">Copy to My Flows</div><div class="cb" id="cb1b">Copying...</div><div class="cb" id="cb1c" style="background:#1d4ed8">✓ Copied to My Flows</div></div>
+            <div class="card kc"><div class="nm">Email Auto-Reply</div><div class="ds">Receive an email as a trigger, have AI read the instructions and draft a reply, then send it back to the sender.</div><div class="au">devon · 4 days ago</div><div class="cb">Copy to My Flows</div></div>
+          </div>
+          <div id="kcap"><b>AI Model blocks are never shared</b>: copiers link their own API key.</div>
+        </div>
+      </div>
+
+      <!-- S8: tasks -->
+      <div class="scene" id="scD">
+        <div class="label" id="L9">Runs can <em>fill your task list</em> too.</div>
+        <div id="tasks">
+          <h2><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/></svg>Tasks</h2>
+          <div class="ds">Add your own, or drop a Task block into a flow to fill this in automatically when it runs.</div>
+          <div class="tin"><div>Add a task...</div><div>+</div></div>
+          <div class="trow"><div class="box"></div>Book the hotel in Florence<span class="from">Task block</span></div>
+          <div class="trow"><div class="box"></div>Pack hiking boots<span class="from">Task block</span></div>
+          <div class="trow"><div class="box"></div>Share Vacation Planner on the Marketplace</div>
+        </div>
+      </div>
+
+      <!-- outro -->
+      <div id="brand">Over<span>Flow</span>Engine</div>
+      <div id="tag">Draw the workflow. Run the workflow.</div>
+      <div id="feat"><span>Canvas</span><span>AI Agents</span><span>Your own models</span><span>Apps</span><span>Marketplace</span></div>
+
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L18 13 Z" fill="#111827" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+      <audio id="bgm" data-start="0" data-duration="46" data-track-index="10" data-volume="0.38" src="assets/music/bed.mp3"></audio>
+      <audio id="a01" data-start="0.5" data-duration="0.19" data-track-index="11" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="a02" data-start="3.62" data-duration="0.06" data-track-index="12" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a03" data-start="4.68" data-duration="0.19" data-track-index="13" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="a04" data-start="5.73" data-duration="0.19" data-track-index="14" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="a05" data-start="6.77" data-duration="0.19" data-track-index="15" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="a06" data-start="7.82" data-duration="0.19" data-track-index="16" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="a07" data-start="5.2" data-duration="0.06" data-track-index="17" data-volume="0.25" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="a08" data-start="6.25" data-duration="0.06" data-track-index="18" data-volume="0.25" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="a09" data-start="7.3" data-duration="0.06" data-track-index="19" data-volume="0.25" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="a10" data-start="10.41" data-duration="0.06" data-track-index="20" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a11" data-start="10.95" data-duration="0.05" data-track-index="21" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a12" data-start="12.0" data-duration="0.05" data-track-index="22" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a13" data-start="13.04" data-duration="0.05" data-track-index="23" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a14" data-start="14.09" data-duration="0.05" data-track-index="24" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a15" data-start="16.68" data-duration="0.06" data-track-index="25" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a16" data-start="17.72" data-duration="0.06" data-track-index="26" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a17" data-start="18.77" data-duration="0.06" data-track-index="27" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a18" data-start="19.31" data-duration="0.06" data-track-index="28" data-volume="0.25" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="a19" data-start="23.49" data-duration="0.05" data-track-index="29" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a20" data-start="24.53" data-duration="0.05" data-track-index="30" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a21" data-start="24.6" data-duration="0.11" data-track-index="31" data-volume="0.35" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a22" data-start="25.58" data-duration="0.05" data-track-index="32" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a23" data-start="26.9" data-duration="0.18" data-track-index="33" data-volume="0.35" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="a24" data-start="27.67" data-duration="0.05" data-track-index="34" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a25" data-start="30.28" data-duration="0.11" data-track-index="35" data-volume="0.35" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a26" data-start="31.85" data-duration="0.11" data-track-index="36" data-volume="0.3" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a27" data-start="32.89" data-duration="0.11" data-track-index="37" data-volume="0.35" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a28" data-start="37.06" data-duration="0.06" data-track-index="38" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="a29" data-start="37.6" data-duration="0.05" data-track-index="39" data-volume="0.33" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="a30" data-start="40.6" data-duration="0.11" data-track-index="40" data-volume="0.3" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a31" data-start="41.12" data-duration="0.11" data-track-index="41" data-volume="0.3" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a32" data-start="41.64" data-duration="0.11" data-track-index="42" data-volume="0.3" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="a33" data-start="43.33" data-duration="1.5" data-track-index="43" data-volume="0.45" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const IN = "power3.out";
+      const cur = (x, y) => ({ x: x - 5, y: y - 4 });
+      const lab = (id, a, b) => {
+        tl.fromTo(id, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, a);
+        tl.to(id, { opacity: 0, y: -26, duration: 0.3, ease: "power2.in" }, b);
+      };
+      const sceneIn = (id, t) => tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: false }, t);
+      const sceneOut = (id, t) => tl.to(id, { opacity: 0, duration: 0.3, ease: "power2.in" }, t);
+      const swap = (a, b, t) => { tl.to(a, { opacity: 0, duration: 0.01 }, t); tl.to(b, { opacity: 1, duration: 0.01 }, t); };
+      const pulse = (id, t, first) => {
+        tl.fromTo(id, { boxShadow: "0 0 0 0 rgba(34,197,94,0.7)" }, { boxShadow: "0 0 0 24px rgba(34,197,94,0)", duration: 0.7, ease: "power2.out", immediateRender: !!first }, t);
+        tl.to(id, { borderColor: "#22c55e", duration: 0.2 }, t);
+      };
+      // beat grid of the trimmed track: 0.5 + k * 0.5225
+
+      // ===== S1 dashboard (0 - 4.2) =====
+      lab("#L1", 0.3, 3.7);
+      tl.fromTo("#dash", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: IN }, 0.5);
+      tl.fromTo(".pp", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, stagger: 0.52 }, 1.05);
+      tl.fromTo("#cursor", { opacity: 0, ...cur(1300, 900) }, { opacity: 1, ...cur(980, 455), duration: 0.8, ease: "power2.inOut" }, 2.4);
+      tl.to("#startBtn", { scale: 0.97, duration: 0.08 }, 3.62); tl.to("#startBtn", { scale: 1, duration: 0.15 }, 3.7); // beat-grid 3.64
+      tl.to("#cursor", { opacity: 0, duration: 0.2 }, 3.85);
+      sceneOut("#scH", 3.95);
+
+      // ===== S2 build (4.2 - 10.3) =====
+      sceneIn("#scC", 4.2);
+      tl.fromTo("#palette", { x: -270 }, { x: 0, duration: 0.45, ease: IN }, 4.25);
+      lab("#L2", 4.5, 9.9);
+      [["#c1", 380, 4.68], ["#c2", 720, 5.73], ["#c3", 1060, 6.77], ["#c4", 1400, 7.82]].forEach(([id, left, t]) =>
+        tl.fromTo(id, { opacity: 0, x: 90 - left, y: 60, scale: 0.55 }, { opacity: 1, x: 0, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, t)); // beat-grid
+      const wg = document.querySelectorAll(".wg");
+      [5.2, 6.25, 7.3].forEach((t, i) => tl.fromTo(wg[i], { strokeDashoffset: 70 }, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out", immediateRender: false }, t));
+      tl.to("#guide", { opacity: 0.9, duration: 0.15 }, 8.0); tl.to("#guide", { opacity: 0, duration: 0.25 }, 8.5);
+      tl.to("#palette", { x: -270, duration: 0.45, ease: "power2.in" }, 9.4);
+
+      // ===== S3 run (10.3 - 15.5) =====
+      tl.fromTo("#cursor", { opacity: 0, ...cur(1400, 400) }, { opacity: 1, ...cur(1770, 74), duration: 0.7, ease: "power2.inOut", immediateRender: false }, 9.6);
+      tl.to("#runbtn", { scale: 0.93, duration: 0.08 }, 10.41); tl.to("#runbtn", { scale: 1, duration: 0.15 }, 10.49); // beat-grid 10.43
+      tl.to("#cursor", { opacity: 0, duration: 0.25 }, 10.8);
+      lab("#L3", 10.6, 15.0);
+      tl.fromTo("#console", { y: 420 }, { y: 0, duration: 0.45, ease: IN }, 10.6);
+      const wn = document.querySelectorAll(".wn"), q = document.querySelectorAll(".q");
+      [10.95, 12.0, 13.04, 14.09].forEach((t, i) => {   // beat-grid
+        pulse("#c" + (i + 1), t, i === 0);
+        tl.fromTo(q[i], { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25, ease: IN, immediateRender: false }, t);
+        if (i < 3) tl.fromTo(wn[i], { strokeDashoffset: 70 }, { strokeDashoffset: 0, duration: 0.35, immediateRender: false }, t + 0.4);
+      });
+      sceneOut("#scC", 15.2);
+
+      // ===== S4 your own model (15.5 - 22) =====
+      sceneIn("#scM", 15.5);
+      tl.fromTo("#agent", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 15.6);
+      tl.fromTo("#circ", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)" }, 16.0);
+      lab("#L4", 15.8, 21.4);
+      tl.fromTo("#cursor", { opacity: 0, ...cur(1400, 1040) }, { opacity: 1, ...cur(965, 825), duration: 0.6, ease: "power2.inOut", immediateRender: false }, 16.0);
+      tl.fromTo("#popA", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: IN, immediateRender: false }, 16.75); // after click 16.7
+      tl.to("#cursor", { ...cur(1190, 762), duration: 0.45, ease: "power2.inOut" }, 17.15);
+      tl.to("#popA", { opacity: 0, duration: 0.1 }, 17.74);
+      swap("#cLock", "#cOpen", 17.74);
+      tl.fromTo("#popB", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.25, ease: IN, immediateRender: false }, 17.8);
+      tl.to("#popB", { opacity: 0, duration: 0.15 }, 18.79);
+      swap("#cOpen", "#cDone", 18.79);
+      tl.to("#cursor", { opacity: 0, duration: 0.25 }, 19.0);
+      tl.to("#wm", { strokeDashoffset: 0, duration: 0.35, ease: "power2.out" }, 19.31); // beat-grid
+      swap("#e1", "#f1", 19.66);
+      tl.fromTo("#mcap", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, immediateRender: false }, 20.0);
+      sceneOut("#scM", 21.7);
+
+      // ===== S5 vacation planner (22 - 29) =====
+      sceneIn("#scT", 22.0);
+      tl.fromTo(["#t0", "#t1", "#t2", "#t3"], { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, stagger: 0.25 }, 22.2);
+      lab("#L5", 22.3, 25.5);
+      const tw = document.querySelectorAll(".tw");
+      [["#t0", 23.49], ["#t1", 24.53], ["#t2", 25.58], ["#t3", 27.67]].forEach(([id, t], i) => {   // beat-grid
+        pulse(id, t, false);
+        if (i > 0) tl.fromTo(tw[i - 1], { strokeDashoffset: 60 }, { strokeDashoffset: 0, duration: 0.3, immediateRender: false }, t - 0.4);
+      });
+      tl.fromTo("#flor", { opacity: 0, scale: 0.7, transformOrigin: "0 50%" }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)", immediateRender: false }, 24.6);
+      lab("#L6", 25.7, 28.5);
+      const s = document.querySelectorAll(".s"), k = document.querySelectorAll(".k");
+      [25.75, 26.05, 26.35].forEach((t, i) => {
+        tl.fromTo(s[i], { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.25, ease: IN, immediateRender: false }, t);
+        tl.fromTo(k[i], { opacity: 0 }, { opacity: 1, duration: 0.15, immediateRender: false }, t + 0.35);
+      });
+      tl.fromTo("#tot", { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)", immediateRender: false }, 26.9);
+      tl.fromTo(".doc", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, immediateRender: false }, 27.8);
+      sceneOut("#scT", 28.7);
+
+      // ===== S6 apps (29 - 35) =====
+      sceneIn("#scA", 29.0);
+      tl.fromTo("#act", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 29.2);
+      tl.fromTo("#chat", { opacity: 0, x: 50 }, { opacity: 1, x: 0, duration: 0.45, ease: IN }, 29.3);
+      tl.fromTo(".ap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.35, ease: IN, stagger: 0.3 }, 29.7);
+      lab("#L7", 29.3, 34.4);
+      pulse("#act", 30.0, false);
+      tl.fromTo("#m1", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 30.28);   // beat-grid
+      tl.fromTo("#typing", { opacity: 0 }, { opacity: 1, duration: 0.2, immediateRender: false }, 31.1);
+      tl.to("#typing", { opacity: 0, duration: 0.1 }, 31.8);
+      tl.fromTo("#m2", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 31.85);   // beat-grid
+      tl.fromTo("#m3", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 32.89);   // beat-grid
+      sceneOut("#scA", 34.7);
+
+      // ===== S7 marketplace (35 - 40) =====
+      sceneIn("#scK", 35.0);
+      tl.fromTo("#win", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 35.0);
+      tl.fromTo(".kc", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, stagger: 0.25 }, 35.3);
+      lab("#L8", 35.3, 39.4);
+      tl.fromTo("#cursor", { opacity: 0, ...cur(1100, 1000) }, { opacity: 1, ...cur(660, 571), duration: 0.8, ease: "power2.inOut", immediateRender: false }, 36.0);
+      swap("#cb1", "#cb1b", 37.08);                      // beat-grid 37.08
+      swap("#cb1b", "#cb1c", 37.6);                      // beat-grid 37.6
+      tl.to("#cursor", { opacity: 0, duration: 0.25 }, 37.9);
+      tl.fromTo("#kcap", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: IN, immediateRender: false }, 37.8);
+      sceneOut("#scK", 39.7);
+
+      // ===== S8 tasks (40 - 43) =====
+      sceneIn("#scD", 40.0);
+      tl.fromTo("#tasks", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 40.0);
+      lab("#L9", 40.2, 42.7);
+      tl.fromTo(".trow", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.3, ease: IN, stagger: 0.52, immediateRender: false }, 40.6);
+      sceneOut("#scD", 42.9);
+
+      // ===== outro (43.2 - 46) =====
+      tl.fromTo("#brand", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, 43.35); // beat-grid 43.34
+      tl.fromTo("#tag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 43.7);
+      tl.fromTo("#feat span", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.3, ease: IN, stagger: 0.12 }, 44.1);
+      tl.to("#feat", { opacity: 1, duration: 0.01 }, 44.1);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
