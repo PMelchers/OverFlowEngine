@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>OverFlowEngine Discord</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #ffffff; font-family: system-ui, sans-serif; color: #111827; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #ffffff;
+        background-image: radial-gradient(#d1d5db 2.5px, transparent 2.5px); background-size: 32px 32px; }
+      .label { position: absolute; left: 0; width: 1920px; text-align: center; top: 62px; font-size: 66px; font-weight: 800; letter-spacing: -0.02em; }
+      .label em { font-style: normal; color: #4338ca; }
+
+      /* chat panel (right) */
+      #chat { position: absolute; left: 1080px; top: 200px; width: 760px; height: 830px; background: #1f2937; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(15,23,42,0.30); }
+      .ch { height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 2px solid #374151; color: #f9fafb; font-size: 24px; font-weight: 800; }
+      .ch span { font-size: 17px; font-weight: 600; color: #9ca3af; }
+      #start { position: absolute; left: 28px; top: 96px; font-size: 20px; color: #9ca3af; }
+      .msg { position: absolute; left: 24px; width: 700px; display: flex; gap: 16px; }
+      .av { width: 52px; height: 52px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 22px; }
+      .mn { font-size: 21px; font-weight: 800; color: #f9fafb; display: flex; align-items: center; gap: 10px; }
+      .bot { font-size: 13px; background: #4f46e5; color: #fff; border-radius: 4px; padding: 2px 6px; }
+      .tm { font-size: 15px; color: #9ca3af; font-weight: 500; }
+      .mt { font-size: 22px; color: #e5e7eb; margin-top: 4px; line-height: 1.35; }
+      #m1 { top: 100px; } #m2 { top: 250px; } #m3 { top: 360px; }
+      #typing { position: absolute; left: 28px; bottom: 26px; font-size: 18px; color: #d1d5db; font-style: italic; }
+
+      /* left: settings card */
+      #set { position: absolute; left: 80px; top: 210px; width: 920px; height: 490px; background: #fff; border: 2px solid #e5e7eb; border-radius: 18px; box-shadow: 0 10px 30px rgba(15,23,42,0.10); padding: 30px 30px; box-sizing: border-box; }
+      #set h2 { margin: 0; font-size: 30px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+      #set .ds { font-size: 19px; color: #4b5563; margin-top: 8px; line-height: 1.4; }
+      .lst { position: relative; height: 56px; margin-top: 18px; }
+      .lst div { position: absolute; inset: 0; display: flex; align-items: center; font-size: 19px; }
+      #none { color: #4b5563; }
+      #row1 { border: 2px solid #e5e7eb; background: #f9fafb; border-radius: 10px; padding: 0 16px; font-size: 21px; }
+      #row1 b { color: #111827; } #row1 .ck { color: #15803d; margin: 0 8px; font-weight: 800; } #row1 i { font-style: normal; color: #6b7280; }
+      .frm { border-top: 2px solid #e5e7eb; margin-top: 16px; padding-top: 16px; }
+      .inp { height: 52px; border: 2px solid #d1d5db; border-radius: 10px; display: flex; align-items: center; padding: 0 16px; font-size: 21px; margin-bottom: 12px; box-sizing: border-box; }
+      .sbtn { position: relative; height: 54px; }
+      .sbtn div { position: absolute; inset: 0; border-radius: 10px; background: #2563eb; color: #fff; font-size: 21px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+      /* left: canvas blocks */
+      .blk { position: absolute; box-sizing: border-box; border: 3px solid; border-radius: 16px; padding: 16px 20px; box-shadow: 0 6px 18px rgba(15,23,42,0.10); }
+      .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .badge { font-size: 16px; font-weight: 800; color: #fff; padding: 4px 10px; border-radius: 7px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .ttl { font-size: 25px; font-weight: 800; }
+      #hook { left: 260px; top: 430px; width: 560px; height: 180px; border-color: #34d399; background: #ecfdf5; }
+      #act { left: 420px; top: 196px; width: 600px; height: 610px; border-color: #34d399; background: #ecfdf5; }
+      #hook .badge, #act .badge { background: #047857; }
+      .mcp { margin-left: auto; font-size: 14px; font-weight: 700; color: #3730a3; background: #e0e7ff; border-radius: 999px; padding: 4px 10px; }
+      .fr .fl { font-size: 15px; font-weight: 700; color: #047857; margin: 6px 0 4px; }
+      .fr .fv { height: 40px; border: 2px solid #6ee7b7; background: #fff; border-radius: 9px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 19px; box-sizing: border-box; }
+      .fr .fv.mono { font-family: monospace; }
+      .note { font-size: 15px; color: #047857; margin-top: 10px; }
+      #ag { left: 80px; top: 380px; width: 280px; height: 150px; border-color: #e879f9; background: #fdf4ff; }
+      #ag .badge { background: #a21caf; } #ag .sub { font-size: 17px; color: #86198f; margin-top: 6px; font-family: monospace; }
+      #model { position: absolute; left: 640px; top: 850px; width: 140px; height: 140px; border-radius: 50%; border: 6px solid #d946ef; background: #fae8ff; color: #86198f; font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; }
+      #run { position: absolute; left: 80px; top: 900px; width: 200px; height: 64px; border-radius: 14px; background: #eff6ff; border: 2px solid #bfdbfe; color: #1d4ed8; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      #wires { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+
+      #cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; }
+      #brand { position: absolute; left: 0; width: 1920px; text-align: center; top: 380px; font-size: 168px; font-weight: 900; letter-spacing: -0.04em; line-height: 1; }
+      #brand span { color: #2563eb; }
+      #tag { position: absolute; left: 0; width: 1920px; text-align: center; top: 590px; font-size: 56px; font-weight: 600; color: #374151; }
+
+      #set, #row1, #b2, #act, #ag, #model, #run, #wires, #m1, #m2, #m3, #typing, .fr { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="20">
+      <div class="label" id="L1">Your flow can <em>talk in Discord.</em></div>
+      <div class="label" id="L2">Link your bot <em>once.</em></div>
+      <div class="label" id="L3">Pick the bot, the channel, <em>the message.</em></div>
+      <div class="label" id="L4">It posts <em>for real</em>…</div>
+      <div class="label" id="L5">…and answers <em>the first reply.</em></div>
+
+      <div id="chat">
+        <div class="ch"># general <span>Team server</span></div>
+        <div id="start">This is the start of #general.</div>
+        <div class="msg" id="m1"><div class="av" style="background:#4f46e5">T</div><div>
+          <div class="mn">Team server bot <span class="bot">BOT</span><span class="tm">Today at 09:00</span></div>
+          <div class="mt">Weekend forecast for the team trip: sunny and 24°C both days.</div></div></div>
+        <div class="msg" id="m2"><div class="av" style="background:#0f766e">A</div><div>
+          <div class="mn">alex <span class="tm">Today at 09:01</span></div>
+          <div class="mt">wait, really??</div></div></div>
+        <div class="msg" id="m3"><div class="av" style="background:#4f46e5">T</div><div>
+          <div class="mn">Team server bot <span class="bot">BOT</span><span class="tm">Today at 09:01</span></div>
+          <div class="mt">It's actually amazing weather! Clear skies all weekend.</div></div></div>
+        <div id="typing">alex is typing…</div>
+      </div>
+
+      <!-- hook: the App Action block pointed at Discord -->
+      <div class="blk" id="hook">
+        <div class="head"><span class="badge">App Action</span><span class="ttl">Weekend update</span></div>
+        <div class="fr" style="opacity:1"><div class="fl">App</div><div class="fv"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4338ca" stroke-width="2.4" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Discord</div></div>
+      </div>
+
+      <!-- settings: Connected Apps → Discord bots -->
+      <div id="set">
+        <h2><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4338ca" stroke-width="2.4" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Discord bots</h2>
+        <div class="ds">Link a bot token so App Action blocks can send to Discord as your own bot instead of the server's default one.</div>
+        <div class="lst"><div id="none">No Discord bots linked yet - App Action blocks will use the server's default bot.</div>
+          <div id="row1"><b>Team server bot</b><span class="ck">✓</span><i>(••••••3f9a)</i></div></div>
+        <div class="frm">
+          <div class="inp" id="i1"></div>
+          <div class="inp" id="i2"></div>
+          <div class="sbtn"><div id="b1">Add Discord bot</div><div id="b2">Verifying with Discord...</div></div>
+        </div>
+      </div>
+
+      <!-- canvas: AI Agent → App Action (Discord) with a reply model -->
+      <svg id="wires" viewBox="0 0 1920 1080" fill="none" stroke-linecap="round">
+        <path id="wa" d="M360 455 L420 455" stroke="#9ca3af" stroke-width="6" />
+        <path id="wm" d="M710 850 L710 806" stroke="#d946ef" stroke-width="6" />
+      </svg>
+      <div class="blk" id="ag">
+        <div class="head"><span class="badge">AI Agent</span></div>
+        <div class="ttl">Weather Agent</div>
+        <div class="sub">→ agentReply</div>
+      </div>
+      <div class="blk" id="act">
+        <div class="head"><span class="badge">App Action</span><span class="ttl">Weekend update</span><span class="mcp">via Discord MCP</span></div>
+        <div class="fr"><div class="fl">App</div><div class="fv"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4338ca" stroke-width="2.4" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Discord</div></div>
+        <div class="fr"><div class="fl">Action</div><div class="fv">Send, then auto-reply to one response</div></div>
+        <div class="fr"><div class="fl">Discord bot</div><div class="fv">Team server bot</div></div>
+        <div class="fr"><div class="fl">Channel ID</div><div class="fv mono">1234567890123456</div></div>
+        <div class="fr"><div class="fl">Message</div><div class="fv mono">{agentReply}</div></div>
+        <div class="fr"><div class="fl">Reply instructions &amp; background facts</div><div class="fv">its actually amazing weather!</div></div>
+        <div class="note">Sends this message for real, then waits for one reply and answers it.</div>
+      </div>
+      <div id="model">claude-sonnet-5</div>
+      <div id="run">▶ Run</div>
+
+      <div id="brand">Over<span>Flow</span>Engine</div>
+      <div id="tag">Wire it to Discord. Run it.</div>
+
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 22 L14.5 20.6 L11 13.2 L18 13 Z" fill="#111827" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+      <audio id="bgm" data-start="0" data-duration="20" data-track-index="10" data-volume="0.4" src="assets/music/bed.mp3"></audio>
+      <audio id="s1" data-start="1.05" data-duration="0.19" data-track-index="11" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="s2" data-start="5.18" data-duration="0.06" data-track-index="12" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="s3" data-start="5.96" data-duration="0.05" data-track-index="13" data-volume="0.35" src="assets/sfx/select_008.ogg"></audio>
+      <audio id="s4" data-start="7.05" data-duration="0.19" data-track-index="14" data-volume="0.28" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="s5" data-start="8.69" data-duration="0.06" data-track-index="15" data-volume="0.28" src="assets/sfx/rollover2.ogg"></audio>
+      <audio id="s6" data-start="11.4" data-duration="0.06" data-track-index="16" data-volume="0.45" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="s7" data-start="11.96" data-duration="0.11" data-track-index="17" data-volume="0.4" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="s8" data-start="13.6" data-duration="0.11" data-track-index="18" data-volume="0.32" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="s9" data-start="15.23" data-duration="0.11" data-track-index="19" data-volume="0.4" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="s10" data-start="17.68" data-duration="1.5" data-track-index="20" data-volume="0.45" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const IN = "power3.out";
+      const cur = (x, y) => ({ x: x - 5, y: y - 4 });
+      const lab = (id, a, b) => {
+        tl.fromTo(id, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, a);
+        tl.to(id, { opacity: 0, y: -26, duration: 0.3, ease: "power2.in" }, b);
+      };
+      const swap = (from, to, t) => { tl.to(from, { opacity: 0, duration: 0.01 }, t); tl.to(to, { opacity: 1, duration: 0.01 }, t); };
+      function typeInto(sel, text, t, step) {
+        const host = document.querySelector(sel), cls = sel.slice(1) + "c";
+        const el = document.createElement("span"); el.style.whiteSpace = "pre"; host.appendChild(el);
+        text.split("").forEach((ch) => { const s = document.createElement("span"); s.className = cls; s.textContent = ch; el.appendChild(s); });
+        tl.fromTo("." + cls, { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: step }, t);
+      }
+      ["#wa", "#wm"].forEach((id) => { const p = document.querySelector(id); const L = p.getTotalLength(); p.setAttribute("stroke-dasharray", L); p.setAttribute("stroke-dashoffset", L); });
+
+      // Scene 1: hook (beat-grid 0.5 / 1.05)
+      lab("#L1", 0.3, 2.55);
+      tl.fromTo("#chat", { opacity: 0, x: 60 }, { opacity: 1, x: 0, duration: 0.5, ease: IN }, 0.5);
+      tl.fromTo("#hook", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: "back.out(1.4)" }, 1.05);
+      tl.to("#hook", { opacity: 0, y: -20, duration: 0.25, ease: "power2.in" }, 2.6);
+
+      // Scene 2: Connected Apps → add a Discord bot token
+      tl.fromTo("#set", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 2.9);
+      lab("#L2", 2.95, 6.5);
+      typeInto("#i1", "Team server bot", 3.2, 0.04);
+      typeInto("#i2", "••••••••••••••••••••••••", 3.95, 0.022);
+      tl.fromTo("#cursor", { opacity: 0, ...cur(980, 900) }, { opacity: 1, ...cur(560, 655), duration: 0.6, ease: "power2.inOut" }, 4.4);
+      swap("#b1", "#b2", 5.19);            // beat-grid 5.19
+      swap("#none", "#row1", 5.96);        // beat-grid 5.96
+      swap("#b2", "#b1", 5.96);
+      tl.fromTo("#row1", { boxShadow: "0 0 0 0 rgba(34,197,94,0.6)" }, { boxShadow: "0 0 0 16px rgba(34,197,94,0)", duration: 0.7, immediateRender: false }, 5.96);
+      tl.to("#cursor", { opacity: 0, duration: 0.25 }, 6.2);
+      tl.to("#set", { opacity: 0, y: -20, duration: 0.3, ease: "power2.in" }, 6.5);
+
+      // Scene 3: canvas — AI Agent feeds the Discord App Action, reply model below
+      tl.fromTo("#ag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 6.85);
+      tl.fromTo("#act", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: IN }, 6.85);
+      tl.to("#wires", { opacity: 1, duration: 0.01 }, 7.3);
+      tl.to("#wa", { strokeDashoffset: 0, duration: 0.3 }, 7.35);
+      lab("#L3", 7.3, 11.0);
+      tl.fromTo(".fr", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.3, ease: IN, stagger: 0.546, immediateRender: false }, 7.59); // beat-grid 7.59 … 10.32
+      tl.fromTo("#model", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.6)" }, 8.69);
+      tl.to("#wm", { strokeDashoffset: 0, duration: 0.25 }, 8.95);
+      tl.fromTo("#run", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.35, ease: IN }, 9.8);
+
+      // Scene 4: run → the bot posts, alex replies, the bot answers once
+      tl.fromTo("#cursor", { opacity: 0, ...cur(700, 1040) }, { opacity: 1, ...cur(180, 930), duration: 0.6, ease: "power2.inOut", immediateRender: false }, 10.6);
+      tl.to("#run", { scale: 0.93, duration: 0.08 }, 11.38); tl.to("#run", { scale: 1, duration: 0.15 }, 11.46);
+      tl.to("#cursor", { opacity: 0, duration: 0.25 }, 11.8);
+      ["#ag", "#act"].forEach((s, i) => {
+        tl.fromTo(s, { boxShadow: "0 0 0 0 rgba(34,197,94,0.7)" }, { boxShadow: "0 0 0 24px rgba(34,197,94,0)", duration: 0.7, ease: "power2.out", immediateRender: false }, 11.45 + i * 0.3);
+        tl.to(s, { borderColor: "#22c55e", duration: 0.2 }, 11.45 + i * 0.3);
+      });
+      lab("#L4", 11.6, 13.9);
+      tl.to("#start", { opacity: 0, duration: 0.2 }, 11.85);
+      tl.fromTo("#m1", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 11.96); // beat-grid
+      tl.fromTo("#typing", { opacity: 0 }, { opacity: 1, duration: 0.2, immediateRender: false }, 12.75);
+      tl.to("#typing", { opacity: 0, duration: 0.1 }, 13.55);
+      tl.fromTo("#m2", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 13.6); // beat-grid
+      lab("#L5", 14.1, 16.95);
+      tl.fromTo("#m3", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: IN, immediateRender: false }, 15.23); // beat-grid
+
+      // Outro
+      tl.to(["#chat", "#ag", "#act", "#model", "#run", "#wires"], { opacity: 0, scale: 0.97, duration: 0.4, ease: "power2.in" }, 17.2);
+      tl.fromTo("#brand", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, 17.68);
+      tl.fromTo("#tag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: IN }, 17.95);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+OverFlowEngine flows can talk in Discord now. Link your bot once, drop an App Action block in a flow, and it posts to your channel, waits for the first reply, and answers it with AI.
