@@ -843,6 +843,7 @@ def _advance(db: Session, state: dict) -> dict:
             currency_raw = _render_message(data.get("currency", ""), eval_vars)
             fuel_type_raw = _render_message(data.get("fuelType", ""), eval_vars)
             consumption_raw = _render_message(data.get("fuelConsumption", ""), eval_vars)
+            tank_raw = _render_message(data.get("tankSize", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
             stops = [s.strip() for s in stops_raw.split("|") if s.strip()]
             dest_stops = [s.strip() for s in dest_stops_raw.split("|") if s.strip()]
@@ -915,15 +916,25 @@ def _advance(db: Session, state: dict) -> dict:
             # real route at current per-country prices. Tolls aren't in that data, so the
             # AI (when connected) is still asked for those alone.
             live_fuel = False
+            ferry_km = 0
             if transport_mode and is_own_car(transport_mode) and origin and resolved(destination):
-                consumption_match = re.search(r"\d+(?:[.,]\d+)?", resolved(consumption_raw))
-                consumption = float(consumption_match.group(0).replace(",", ".")) if consumption_match else None
+
+                def to_float(s: str) -> float | None:
+                    match = re.search(r"\d+(?:[.,]\d+)?", resolved(s))
+                    return float(match.group(0).replace(",", ".")) if match else None
+
                 try:
-                    live_items.append(
-                        estimate_fuel_cost(
-                            origin, stops, resolved(destination), resolved(fuel_type_raw), consumption, target_currency
-                        )
+                    fuel_item = estimate_fuel_cost(
+                        origin,
+                        stops,
+                        resolved(destination),
+                        resolved(fuel_type_raw),
+                        to_float(consumption_raw),
+                        to_float(tank_raw),
+                        target_currency,
                     )
+                    live_items.append(fuel_item)
+                    ferry_km = fuel_item.get("ferryKm") or 0
                     live_fuel = searched = True
                 except FuelPriceError as exc:
                     logger.warning("Live fuel price lookup failed for %r -> %r: %s", origin, destination, exc)
@@ -973,11 +984,19 @@ def _advance(db: Session, state: dict) -> dict:
                     elif stay_type and not nights:
                         skipped_notes.append("accommodation not estimated - check-in/check-out dates not set")
                     if live_fuel:
+                        # The fuel route knows when it crosses water - ferry tickets (car +
+                        # passengers) are a real cost the fuel line deliberately leaves out.
+                        ferry_part = (
+                            f" plus the car ferry crossings on the way (about {ferry_km} km by ferry in "
+                            "total, round trip) for the car and the whole group"
+                            if ferry_km
+                            else ""
+                        )
                         lines.append(
-                            f'one "transport" line: ONLY the road tolls and vignettes for a round trip by '
-                            f"car from {origin} to {destination} and back - fuel is already priced "
-                            'separately, so do NOT include fuel. Use 0 if there are no tolls, and name '
-                            'the tolls/vignettes in "note"'
+                            f'one "transport" line: ONLY the road tolls and vignettes{ferry_part} for a '
+                            f"round trip by car from {origin} to {destination} and back - fuel is already "
+                            'priced separately, so do NOT include fuel. Use 0 if there are none, and name '
+                            'each toll/vignette/ferry in "note"'
                         )
                     elif transport_mode and (origin or destination):
                         lines.append(

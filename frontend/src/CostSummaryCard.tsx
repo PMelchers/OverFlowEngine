@@ -91,6 +91,25 @@ export default function CostSummaryCard({ breakdown, onClose }: { breakdown: Cos
                               {item.note}
                             </span>
                           )}
+                          {item.fuelStops && item.fuelStops.length > 0 && (
+                            <details className="mt-1 text-[10px] text-yellow-700 dark:text-yellow-400">
+                              <summary className="cursor-pointer font-medium">
+                                {item.fuelStops.length} fuel stop{item.fuelStops.length === 1 ? '' : 's'}
+                              </summary>
+                              <ol className="mt-1 space-y-0.5 pl-1">
+                                {item.fuelStops.map((stop, n) => (
+                                  <li key={n} className="flex justify-between gap-2 font-mono">
+                                    <span>
+                                      {n + 1}. km {stop.km.toLocaleString()} · {stop.country}
+                                    </span>
+                                    <span>
+                                      {stop.liters} L × {stop.pricePerLiter.toFixed(2)} = {stop.cost.toFixed(2)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
                         </span>
                         <span
                           className={`shrink-0 font-mono font-medium ${unreliable ? 'text-red-700 dark:text-red-400' : 'text-yellow-800 dark:text-yellow-300'}`}

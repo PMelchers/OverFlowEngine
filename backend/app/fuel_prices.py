@@ -1,20 +1,29 @@
 """Live fuel cost for the Trip Cost block's transport line, when the trip is made by the
-travelers' own car: the real driving route, split per country, priced with current fuel
-prices in each country it passes through.
+travelers' own car: the real driving route, priced with current fuel prices in each
+country it passes through, by simulating where the car would actually fill up.
 
 Sources (all free, no API key):
 - Route: OSRM's public demo server (router.project-osrm.org), with the origin, route
-  stops and destination geocoded through Nominatim (see geo.py).
-- Countries along the route: Nominatim reverse geocoding of points sampled along it.
+  stops and destination geocoded through Nominatim (see geo.py). Ferry crossings are
+  recognised from OSRM's step mode and burn no fuel.
+- Country of every ~10 km route point: a local lookup against Natural Earth borders
+  (geo.country_code).
 - Prices, best first:
-  1. France / Spain: median of the actual stations within STATION_RADIUS_KM of the route,
-     from each government's open fuel-price data (updated many times a day).
+  1. France / Spain / UK: median of the actual stations within STATION_RADIUS_KM of the
+     route - government open data (FR, ES) and the UK retailers' open price feeds
+     published under the CMA's fuel-price transparency scheme (Asda, Motor Fuel Group).
   2. Every other EU country: the national average from the European Commission's Weekly
      Oil Bulletin (updated weekly).
-  3. A country with neither (e.g. Switzerland, Norway, UK): the median price of the
-     other countries on the route, flagged as such in the note.
-- Currency: everything above is in EUR; other target currencies are converted with
-  ECB reference rates from Frankfurter (api.frankfurter.dev).
+  3. A country with neither (e.g. Switzerland, Norway): the median price of the other
+     countries on the route, flagged as such in the note.
+- Currency: prices are handled in EUR internally (UK prices converted from GBP) and
+  converted to the target currency with ECB reference rates from Frankfurter.
+
+The fill-up simulation (simulate_fill_ups) leaves home with a full tank, and every time
+the tank drops below REFUEL_FROM (half) it fills up again at the cheapest point it can
+still reach before hitting the RESERVE - so a cheap country just ahead is waited for,
+an expensive one is skipped where the range allows. Fuel left on return is deducted at
+the home price, so the total is what the trip's fuel actually cost.
 
 Every failure raises FuelPriceError with a step-log-safe reason, and the caller falls
 back to the AI estimate - same contract as accommodation_prices.py.
@@ -28,11 +37,12 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 import httpx
 
-from .geo import country_code, geocode, haversine_km
+from .geo import BordersUnavailable, country_code, geocode, haversine_km
 
 _TIMEOUT = 20.0
 _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"
@@ -44,22 +54,30 @@ FRANCE_API = (
     "prix-des-carburants-en-france-flux-instantane-v2/records"
 )
 SPAIN_API = "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/"
+# UK retailers that publish open price feeds and don't block server requests (Tesco and
+# Sainsbury's feeds answer 403). Same JSON shape for both, prices in pence per litre.
+UK_FEEDS = [
+    "https://storelocator.asda.com/fuel_prices_data.json",
+    "https://fuel.motorfuelgroup.com/fuel_prices_data.json",
+]
 FX_API = "https://api.frankfurter.dev/v1/latest"
 
-# The route is cut into chunks of about this length, and each chunk's country is looked
-# up at its midpoint. Nominatim allows 1 request/second, so the chunk length grows on long
-# routes to keep the lookup count (and the block's run time) bounded.
-SAMPLE_KM = 75
-MAX_SAMPLES = 20
-# Station prices are looked up around at most this many of a country's route samples
-# (evenly spread), in parallel - plenty for a median, and keeps long French stretches fast.
+# Distance between route points: each one gets a country (and so a price) and is a
+# possible fill-up spot.
+SAMPLE_KM = 10
+# Station prices are looked up around at most this many of a country's route points
+# (evenly spread), in parallel - plenty for a median, and keeps long stretches fast.
 MAX_STATION_POINTS = 6
-# Stations further than this from a route sample don't count as "on the route".
+# Stations further than this from a route point don't count as "on the route".
 STATION_RADIUS_KM = 5
 # Fewer stations than this near the route -> use the national average instead.
 MIN_STATIONS = 3
-# Used when the block doesn't set a consumption - a typical loaded family car.
+# Used when the block doesn't set them - a typical loaded family car.
 DEFAULT_CONSUMPTION = {"petrol": 7.0, "diesel": 6.0, "lpg": 9.0}
+DEFAULT_TANK_LITERS = 50.0
+# Fill-up window, as a fraction of the tank: from when it's half empty until the reserve.
+REFUEL_FROM = 0.5
+RESERVE = 0.15
 
 # ISO code -> country name as written in the Oil Bulletin's first column.
 EU_COUNTRIES = {
@@ -80,6 +98,7 @@ _SPAIN_FIELDS = {
     "diesel": ["Precio Gasoleo A"],
     "lpg": ["Precio Gases licuados del petróleo"],
 }
+_UK_FIELDS = {"petrol": ["E10", "E5"], "diesel": ["B7"], "lpg": []}
 
 _cache_lock = threading.Lock()
 # name -> (fetched_at, value). In-process only.
@@ -134,38 +153,70 @@ def parse_fuel_type(raw: str) -> str:
 # --- route -------------------------------------------------------------------------
 
 
-def _osrm_route(points: list[tuple[float, float]]) -> tuple[float, list[tuple[float, float]]]:
-    """(distance in km, [(lat, lon), ...] along the road) for a route through `points`."""
+@dataclass
+class RoutePoint:
+    lat: float
+    lon: float
+    km: float  # driving km from the start of the round trip (ferry crossings don't count)
+    country: str = "??"
+
+
+def _osrm_route(points: list[tuple[float, float]]) -> tuple[float, float, list[RoutePoint]]:
+    """(driving km, ferry km, points every ~SAMPLE_KM of driving) for a route through
+    `points`. Ferry steps are skipped: they add no driving km and get no points, so the
+    car neither burns nor buys fuel on board."""
     coords = ";".join(f"{lon},{lat}" for lat, lon in points)
-    body = _get(f"{OSRM_BASE}/{coords}", params={"overview": "full", "geometries": "geojson"}).json()
+    body = _get(
+        f"{OSRM_BASE}/{coords}", params={"overview": "false", "steps": "true", "geometries": "geojson"}
+    ).json()
     if body.get("code") != "Ok" or not body.get("routes"):
         raise FuelPriceError(f"no driving route found ({body.get('message') or body.get('code')})")
-    route = body["routes"][0]
-    return route["distance"] / 1000, [(lat, lon) for lon, lat in route["geometry"]["coordinates"]]
+
+    driven = ferry_km = 0.0
+    next_emit = 0.0
+    out: list[RoutePoint] = []
+    last: tuple[float, float] | None = None
+    for leg in body["routes"][0]["legs"]:
+        for step in leg["steps"]:
+            path = [(lat, lon) for lon, lat in step["geometry"]["coordinates"]]
+            step_km = step["distance"] / 1000
+            if step.get("mode") == "ferry":
+                ferry_km += step_km
+                continue
+            if len(path) < 2:
+                continue
+            # Scale the straight-line segment lengths to OSRM's own road distance for the step.
+            seg_lengths = [haversine_km(*a, *b) for a, b in zip(path, path[1:])]
+            geo_km = sum(seg_lengths)
+            scale = step_km / geo_km if geo_km else 0
+            for (a, b), seg in zip(zip(path, path[1:]), seg_lengths):
+                seg *= scale
+                while seg and driven + seg >= next_emit:
+                    frac = (next_emit - driven) / seg
+                    out.append(RoutePoint(a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac, next_emit))
+                    next_emit += SAMPLE_KM
+                driven += seg
+            last = path[-1]
+    if last and (not out or out[-1].km < driven):
+        out.append(RoutePoint(last[0], last[1], driven))
+    if len(out) < 2:
+        raise FuelPriceError("the route is too short to price")
+    return driven, ferry_km, out
 
 
-def _chunk_midpoints(path: list[tuple[float, float]], total_km: float) -> tuple[list[tuple[float, float]], float]:
-    """Cuts the path into equal chunks; returns each chunk's midpoint and the chunk length."""
-    chunk_km = max(SAMPLE_KM, total_km / MAX_SAMPLES)
-    n_chunks = max(1, round(total_km / chunk_km))
-    chunk_km = total_km / n_chunks
-    targets = [(i + 0.5) * chunk_km for i in range(n_chunks)]
-
-    midpoints: list[tuple[float, float]] = []
-    walked = 0.0
-    t = 0
-    for (lat1, lon1), (lat2, lon2) in zip(path, path[1:]):
-        seg = haversine_km(lat1, lon1, lat2, lon2)
-        while t < len(targets) and walked + seg >= targets[t]:
-            frac = (targets[t] - walked) / seg if seg else 0
-            midpoints.append((lat1 + (lat2 - lat1) * frac, lon1 + (lon2 - lon1) * frac))
-            t += 1
-        walked += seg
-    # Haversine along the polyline is a little shorter than OSRM's road distance, so the
-    # last target(s) can fall just past the end - pin them to the destination.
-    while len(midpoints) < n_chunks:
-        midpoints.append(path[-1])
-    return midpoints, chunk_km
+def _assign_countries(points: list[RoutePoint]) -> None:
+    try:
+        codes = [country_code(p.lat, p.lon) for p in points]
+    except BordersUnavailable as exc:
+        raise FuelPriceError(str(exc)) from exc
+    # A point just outside every border (coastal road, bridge, ferry terminal) takes its
+    # neighbour's country - the previous one, or the next one at the very start.
+    known = next((c for c in codes if c), None)
+    if known is None:
+        raise FuelPriceError("could not tell which countries the route goes through")
+    for p, code in zip(points, codes):
+        known = code or known
+        p.country = known
 
 
 # --- prices --------------------------------------------------------------------------
@@ -267,7 +318,35 @@ def _spain_stations(lat: float, lon: float, fuel: str) -> list[float]:
     return []
 
 
-_STATION_SOURCES = {"fr": _france_stations, "es": _spain_stations}
+def _fetch_uk_stations() -> list[dict]:
+    stations: list[dict] = []
+    for url in UK_FEEDS:
+        try:
+            stations += _get(url, headers={"User-Agent": _BROWSER_UA}).json().get("stations") or []
+        except (FuelPriceError, ValueError):
+            continue  # one retailer down still leaves the other
+    return stations
+
+
+def _uk_stations(lat: float, lon: float, fuel: str) -> list[float]:
+    stations = _cached("uk_stations", 3600, _fetch_uk_stations)
+    gbp_per_eur = _eur_to("GBP")
+    for field in _UK_FIELDS[fuel]:
+        prices = []
+        for s in stations:
+            loc, price = s.get("location") or {}, (s.get("prices") or {}).get(field)
+            try:
+                s_lat, s_lon, pence = float(loc["latitude"]), float(loc["longitude"]), float(price)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if abs(s_lat - lat) < 0.1 and abs(s_lon - lon) < 0.15 and haversine_km(lat, lon, s_lat, s_lon) <= STATION_RADIUS_KM:
+                prices.append(pence / 100 / gbp_per_eur)
+        if prices:
+            return prices
+    return []
+
+
+_STATION_SOURCES = {"fr": _france_stations, "es": _spain_stations, "gb": _uk_stations}
 
 
 def _eur_to(currency: str) -> float:
@@ -284,6 +363,61 @@ def _eur_to(currency: str) -> float:
     return _cached(f"fx_{currency}", 12 * 3600, fetch)
 
 
+# --- fill-up simulation ---------------------------------------------------------------
+
+
+def simulate_fill_ups(
+    points: list[RoutePoint], price_eur: dict[str, float], tank: float, consumption: float
+) -> tuple[float, list[dict], float]:
+    """(fuel cost in EUR, fill-up stops, litres left at the end).
+
+    Leaves with a full tank bought at the first point's price. Whenever the tank has
+    dropped below REFUEL_FROM, it fills up at the cheapest point reachable before the
+    RESERVE (the latest one on a tie, so it buys as much as possible at that price) -
+    filling to full, or just enough to get home on the reserve near the end. The fuel
+    left on arrival is deducted at the home price."""
+    per_km = consumption / 100
+    reserve = tank * RESERVE
+    end_km = points[-1].km
+    home_price = price_eur[points[0].country]
+
+    fuel = tank
+    cost = tank * home_price
+    stops: list[dict] = []
+    i = 0
+    while fuel - reserve < (end_km - points[i].km) * per_km:
+        candidates = []
+        last_reachable = None
+        for j in range(i + 1, len(points)):
+            fuel_at = fuel - (points[j].km - points[i].km) * per_km
+            if fuel_at < reserve:
+                break
+            last_reachable = j
+            if fuel_at <= tank * REFUEL_FROM:
+                candidates.append(j)
+        if not candidates:
+            if last_reachable is None:
+                raise FuelPriceError(
+                    f"a {tank:g} L tank at {consumption:g} L/100km can't cover {SAMPLE_KM} km above the reserve"
+                )
+            candidates = [last_reachable]
+        best = min(candidates, key=lambda j: (round(price_eur[points[j].country], 3), -j))
+        fuel -= (points[best].km - points[i].km) * per_km
+        to_finish = (end_km - points[best].km) * per_km + reserve
+        buy = max(0.0, min(tank - fuel, to_finish - fuel))
+        price = price_eur[points[best].country]
+        cost += buy * price
+        fuel += buy
+        stops.append(
+            {"km": round(points[best].km), "country": points[best].country.upper(), "liters": round(buy, 1), "priceEur": price}
+        )
+        i = best
+
+    left = fuel - (end_km - points[i].km) * per_km
+    cost -= left * home_price
+    return cost, stops, left
+
+
 # --- main entry point ----------------------------------------------------------------
 
 
@@ -293,14 +427,18 @@ def estimate_fuel_cost(
     destination: str,
     fuel_type: str,
     consumption_l_per_100km: float | None,
+    tank_liters: float | None,
     currency: str,
 ) -> dict:
-    """Returns one Trip Cost item ({name, category, estimated_cost, currency, note, live})
-    for the round trip's fuel, or raises FuelPriceError."""
+    """Returns one Trip Cost item ({name, category, estimated_cost, currency, note, live,
+    fuelStops, ferryKm}) for the round trip's fuel, or raises FuelPriceError."""
     fuel = parse_fuel_type(fuel_type)
     consumption = consumption_l_per_100km or DEFAULT_CONSUMPTION[fuel]
     if not 1 <= consumption <= 40:
         raise FuelPriceError(f"a consumption of {consumption:g} L/100km doesn't look right")
+    tank = tank_liters or DEFAULT_TANK_LITERS
+    if not 10 <= tank <= 200:
+        raise FuelPriceError(f"a {tank:g} L fuel tank doesn't look right")
 
     start = geocode(origin)
     if start is None:
@@ -315,72 +453,89 @@ def estimate_fuel_cost(
         point = geocode(stop)
         (via if point else skipped_stops).append(point or stop)
 
-    outbound_km, path = _osrm_route([start, *via, end])
-    return_km = _osrm_route([end, start])[0] if via else outbound_km
-    total_km = outbound_km + return_km
+    out_km, out_ferry, out_points = _osrm_route([start, *via, end])
+    if via:
+        back_km, back_ferry, back_points = _osrm_route([end, start])
+    else:
+        # Same road back - mirror the outbound points instead of asking OSRM again.
+        back_km, back_ferry = out_km, out_ferry
+        back_points = [RoutePoint(p.lat, p.lon, out_km - p.km) for p in reversed(out_points)]
+    points = out_points + [RoutePoint(p.lat, p.lon, out_km + p.km) for p in back_points[1:]]
+    driving_km, ferry_km = out_km + back_km, out_ferry + back_ferry
+    _assign_countries(points)
 
-    # Country split is measured on the outbound route and applied to the whole round
-    # trip - the direct way back crosses the same borders in practice.
-    midpoints, chunk_km = _chunk_midpoints(path, outbound_km)
     km_by_country: dict[str, float] = {}
-    point_by_country: dict[str, list[tuple[float, float]]] = {}
-    for lat, lon in midpoints:
-        code = country_code(lat, lon) or "??"
-        km_by_country[code] = km_by_country.get(code, 0) + chunk_km
-        point_by_country.setdefault(code, []).append((lat, lon))
+    for a, b in zip(points, points[1:]):
+        km_by_country[b.country] = km_by_country.get(b.country, 0) + (b.km - a.km)
+    countries = set(km_by_country) | {points[0].country}
 
     bulletin = None
     price_by_country: dict[str, tuple[float, str]] = {}
-    for code in km_by_country:
+    for code in countries:
         station_source = _STATION_SOURCES.get(code)
         if station_source:
-            points = point_by_country[code]
-            step = max(1, len(points) // MAX_STATION_POINTS)
-            points = points[::step][:MAX_STATION_POINTS]
+            country_points = [p for p in points if p.country == code]
+            step = max(1, len(country_points) // MAX_STATION_POINTS)
+            country_points = country_points[::step][:MAX_STATION_POINTS]
             try:
                 with ThreadPoolExecutor(max_workers=MAX_STATION_POINTS) as pool:
-                    found = [p for prices in pool.map(lambda pt: station_source(pt[0], pt[1], fuel), points) for p in prices]
+                    found = [x for prices in pool.map(lambda p: station_source(p.lat, p.lon, fuel), country_points) for x in prices]
             except FuelPriceError:
                 found = []
             if len(found) >= MIN_STATIONS:
-                price_by_country[code] = (statistics.median(found), f"median of {len(found)} stations along the route")
+                price_by_country[code] = (statistics.median(found), f"median of {len(found)} stations on the route")
                 continue
         if code in EU_COUNTRIES:
             bulletin = bulletin or _oil_bulletin()
             price = bulletin["prices"].get(EU_COUNTRIES[code], {}).get(fuel)
             if price:
                 as_of = f" {bulletin['as_of']:%d-%m-%Y}" if bulletin["as_of"] else ""
-                price_by_country[code] = (price, f"EU Oil Bulletin national average{as_of}")
+                price_by_country[code] = (price, f"EU Oil Bulletin{as_of}")
 
     if not price_by_country:
         raise FuelPriceError("no fuel prices available for any country on the route")
     fallback_price = statistics.median(p for p, _ in price_by_country.values())
-    for code in km_by_country:
+    for code in countries:
         if code not in price_by_country:
-            price_by_country[code] = (fallback_price, "no data for this country - used the route's median price")
+            price_by_country[code] = (fallback_price, "no data - route median used")
 
+    cost_eur, fill_ups, left = simulate_fill_ups(
+        points, {code: p for code, (p, _) in price_by_country.items()}, tank, consumption
+    )
     fx = _eur_to(currency)
-    share = total_km / outbound_km
-    total_cost = 0.0
-    parts = []
-    for code, km in sorted(km_by_country.items(), key=lambda kv: -kv[1]):
-        trip_km = km * share
-        price = price_by_country[code][0] * fx
-        total_cost += trip_km * consumption / 100 * price
-        parts.append(f"{code.upper()} {trip_km:.0f} km at {price:.2f} {currency}/L ({price_by_country[code][1]})")
+    for stop in fill_ups:
+        stop["pricePerLiter"] = round(stop.pop("priceEur") * fx, 3)
+        stop["cost"] = round(stop["liters"] * stop["pricePerLiter"], 2)
 
+    home = points[0].country.upper()
+    per_country_stops: dict[str, int] = {}
+    for stop in fill_ups:
+        per_country_stops[stop["country"]] = per_country_stops.get(stop["country"], 0) + 1
+    stops_summary = ", ".join(f"{n}x {c}" for c, n in sorted(per_country_stops.items(), key=lambda kv: -kv[1]))
+    price_parts = "; ".join(
+        f"{code.upper()} {km_by_country.get(code, 0):.0f} km, {price_by_country[code][0] * fx:.2f}/L ({price_by_country[code][1]})"
+        for code in sorted(km_by_country, key=lambda c: -km_by_country[c])
+    )
+    fill_up_note = (
+        f"{len(fill_ups)} fill-up(s): {stops_summary} - each at the cheapest point in reach once the tank is half empty"
+        if fill_ups
+        else "no fill-ups needed"
+    )
     via_note = f" via {len(via)} stop(s)" if via else ""
+    ferry_note = f" plus {ferry_km:.0f} km by ferry (no fuel used, tickets not included)" if ferry_km >= 1 else ""
     skipped_note = f" Stops not found on the map, left out of the route: {', '.join(skipped_stops)}." if skipped_stops else ""
     note = (
-        f"Live fuel prices: {total_km:.0f} km round trip ({outbound_km:.0f} km there{via_note}, "
-        f"{return_km:.0f} km back) at {consumption:g} L/100km {fuel}, "
-        f"{total_km * consumption / 100:.0f} L in total. {'; '.join(parts)}. Tolls not included.{skipped_note}"
+        f"Live fuel prices, simulated fill-ups: {driving_km:.0f} km driving ({out_km:.0f} there{via_note}, "
+        f"{back_km:.0f} back){ferry_note}, {consumption:g} L/100km {fuel}, {tank:g} L tank. Leaves {home} "
+        f"with a full tank; {fill_up_note}. {left:.0f} L left on return, deducted at the {home} price. {currency} per litre: {price_parts}. Tolls not included.{skipped_note}"
     )
     return {
         "name": f"Fuel ({fuel}) for the round trip {origin} - {destination}",
         "category": "transport",
-        "estimated_cost": round(total_cost, 2),
+        "estimated_cost": round(cost_eur * fx, 2),
         "currency": currency,
         "note": note,
         "live": True,
+        "fuelStops": fill_ups,
+        "ferryKm": round(ferry_km),
     }

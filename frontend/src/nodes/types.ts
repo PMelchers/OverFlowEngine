@@ -93,8 +93,22 @@ export interface CostBreakdownItem {
   estimated_cost: number
   currency: string
   note: string
-  /** true when priced from live booking-site rates instead of an AI estimate */
+  /** true when priced from live data (booking sites, fuel prices) instead of an AI estimate */
   live?: boolean
+  /** live fuel line only: where the simulated round trip fills up, in order */
+  fuelStops?: FuelStop[]
+  /** live fuel line only: km crossed by ferry (no fuel used, tickets priced separately) */
+  ferryKm?: number
+}
+
+export interface FuelStop {
+  /** driving km from the start of the round trip */
+  km: number
+  /** ISO country code, uppercase */
+  country: string
+  liters: number
+  pricePerLiter: number
+  cost: number
 }
 
 export interface CostBreakdown {
@@ -376,6 +390,8 @@ export interface CostEstimateBlockData extends BaseBlockData, WithAvailableVaria
   fuelType?: string
   /** own-car transport only: litres per 100 km (default depends on fuel type) */
   fuelConsumption?: string
+  /** own-car transport only: fuel tank size in litres (default 50) */
+  tankSize?: string
   checkInDate?: string
   checkOutDate?: string
   /** every cost line is the TOTAL for this many travelers, not a per-person price */

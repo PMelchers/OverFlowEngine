@@ -56,8 +56,14 @@ Important: `start.ps1` (Windows) does **not** start the Discord MCP server, but 
 - **`calendar_providers.py`**: Google/Microsoft Calendar OAuth2. **Each user registers their own OAuth app.** No server-wide client ID or secret exists, and none should be added to `.env`.
 - **`discord_mcp_client.py`**: MCP client that calls `mcp-servers/discord` at `DISCORD_MCP_URL`. Discord is a `targetApp` on the existing `appAction` block, not a separate node type (see DECISIONS.md). Per-user bot tokens are stored in `AppCredential`.
 - **`accommodation_prices.py`**: the Trip Cost block's live accommodation prices. It gets booking-site rates from Xotelo (free, no key, keyed on TripAdvisor location codes). The location code is found via DuckDuckGo HTML search and then checked against a Nominatim geocode. All sources are unofficial, so any failure raises `AccommodationPriceError` and the executor falls back to the AI web-search estimate. See [md/LIVE-PRICES.md](md/LIVE-PRICES.md).
-- **`fuel_prices.py`**: live fuel cost for own-car transport. It builds an OSRM route, splits the km per country (Nominatim reverse geocoding), and prices each country with station data (France, Spain) or the EU Weekly Oil Bulletin average. Failures raise `FuelPriceError`, which triggers the AI fallback. Tolls are still asked of the AI.
-- **`geo.py`**: shared Nominatim helpers with a process-wide 1 request/second throttle and in-memory cache. **Always use these for Nominatim calls. Don't call Nominatim directly.**
+- **`fuel_prices.py`**: live fuel cost for own-car transport.
+  - It builds an OSRM route with a point every 10 km. Ferry steps are excluded and reported as `ferryKm`.
+  - Each point gets a country, and each country a price: station data for France, Spain and the UK, otherwise the EU Weekly Oil Bulletin average.
+  - `simulate_fill_ups()` decides where the car fills up. The item carries the stops as `fuelStops`.
+  - Failures raise `FuelPriceError`, which triggers the AI fallback. Tolls and ferry tickets are still asked of the AI.
+- **`geo.py`**: shared geo helpers.
+  - Nominatim geocoding goes through a process-wide 1 request/second throttle and an in-memory cache. **Always use these helpers for Nominatim calls. Don't call Nominatim directly.**
+  - `country_code()` is an offline point-in-polygon lookup on Natural Earth borders, downloaded once to the gitignored `backend/.cache/`.
 - **`maps.py`**: builds Google/Apple Maps directions URLs. **`tripsummary.py`**: generates trip PDFs with reportlab.
 
 Config comes from `backend/.env` (copied from `.env.example` and gitignored). It uses `DATABASE_URL` with the `postgresql+psycopg://` scheme (psycopg v3, not psycopg2), plus `SECRET_KEY`, `DISCORD_MCP_URL`, `BACKEND_BASE_URL`, and `FRONTEND_BASE_URL`.

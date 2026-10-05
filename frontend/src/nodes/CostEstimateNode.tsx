@@ -165,6 +165,13 @@ export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockDa
           onChange={(e) => data.onChange?.({ fuelConsumption: e.target.value })}
           className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
         />
+        <input
+          type="text"
+          value={data.tankSize ?? ''}
+          placeholder="tank in L (default 50)"
+          onChange={(e) => data.onChange?.({ tankSize: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
       </div>
 
       <p className="mb-1 text-[11px] font-semibold text-yellow-800 dark:text-yellow-300">
