@@ -93,6 +93,8 @@ export interface CostBreakdownItem {
   estimated_cost: number
   currency: string
   note: string
+  /** true when priced from live booking-site rates instead of an AI estimate */
+  live?: boolean
 }
 
 export interface CostBreakdown {
@@ -370,6 +372,10 @@ export interface CostEstimateBlockData extends BaseBlockData, WithAvailableVaria
    *  left blank (or an unresolved "{var}") to skip that line entirely */
   stayType?: string
   transportMode?: string
+  /** own-car transport only: "petrol" (default), "diesel" or "lpg" */
+  fuelType?: string
+  /** own-car transport only: litres per 100 km (default depends on fuel type) */
+  fuelConsumption?: string
   checkInDate?: string
   checkOutDate?: string
   /** every cost line is the TOTAL for this many travelers, not a per-person price */

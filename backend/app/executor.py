@@ -10,6 +10,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from . import models, providers, calendar_providers, tripsummary
+from .accommodation_prices import AccommodationPriceError, fetch_accommodation_price
+from .fuel_prices import FuelPriceError, estimate_fuel_cost, is_own_car
 from .conditions import evaluate_conditions
 from .discord_mcp_client import read_discord_messages, send_discord_message
 from .maps import build_maps_url
@@ -839,6 +841,8 @@ def _advance(db: Session, state: dict) -> dict:
             adults_raw = _render_message(data.get("adults", ""), eval_vars)
             children_raw = _render_message(data.get("children", ""), eval_vars)
             currency_raw = _render_message(data.get("currency", ""), eval_vars)
+            fuel_type_raw = _render_message(data.get("fuelType", ""), eval_vars)
+            consumption_raw = _render_message(data.get("fuelConsumption", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
             stops = [s.strip() for s in stops_raw.split("|") if s.strip()]
             dest_stops = [s.strip() for s in dest_stops_raw.split("|") if s.strip()]
@@ -861,6 +865,7 @@ def _advance(db: Session, state: dict) -> dict:
             travelers = max(adults + children, 1)
 
             nights = None
+            d1 = d2 = None
             check_in, check_out = resolved(check_in_raw), resolved(check_out_raw)
             if check_in and check_out:
                 try:
@@ -890,10 +895,62 @@ def _advance(db: Session, state: dict) -> dict:
             error: str | None = None
             skipped_notes: list[str] = []
 
+            # Accommodation is priced from live booking-site rates first - the AI's
+            # web-search estimate is only the fallback for when that lookup fails.
+            live_items: list[dict] = []
+            if stay_type and nights and resolved(destination):
+                try:
+                    live_items.append(
+                        fetch_accommodation_price(
+                            resolved(destination), stay_type, d1.date(), d2.date(), adults, children, target_currency
+                        )
+                    )
+                    searched = True
+                except AccommodationPriceError as exc:
+                    logger.warning("Live accommodation price lookup failed for %r: %s", destination, exc)
+                    skipped_notes.append(f"no live accommodation prices ({exc}) - used the AI estimate instead")
+            live_accommodation = bool(live_items)
+
+            # Same for the transport line when it's the travelers' own car: fuel along the
+            # real route at current per-country prices. Tolls aren't in that data, so the
+            # AI (when connected) is still asked for those alone.
+            live_fuel = False
+            if transport_mode and is_own_car(transport_mode) and origin and resolved(destination):
+                consumption_match = re.search(r"\d+(?:[.,]\d+)?", resolved(consumption_raw))
+                consumption = float(consumption_match.group(0).replace(",", ".")) if consumption_match else None
+                try:
+                    live_items.append(
+                        estimate_fuel_cost(
+                            origin, stops, resolved(destination), resolved(fuel_type_raw), consumption, target_currency
+                        )
+                    )
+                    live_fuel = searched = True
+                except FuelPriceError as exc:
+                    logger.warning("Live fuel price lookup failed for %r -> %r: %s", origin, destination, exc)
+                    skipped_notes.append(f"no live fuel prices ({exc}) - used the AI estimate instead")
+
+            ai_accommodation = bool(stay_type and nights) and not live_accommodation
+            has_model = bool(credential_id and model)
+            needs_ai = bool(
+                stops
+                or dest_stops
+                or (transport_mode and not live_fuel)
+                or (stay_type and not live_accommodation)
+                or (live_fuel and has_model)
+            )
+
             if not stops and not dest_stops and not stay_type and not transport_mode:
                 error = "nothing to price - no stops, accommodation, or transport configured"
-            elif not credential_id or not model:
-                error = "no AI Model block connected/unlocked"
+            elif not needs_ai:
+                if live_fuel:
+                    # Only reachable without a model - otherwise tolls would still need the AI.
+                    skipped_notes.append("tolls not estimated - connect an AI Model block to include them")
+            elif not has_model:
+                if live_items:
+                    # Live lines alone still make a useful (if partial) breakdown.
+                    skipped_notes.append("only live prices included - connect an AI Model block to price the rest (and tolls)")
+                else:
+                    error = "no AI Model block connected/unlocked"
             else:
                 cred = (
                     db.query(models.AiCredential)
@@ -908,14 +965,21 @@ def _advance(db: Session, state: dict) -> dict:
                         lines.append(f'one "route_activity" line for a stop ALONG THE WAY: {stop}')
                     for stop in dest_stops:
                         lines.append(f'one "destination_activity" line for something done AT the destination: {stop}')
-                    if stay_type and nights:
+                    if ai_accommodation:
                         lines.append(
                             f'one "accommodation" line: {nights} night(s) of {stay_type} accommodation '
                             f"in {destination or 'the destination'} for the whole group"
                         )
-                    elif stay_type:
+                    elif stay_type and not nights:
                         skipped_notes.append("accommodation not estimated - check-in/check-out dates not set")
-                    if transport_mode and (origin or destination):
+                    if live_fuel:
+                        lines.append(
+                            f'one "transport" line: ONLY the road tolls and vignettes for a round trip by '
+                            f"car from {origin} to {destination} and back - fuel is already priced "
+                            'separately, so do NOT include fuel. Use 0 if there are no tolls, and name '
+                            'the tolls/vignettes in "note"'
+                        )
+                    elif transport_mode and (origin or destination):
                         lines.append(
                             f'one "transport" line: round trip by {transport_mode} from '
                             f"{origin or 'the starting point'} to {destination or 'the destination'} "
@@ -986,7 +1050,7 @@ def _advance(db: Session, state: dict) -> dict:
                                 reason = _classify_json_failure(reply)
                                 logger.warning("Cost Estimate repair call also failed to produce valid JSON (%s)", reason)
                                 items = _cost_fallback_items(
-                                    stops, dest_stops, bool(stay_type and nights), bool(transport_mode), target_currency, reason
+                                    stops, dest_stops, ai_accommodation, bool(transport_mode), target_currency, reason
                                 )
                                 used_fallback = True
                         if not used_fallback:
@@ -994,11 +1058,12 @@ def _advance(db: Session, state: dict) -> dict:
                             # (fewer searches to run) despite "never omit a line" - flag any
                             # gap instead of letting a short total pass silently as complete.
                             items = _reconcile_cost_items(
-                                items, stops, dest_stops, bool(stay_type and nights), bool(transport_mode), target_currency
+                                items, stops, dest_stops, ai_accommodation, bool(transport_mode), target_currency
                             )
                     except providers.ModelCallError as exc:
                         error = str(exc)
 
+            items = live_items + items
             total = sum(item["estimated_cost"] for item in items)
             # Display in target_currency regardless of what individual items ended up
             # labeled - a mismatched item already carries a note flagging it as unreliable

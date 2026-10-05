@@ -151,6 +151,20 @@ export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockDa
           onChange={(e) => data.onChange?.({ checkOutDate: e.target.value })}
           className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
         />
+        <input
+          type="text"
+          value={data.fuelType ?? ''}
+          placeholder="fuel: petrol / diesel / lpg"
+          onChange={(e) => data.onChange?.({ fuelType: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.fuelConsumption ?? ''}
+          placeholder="L/100km (default 7)"
+          onChange={(e) => data.onChange?.({ fuelConsumption: e.target.value })}
+          className="nodrag rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+        />
       </div>
 
       <p className="mb-1 text-[11px] font-semibold text-yellow-800 dark:text-yellow-300">
@@ -209,8 +223,9 @@ export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockDa
         Searches the web for real prices per stop, plus accommodation/transport if filled in, and
         shows a cost card in the sidebar - not just a console line. Every price is totaled for the
         whole group (not per person) and converted to Currency above - a price the AI couldn't
-        convert is flagged, not silently trusted. Car/own-vehicle transport is priced as fuel only,
-        never a rental.
+        convert is flagged, not silently trusted. Accommodation uses live booking-site prices, and
+        own-car transport uses live fuel prices along the real route (fuel type and consumption
+        above, tolls via the AI) - the AI estimate is the fallback if a live lookup fails.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-yellow-600" />

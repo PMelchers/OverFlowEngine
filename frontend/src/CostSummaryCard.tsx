@@ -79,6 +79,11 @@ export default function CostSummaryCard({ breakdown, onClose }: { breakdown: Cos
                       <li key={i} className="flex items-start justify-between gap-2 text-xs">
                         <span className={unreliable ? 'text-red-700 dark:text-red-400' : 'text-yellow-900 dark:text-yellow-200'}>
                           {item.name}
+                          {item.live && (
+                            <span className="ml-1 rounded bg-green-600 px-1 py-px align-middle text-[9px] font-semibold uppercase text-white">
+                              live
+                            </span>
+                          )}
                           {item.note && (
                             <span
                               className={`block text-[10px] ${unreliable ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-500'}`}
@@ -120,7 +125,11 @@ export default function CostSummaryCard({ breakdown, onClose }: { breakdown: Cos
         )}
         <p className="mt-1 flex items-center gap-1 text-[10px] text-yellow-600 dark:text-yellow-500">
           <Search className="h-3 w-3" />
-          {breakdown.searched ? 'Prices found via live web search' : 'Rough AI estimate - not searched'}
+          {breakdown.items.some((i) => i.live)
+            ? 'Items marked live use current booking-site prices; the rest via AI web search'
+            : breakdown.searched
+              ? 'Prices found via live web search'
+              : 'Rough AI estimate - not searched'}
         </p>
       </div>
     </div>
