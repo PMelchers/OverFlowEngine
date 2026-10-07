@@ -17,15 +17,15 @@ import {
   useNodesState,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { type AlignmentGuides } from '../alignment'
-import AuthModal from '../AuthModal'
-import { useAuth } from '../auth'
+import { type AlignmentGuides } from './alignment'
+import AuthModal from '../shared/AuthModal'
+import { useAuth } from '../shared/auth'
 import CanvasHeader from './CanvasHeader'
 import CanvasSidebar from './CanvasSidebar'
 import { nodeTypes } from './canvasGraph'
-import FlowsPanel from '../FlowsPanel'
-import GroupNameModal from '../GroupNameModal'
-import { QuickAddContext } from '../nodes/QuickAddContext'
+import FlowsPanel from './FlowsPanel'
+import GroupNameModal from './GroupNameModal'
+import { QuickAddContext } from './QuickAddContext'
 import {
   CALENDAR_PROVIDER_TO_APP,
   type BlockDataPatch,
@@ -33,8 +33,8 @@ import {
   type VariableBlockData,
   type VariableType,
 } from '../nodes/types'
-import Palette from '../Palette'
-import { useTheme } from '../theme'
+import Palette from './Palette'
+import { useTheme } from '../shared/theme'
 import { useBlockCreation } from './useBlockCreation'
 import { useCustomBlockEditing } from './useCustomBlockEditing'
 import { useFlowPersistence } from './useFlowPersistence'

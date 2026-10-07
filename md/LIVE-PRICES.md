@@ -14,7 +14,7 @@ For both lines the AI web-search estimate is only a fallback. Route stops, desti
 | [`backend/app/geo.py`](../backend/app/geo.py) | Shared geo helpers (Nominatim geocoding, offline country lookup, distance) |
 | `costEstimate` branch in [`backend/app/executor.py`](../backend/app/executor.py) | Calls both lookups and decides what the AI still has to price |
 
-In the frontend, an item with `live: true` gets a green **LIVE** label in the cost summary card ([`CostSummaryCard.tsx`](../frontend/src/CostSummaryCard.tsx)).
+In the frontend, an item with `live: true` gets a green **LIVE** label in the cost summary card ([`CostSummaryCard.tsx`](../frontend/src/canvas/CostSummaryCard.tsx)).
 
 ---
 

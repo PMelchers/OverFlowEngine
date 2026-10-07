@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import Canvas from './canvas/Canvas'
 import Dashboard from './dashboard/Dashboard'
-import Marketplace from './Marketplace'
-import OAuthPopupBridge from './OAuthPopupBridge'
-import Settings from './Settings'
-import { AuthProvider, useAuth } from './auth'
-import { ThemeProvider } from './theme'
+import Marketplace from './marketplace/Marketplace'
+import OAuthPopupBridge from './nodes/apps/OAuthPopupBridge'
+import Settings from './settings/Settings'
+import { AuthProvider, useAuth } from './shared/auth'
+import { ThemeProvider } from './shared/theme'
 
 type View =
   | { kind: 'dashboard' }
