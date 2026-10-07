@@ -1,11 +1,11 @@
 import { ArrowLeft, Check, ChevronRight, KeyRound, Link2, Lock, Moon, ShieldCheck, Sun, Unlock } from 'lucide-react'
 import { useState } from 'react'
 import ApiKeysPage from './ApiKeysPage'
-import { useAuth } from '../auth'
+import { useAuth } from '../shared/auth'
 import ConnectedAppsPage from './ConnectedAppsPage'
 import ReauthGate from './ReauthGate'
 import SecurityPage from './SecurityPage'
-import { useTheme } from '../theme'
+import { useTheme } from '../shared/theme'
 
 type SubPage = 'security' | 'api-keys' | 'connected-apps'
 

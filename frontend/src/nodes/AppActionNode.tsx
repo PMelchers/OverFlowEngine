@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import { useAuth } from '../auth'
+import { useAuth } from '../shared/auth'
 import AiCallFields from './AiCallFields'
 import AppPicker from './AppPicker'
 import BlockHeader from './BlockHeader'

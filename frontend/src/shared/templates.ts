@@ -1,4 +1,4 @@
-import type { BlockNodeData, FormField } from './nodes/types'
+import type { BlockNodeData, FormField } from '../nodes/types'
 
 export interface TemplateNode {
   id: string

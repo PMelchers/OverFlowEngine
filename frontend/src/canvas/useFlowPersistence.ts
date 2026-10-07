@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type Set
 import type { Edge, Node, useReactFlow } from 'reactflow'
 import { TRIGGER_NODE_TYPES, defaultDataFor, nextId, sanitizeData } from './canvasGraph'
 import type { BlockDataPatch, BlockNodeData, FormField, SubgraphEdge, SubgraphNode, VariableType } from '../nodes/types'
-import { TEMPLATES, type WorkflowTemplate } from '../templates'
+import { TEMPLATES, type WorkflowTemplate } from '../shared/templates'
 
 interface UseFlowPersistenceArgs {
   nodesRef: RefObject<Node<BlockNodeData>[]>

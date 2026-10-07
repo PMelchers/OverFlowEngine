@@ -5,7 +5,7 @@ import { TRIGGER_NODE_TYPES, defaultDataFor, nextId, sanitizeData } from './canv
 import { CUSTOM_DRAG_PREFIX, DRAG_DATA_FORMAT } from './Palette'
 import { type CustomBlock } from './customBlocks'
 import type { BlockDataPatch, BlockKind, BlockNodeData, FormField, Subgraph, VariableType } from '../nodes/types'
-import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from '../templates'
+import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from '../shared/templates'
 
 /** Selection snapshot awaiting a name from GroupNameModal before groupSelected commits it. */
 export interface PendingGroup {

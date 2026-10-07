@@ -1,6 +1,6 @@
 import { Layers, X } from 'lucide-react'
 import { useState } from 'react'
-import Modal from '../Modal'
+import Modal from '../shared/Modal'
 
 /** Replaces window.prompt (unstyled, ignores the app's theme entirely) for naming a
  *  new saved block when grouping selected canvas nodes. */

@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import { useAuth } from '../auth'
+import { useAuth } from '../shared/auth'
 
 export default function SecurityPage({ onBack }: { onBack: () => void }) {
   const { changePassword } = useAuth()

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Edge, Node } from 'reactflow'
-import { API_BASE } from '../apiBase'
+import { API_BASE } from '../shared/apiBase'
 import { TRIGGER_NODE_TYPES, expandGraph, sanitizeData, sleep, timestamp } from './canvasGraph'
 import type { BlockDataPatch, BlockNodeData, CostBreakdown, FormField } from '../nodes/types'
 import type { TripPdf } from './TripPdfCard'

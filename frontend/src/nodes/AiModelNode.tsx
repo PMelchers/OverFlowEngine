@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, Lock, Unlock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import { useAuth } from '../auth'
+import { useAuth } from '../shared/auth'
 import type { AiModelBlockData } from './types'
 
 type Credential = { id: number; provider: string; label: string; verified: boolean }

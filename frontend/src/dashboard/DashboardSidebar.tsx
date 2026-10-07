@@ -1,8 +1,8 @@
 import { Plus, Settings as SettingsIcon, Store, X, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
-import AboutDropdown from '../AboutDropdown'
-import type { AuthUser } from '../auth'
-import { relativeDate } from '../relativeDate'
+import AboutDropdown from '../shared/AboutDropdown'
+import type { AuthUser } from '../shared/auth'
+import { relativeDate } from '../shared/relativeDate'
 import type { FlowSummary } from './types'
 
 export default function DashboardSidebar({
