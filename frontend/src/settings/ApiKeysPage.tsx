@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, KeyRound, X } from 'lucide-react'
 import { useState } from 'react'
-import { useAuth } from './auth'
-import { useAuthedResource } from './useAuthedResource'
+import { useAuth } from '../auth'
+import { useAuthedResource } from '../useAuthedResource'
 
 type Credential = {
   id: number

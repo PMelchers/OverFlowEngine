@@ -1,7 +1,7 @@
 import { Lock, X } from 'lucide-react'
 import { useState } from 'react'
-import { useAuth } from './auth'
-import Modal from './Modal'
+import { useAuth } from '../auth'
+import Modal from '../Modal'
 
 /** Confirms the current password before revealing a sensitive settings page -
  *  a second, short-lived check on top of the normal login session. */

@@ -3,7 +3,7 @@ import Canvas from './canvas/Canvas'
 import Dashboard from './dashboard/Dashboard'
 import Marketplace from './Marketplace'
 import OAuthPopupBridge from './OAuthPopupBridge'
-import Settings from './Settings'
+import Settings from './settings/Settings'
 import { AuthProvider, useAuth } from './auth'
 import { ThemeProvider } from './theme'
 

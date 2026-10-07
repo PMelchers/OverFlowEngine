@@ -1,7 +1,7 @@
 import { ArrowLeft, Calendar, Check, Link2, MessageSquare, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useAuth } from './auth'
-import { useAuthedResource } from './useAuthedResource'
+import { useAuth } from '../auth'
+import { useAuthedResource } from '../useAuthedResource'
 
 type CalendarProvider = 'google' | 'microsoft'
 type CalendarConnection = {
