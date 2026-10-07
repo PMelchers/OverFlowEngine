@@ -3,8 +3,8 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import AboutDropdown from '../AboutDropdown'
 import type { AuthUser } from '../auth'
-import { DRAG_DATA_FORMAT } from '../Palette'
-import type { CustomBlock } from '../customBlocks'
+import { DRAG_DATA_FORMAT } from './Palette'
+import type { CustomBlock } from './customBlocks'
 import { TEMPLATE_DRAG_PREFIX, TEMPLATES, type WorkflowTemplate } from '../templates'
 
 interface CanvasHeaderProps {

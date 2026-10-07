@@ -1,9 +1,9 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import { useAuth } from './auth'
-import Modal from './Modal'
-import type { SubgraphEdge, SubgraphNode } from './nodes/types'
-import { useAuthedResource } from './useAuthedResource'
+import { useAuth } from '../auth'
+import Modal from '../Modal'
+import type { SubgraphEdge, SubgraphNode } from '../nodes/types'
+import { useAuthedResource } from '../useAuthedResource'
 
 type FlowSummary = { id: number; name: string; created_at: string }
 

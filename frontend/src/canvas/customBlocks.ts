@@ -1,4 +1,4 @@
-import type { BlockNodeData, Subgraph } from './nodes/types'
+import type { BlockNodeData, Subgraph } from '../nodes/types'
 
 export interface CustomBlock {
   id: string

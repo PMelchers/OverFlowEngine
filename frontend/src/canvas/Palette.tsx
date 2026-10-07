@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Pencil, X } from 'lucide-react'
 import { useState } from 'react'
-import BlockHeader from './nodes/BlockHeader'
-import { GROUP_ICON, PALETTE_ITEMS, type BlockKind, type PaletteCategory } from './nodes/types'
+import BlockHeader from '../nodes/BlockHeader'
+import { GROUP_ICON, PALETTE_ITEMS, type BlockKind, type PaletteCategory } from '../nodes/types'
 import type { CustomBlock } from './customBlocks'
 
 export const DRAG_DATA_FORMAT = 'application/overflowengine-block'

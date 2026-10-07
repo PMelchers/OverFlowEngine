@@ -1,5 +1,5 @@
 import { AlertTriangle, Bed, Car, MapPinned, Receipt, Search, Ticket, X } from 'lucide-react'
-import type { CostBreakdown, CostBreakdownItem } from './nodes/types'
+import type { CostBreakdown, CostBreakdownItem } from '../nodes/types'
 
 const CATEGORY_META: Record<CostBreakdownItem['category'], { label: string; icon: typeof Ticket }> = {
   route_activity: { label: 'On the way', icon: MapPinned },

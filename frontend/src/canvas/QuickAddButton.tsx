@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useEdges, useNodeId } from 'reactflow'
 import { useQuickAdd } from './QuickAddContext'
-import { PALETTE_ITEMS } from './types'
+import { PALETTE_ITEMS } from '../nodes/types'
 
 /**
  * The green "+" next to a block's output handle - click it to add and connect a new

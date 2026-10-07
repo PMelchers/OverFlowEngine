@@ -1,5 +1,5 @@
 import type { Node } from 'reactflow'
-import type { BlockNodeData } from './nodes/types'
+import type { BlockNodeData } from '../nodes/types'
 
 const SNAP_THRESHOLD = 8
 

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { BlockKind } from './types'
+import type { BlockKind } from '../nodes/types'
 
 /** Supplied once by Canvas (see quickAddBlock) so QuickAddButton, rendered inside every
  *  wrapped node, doesn't need this threaded through each node's own `data`. */

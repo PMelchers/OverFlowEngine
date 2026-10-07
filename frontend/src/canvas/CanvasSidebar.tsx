@@ -1,8 +1,8 @@
 import { ChevronDown, Package } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import CostSummaryCard from '../CostSummaryCard'
+import CostSummaryCard from './CostSummaryCard'
 import type { CostBreakdown } from '../nodes/types'
-import TripPdfCard, { type TripPdf } from '../TripPdfCard'
+import TripPdfCard, { type TripPdf } from './TripPdfCard'
 import type { PendingChoice, StoredVariable } from './useWorkflowRun'
 
 interface CanvasSidebarProps {

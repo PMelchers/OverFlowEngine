@@ -8,7 +8,7 @@ import {
   refreshGroupInstances,
   saveCustomBlock,
   type CustomBlock,
-} from '../customBlocks'
+} from './customBlocks'
 import type { BlockDataPatch, BlockNodeData, FormField, VariableType } from '../nodes/types'
 
 interface UseCustomBlockEditingArgs {
