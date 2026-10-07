@@ -21,3 +21,5 @@ frontend/dist/
 
 # HyperFrames QC snapshots (brag video compositions)
 **/snapshots/
+# Downloaded data caches (country borders for fuel_prices.py)
+backend/.cache/
