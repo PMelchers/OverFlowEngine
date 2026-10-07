@@ -1,9 +1,9 @@
 import { ArrowLeft, Globe, Rocket, Store, User, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useAuth } from './auth'
-import Modal from './Modal'
-import { relativeDate } from './relativeDate'
-import { useAuthedResource } from './useAuthedResource'
+import { useAuth } from '../auth'
+import Modal from '../Modal'
+import { relativeDate } from '../relativeDate'
+import { useAuthedResource } from '../useAuthedResource'
 
 type Listing = { id: number; name: string; description: string | null; author: string; created_at: string }
 type MyFlow = { id: number; name: string; description: string | null; is_public: boolean; created_at: string }

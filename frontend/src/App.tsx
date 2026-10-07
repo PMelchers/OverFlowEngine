@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Canvas from './canvas/Canvas'
 import Dashboard from './dashboard/Dashboard'
-import Marketplace from './Marketplace'
+import Marketplace from './marketplace/Marketplace'
 import OAuthPopupBridge from './OAuthPopupBridge'
 import Settings from './settings/Settings'
 import { AuthProvider, useAuth } from './auth'
