@@ -1,7 +1,7 @@
 import { Search, Sparkles, Wrench } from 'lucide-react'
 import { type RefObject, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AI_QUICK_ACTIONS, APP_ICONS, type AiCallMode } from './types'
+import { AI_QUICK_ACTIONS, APP_ICONS, type AiCallMode } from '../types'
 
 type Category = 'apps' | 'ai'
 

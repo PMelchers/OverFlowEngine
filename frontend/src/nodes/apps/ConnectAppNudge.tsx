@@ -1,6 +1,6 @@
 import { Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { APP_ICONS, CALENDAR_APPS } from './types'
+import { APP_ICONS, CALENDAR_APPS } from '../types'
 
 /**
  * Slides in from the right edge of the screen after picking an app that isn't connected

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ConditionOperator, IfCondition, VariableType } from './types'
+import type { ConditionOperator, IfCondition, VariableType } from '../types'
 
 export const TYPE_BADGE: Record<VariableType, string> = {
   boolean: 'bg-purple-200 text-purple-800 dark:bg-purple-900 dark:text-purple-200',

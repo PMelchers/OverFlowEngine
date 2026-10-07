@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Pencil, X } from 'lucide-react'
 import { useState } from 'react'
-import BlockHeader from '../nodes/BlockHeader'
+import BlockHeader from '../nodes/shared/BlockHeader'
 import { GROUP_ICON, PALETTE_ITEMS, type BlockKind, type PaletteCategory } from '../nodes/types'
 import type { CustomBlock } from './customBlocks'
 

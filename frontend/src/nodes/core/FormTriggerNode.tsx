@@ -1,10 +1,10 @@
 import { ClipboardList, Play, X } from 'lucide-react'
 import { useState } from 'react'
 import { Handle, Position, useNodeId, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
+import BlockHeader from '../shared/BlockHeader'
 import FormSubmissionModal from './FormSubmissionModal'
-import GridSnapBox from './GridSnapBox'
-import type { FormField, FormTriggerBlockData, VariableType } from './types'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { FormField, FormTriggerBlockData, VariableType } from '../types'
 
 const VAR_TYPES: VariableType[] = ['string', 'int', 'boolean']
 

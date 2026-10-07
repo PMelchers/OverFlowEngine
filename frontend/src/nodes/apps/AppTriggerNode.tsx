@@ -1,11 +1,11 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Zap } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import AppPicker from './AppPicker'
-import BlockHeader from './BlockHeader'
+import BlockHeader from '../shared/BlockHeader'
 import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
-import GridSnapBox from './GridSnapBox'
-import { APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppTriggerBlockData } from './types'
+import GridSnapBox from '../shared/GridSnapBox'
+import { APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppTriggerBlockData } from '../types'
 import { useAppConnection } from './useAppConnection'
 
 export default function AppTriggerNode({ data }: NodeProps<AppTriggerBlockData>) {

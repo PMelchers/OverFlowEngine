@@ -1,10 +1,10 @@
 import { MapPin } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { MapsActionBlockData } from './types'
-import { useVariableInsertion } from './useVariableInsertion'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { MapsActionBlockData } from '../types'
+import { useVariableInsertion } from '../shared/useVariableInsertion'
 
 const TRAVEL_MODES: { value: NonNullable<MapsActionBlockData['travelMode']>; label: string }[] = [
   { value: 'driving', label: 'Driving' },

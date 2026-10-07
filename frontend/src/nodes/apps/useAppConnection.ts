@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { AppActionBlockData, AppTriggerBlockData } from './types'
+import type { AppActionBlockData, AppTriggerBlockData } from '../types'
 
 type AppConnectionData = AppActionBlockData | AppTriggerBlockData
 

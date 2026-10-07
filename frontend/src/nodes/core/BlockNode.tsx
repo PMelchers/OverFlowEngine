@@ -1,8 +1,8 @@
 import { Circle } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { ActionBlockData } from './types'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { ActionBlockData } from '../types'
 
 export default function BlockNode({ data }: NodeProps<ActionBlockData>) {
   const active = data.status === 'active'

@@ -1,5 +1,5 @@
 import { useNodeId, useStore, type ReactFlowState } from 'reactflow'
-import type { BlockNodeData } from './types'
+import type { BlockNodeData } from '../types'
 
 /** The label for whatever AI Model block feeds this node's "model" handle, e.g.
  *  "gpt-4o (openai)" - shared by AiCallFields, AiAgentNode and ActivitySuggestionNode.

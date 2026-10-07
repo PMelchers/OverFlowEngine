@@ -1,8 +1,8 @@
 import { Layers } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { GroupBlockData } from './types'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { GroupBlockData } from '../types'
 
 export default function GroupNode({ data }: NodeProps<GroupBlockData>) {
   const active = data.status === 'active'

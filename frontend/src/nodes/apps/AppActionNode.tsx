@@ -1,17 +1,17 @@
 import { CheckCircle2, ChevronDown, CircleDashed, Plug, Reply, Sparkles, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import { useAuth } from '../shared/auth'
+import { useAuth } from '../../shared/auth'
 import AiCallFields from './AiCallFields'
 import AppPicker from './AppPicker'
-import BlockHeader from './BlockHeader'
+import BlockHeader from '../shared/BlockHeader'
 import ConnectAppModal from './ConnectAppModal'
 import ConnectAppNudge from './ConnectAppNudge'
-import GridSnapBox from './GridSnapBox'
-import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppActionBlockData } from './types'
+import GridSnapBox from '../shared/GridSnapBox'
+import { AI_ACTION_APP, AI_QUICK_ACTIONS, APP_ICONS, APP_TRIGGER_SOURCES, CALENDAR_APPS, type AppActionBlockData } from '../types'
 import { useAppConnection } from './useAppConnection'
-import { useConnectedModel } from './useConnectedModel'
-import { useVariableInsertion } from './useVariableInsertion'
+import { useConnectedModel } from '../shared/useConnectedModel'
+import { useVariableInsertion } from '../shared/useVariableInsertion'
 
 const CALENDAR_ACTIONS: { value: NonNullable<AppActionBlockData['targetAction']>; label: string }[] = [
   { value: 'fetchEvents', label: 'Fetch Events' },

@@ -1,10 +1,10 @@
 import { Receipt } from 'lucide-react'
 import { useRef } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { CostEstimateBlockData } from './types'
-import { useConnectedModel } from './useConnectedModel'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { CostEstimateBlockData } from '../types'
+import { useConnectedModel } from '../shared/useConnectedModel'
 
 export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockData>) {
   const active = data.status === 'active'

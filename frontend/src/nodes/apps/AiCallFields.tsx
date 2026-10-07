@@ -1,7 +1,7 @@
 import { useRef } from 'react'
-import type { AppActionBlockData } from './types'
-import { useConnectedModel } from './useConnectedModel'
-import { useVariableInsertion } from './useVariableInsertion'
+import type { AppActionBlockData } from '../types'
+import { useConnectedModel } from '../shared/useConnectedModel'
+import { useVariableInsertion } from '../shared/useVariableInsertion'
 
 /** Fields shown inside an App Action block once its app is set to "AI" - the model
  *  comes from an AI Model block wired to this node's own "model" handle, same as an

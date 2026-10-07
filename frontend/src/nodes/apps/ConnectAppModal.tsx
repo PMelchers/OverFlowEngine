@@ -1,8 +1,8 @@
 import { AlertTriangle, Check, ExternalLink, Loader2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../shared/auth'
-import Modal from '../shared/Modal'
-import { APP_ICONS, APP_TO_CALENDAR_PROVIDER } from './types'
+import { useAuth } from '../../shared/auth'
+import Modal from '../../shared/Modal'
+import { APP_ICONS, APP_TO_CALENDAR_PROVIDER } from '../types'
 
 type CalendarProvider = 'google' | 'microsoft'
 

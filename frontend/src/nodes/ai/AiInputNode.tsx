@@ -1,8 +1,8 @@
 import { LogIn } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { AiInputBlockData } from './types'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { AiInputBlockData } from '../types'
 
 export default function AiInputNode({ data }: NodeProps<AiInputBlockData>) {
   const active = data.status === 'active'

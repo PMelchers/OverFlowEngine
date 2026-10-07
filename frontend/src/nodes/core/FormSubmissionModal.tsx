@@ -1,7 +1,7 @@
 import { ClipboardList, X } from 'lucide-react'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { FormField } from './types'
+import type { FormField } from '../types'
 
 /** Pops up (via portal, so it isn't clipped/mispositioned by React Flow's canvas
  *  transform) when a Form Trigger block is run - one input per field, prefilled with

@@ -1,7 +1,7 @@
 import { Play } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import GridSnapBox from './GridSnapBox'
-import type { TriggerBlockData } from './types'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { TriggerBlockData } from '../types'
 
 export default function TriggerNode({ data }: NodeProps<TriggerBlockData>) {
   const active = data.status === 'active'

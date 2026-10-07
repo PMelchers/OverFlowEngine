@@ -1,9 +1,9 @@
 import { Bot } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import BlockHeader from './BlockHeader'
-import GridSnapBox from './GridSnapBox'
-import type { AiAgentBlockData } from './types'
-import { useConnectedModel } from './useConnectedModel'
+import BlockHeader from '../shared/BlockHeader'
+import GridSnapBox from '../shared/GridSnapBox'
+import type { AiAgentBlockData } from '../types'
+import { useConnectedModel } from '../shared/useConnectedModel'
 
 export default function AiAgentNode({ data }: NodeProps<AiAgentBlockData>) {
   const active = data.status === 'active'
