@@ -44,7 +44,7 @@ def learning_enabled(user: models.User) -> bool:
     return bool(getattr(user, "learning_enabled", False))
 
 
-def _bump_block(db: Session, user_id: int, kind: str, key: str):
+def _bump(db: Session, user_id: int, kind: str, key: str) -> models.UserSignal:
     row = (
         db.query(models.UserSignal)
         .filter_by(user_id=user_id, kind=kind, key=key)
@@ -54,29 +54,55 @@ def _bump_block(db: Session, user_id: int, kind: str, key: str):
         row = models.UserSignal(user_id=user_id, kind=kind, key=key, count=0, total=0)
         db.add(row)
     row.count += 1
+    return row
 
 
-def record_saved_flow(db: Session, user: models.User, nodes: list[dict], privacy_mode: bool):
-    """Called when a workflow is kept (saved). Counts each block type and app once per workflow,
-    so one big workflow full of AI Agents does not outweigh several small ones."""
-    if privacy_mode or not learning_enabled(user):
-        return
-    seen_blocks: set[str] = set()
-    seen_apps: set[str] = set()
+def _blocks_and_apps(nodes: list[dict]) -> tuple[set[str], set[str]]:
+    """Block types and apps used in a workflow. Each one is counted once per workflow, so one
+    big workflow full of AI Agents does not outweigh several small ones."""
+    blocks: set[str] = set()
+    apps: set[str] = set()
     for node in nodes:
         kind = node.get("type") or ""
         if kind in ("group", ""):
             continue
-        seen_blocks.add(kind)
+        blocks.add(kind)
         data = node.get("data") or {}
         app = data.get("targetApp")
         if app and kind in ("appAction", "appTrigger"):
-            seen_apps.add(str(app))
-    for kind in seen_blocks:
-        _bump_block(db, user.id, "block", kind)
-    for app in seen_apps:
-        _bump_block(db, user.id, "app", app)
+            apps.add(str(app))
+    return blocks, apps
+
+
+def record_saved_flow(db: Session, user: models.User, nodes: list[dict], privacy_mode: bool):
+    """Called when a workflow is kept (saved)."""
+    if privacy_mode or not learning_enabled(user):
+        return
+    blocks, apps = _blocks_and_apps(nodes)
+    for kind in blocks:
+        _bump(db, user.id, "block", kind)
+    for app in apps:
+        _bump(db, user.id, "app", app)
     db.commit()
+
+
+def record_run(db: Session, user_id: int, nodes: list[dict], privacy_mode: bool) -> list[str]:
+    """Called when a workflow finishes running. Returns one line per thing learned from this run,
+    so the canvas can show the user what the app picked up. Nothing is returned in privacy mode
+    or when learning is off."""
+    user = db.get(models.User, user_id)
+    if user is None or privacy_mode or not learning_enabled(user):
+        return []
+    blocks, apps = _blocks_and_apps(nodes)
+    notes: list[str] = []
+    for kind in sorted(blocks):
+        row = _bump(db, user_id, "block", kind)
+        notes.append(f"Noticed you use {_block_name(kind)} blocks ({row.count} times so far)")
+    for app in sorted(apps):
+        row = _bump(db, user_id, "app", app)
+        notes.append(f"Noticed you use {app} ({row.count} times so far)")
+    db.commit()
+    return notes
 
 
 def record_rating(db: Session, user: models.User, result_type: str, rating: int, privacy_mode: bool = False):

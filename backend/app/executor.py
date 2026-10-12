@@ -1310,7 +1310,18 @@ def run_workflow(
         run_id = str(uuid.uuid4())
         PENDING_RUNS[run_id] = state
         result["run_id"] = run_id
+    else:
+        _attach_learned(db, state, result)
     return result
+
+
+def _attach_learned(db: Session, state: dict, result: dict):
+    """A finished run tells the canvas what the profile learned from it (opt-in, never in privacy mode)."""
+    if state.get("user_id") is None:
+        return
+    result["learned"] = profile_learning.record_run(
+        db, state["user_id"], list(state["node_by_id"].values()), state.get("privacy_mode", False)
+    )
 
 
 def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
@@ -1368,4 +1379,5 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
         result["run_id"] = run_id
     else:
         PENDING_RUNS.pop(run_id, None)
+        _attach_learned(db, state, result)
     return result
