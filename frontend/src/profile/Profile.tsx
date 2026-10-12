@@ -98,7 +98,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <header className="flex shrink-0 items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm dark:border-gray-800 dark:bg-gray-900/95">
         <button
           type="button"
@@ -112,7 +112,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
         </h1>
       </header>
 
-      <div className="mx-auto w-full max-w-3xl flex-1 space-y-8 px-5 py-8">
+      <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 content-start gap-4 overflow-hidden px-5 py-6 md:grid-cols-2">
         <p className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100">
           Your preferences and feedback are saved only in your account. An AI Agent sees them only when you connect
           a <b>My Profile</b> block to that agent's Profile handle. Nothing is shared by default.
