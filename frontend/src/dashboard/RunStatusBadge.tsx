@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, PauseCircle, XCircle, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, CircleSlash, Loader2, PauseCircle, TimerOff, XCircle, type LucideIcon } from 'lucide-react'
 import type { RunStatus } from './types'
 
 const STATUS_STYLES: Record<RunStatus, { label: string; className: string; Icon: LucideIcon }> = {
@@ -21,6 +21,16 @@ const STATUS_STYLES: Record<RunStatus, { label: string; className: string; Icon:
     label: 'Running',
     className: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     Icon: Loader2,
+  },
+  interrupted: {
+    label: 'Interrupted',
+    className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    Icon: CircleSlash,
+  },
+  expired: {
+    label: 'Expired',
+    className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    Icon: TimerOff,
   },
   completed: {
     label: 'Completed',

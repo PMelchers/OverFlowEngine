@@ -24,7 +24,7 @@ The old `variables` table is left in the database, unused. There is no migration
 
 - `running`: the row is created when the run starts, not only when it finishes, so a run cut off half-way still leaves a trace. On startup, `expire_stale_runs()` turns any `running` row into `interrupted`. The executor is synchronous, so nothing can still be working on it.
 - `awaiting_choice`: `state` holds the executor state. `/workflows/continue` locks the row (`FOR UPDATE`) and immediately flips it back to `running` before doing anything else. The lock alone isn't enough because `_advance()` commits along the way, which releases the lock. The status flip is what stops a double-clicked choice from running the rest of the flow twice. Paused runs older than `PENDING_RUN_TTL` (24 h) become `expired`.
-- `completed` / `failed`: `state` is cleared.
+- `succeeded` / `failed`: `state` is cleared and `finished_at` is set. `failed` means at least one step carries `"error": True` (a block that couldn't do its job), or the run crashed. Rows from before this lifecycle say `completed`.
 
 The id the frontend sees (`run_id`) is `public_id`, a uuid, not the integer primary key. Anonymous runs can be read and continued by whoever holds that id, so it must not be guessable. A signed-in user's run can only be read (`GET /state`) and continued by that user. Because anonymous runs belong to no account, the frontend keeps its last `run_id` in `localStorage` (`overflow.lastRunId`) to show that run's variables again after a reload.
 

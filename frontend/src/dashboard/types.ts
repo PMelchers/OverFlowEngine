@@ -9,8 +9,17 @@ export type Assignment = {
 }
 
 /** Lifecycle of a workflow_runs row (see the backend's executor._advance_and_record).
- *  "completed" only appears on rows logged before runs had this lifecycle. */
-export type RunStatus = 'running' | 'awaiting_choice' | 'succeeded' | 'failed' | 'completed'
+ *  "interrupted" = cut off by a backend restart, "expired" = paused too long without a
+ *  choice (both set by executor.expire_stale_runs). "completed" only appears on rows
+ *  logged before runs had this lifecycle. */
+export type RunStatus =
+  | 'running'
+  | 'awaiting_choice'
+  | 'succeeded'
+  | 'failed'
+  | 'interrupted'
+  | 'expired'
+  | 'completed'
 
 export type RunSummary = {
   id: number
@@ -33,4 +42,6 @@ export type RunStep = {
 
 export type RunDetail = RunSummary & {
   steps: RunStep[]
+  /** the variables this run ended with (or has so far) - scoped to the run itself */
+  variables: Record<string, { type: string; value: string }>
 }

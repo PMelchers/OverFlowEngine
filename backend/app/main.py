@@ -55,6 +55,10 @@ def on_startup():
             text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
         )
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workflow_runs_user_id ON workflow_runs (user_id)"))
+        # The flow it ran and a finish time, for the dashboard's run overview.
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_id INTEGER"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_name VARCHAR"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"))
         conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS state JSON"))
         conn.execute(
             text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()")
@@ -1114,10 +1118,9 @@ def get_run(
     )
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    # Not variables_snapshot: variables are one global store shared by every user's runs,
-    # so it would show this user other people's values. Each block's output is already
-    # in its step message.
-    return {**_run_summary(run), "steps": run.steps}
+    # Variables are scoped to the run (see DECISIONS.md), so its snapshot only ever holds
+    # this run's own values.
+    return {**_run_summary(run), "steps": run.steps, "variables": run.variables_snapshot or {}}
 
 
 @app.get("/state")

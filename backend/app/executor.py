@@ -1229,55 +1229,26 @@ def _advance(db: Session, state: dict) -> dict:
     return {"status": "completed", "steps": flush_new_steps(), "variables": dict(state["variables"])}
 
 
-def _advance_and_save(db: Session, run: models.WorkflowRun, state: dict) -> dict:
-    """Run _advance() and write its outcome onto the run's row. A paused run keeps its
+def _save_run(db: Session, state: dict, status: str) -> None:
+    """Writes the run's progress so far to its workflow_runs row. A paused run keeps its
     whole executor state in the row (instead of an in-memory dict) so it survives a
-    backend restart / reload and can be continued from any worker process."""
-    try:
-        result = _advance(db, state)
-    except Exception:
-        # Block errors are meant to land in the step log, so this is a bug - still mark
-        # the row, otherwise it sits on "running" until the next restart.
-        db.rollback()
-        run.status = "failed"
-        run.steps = list(state["steps"])
-        run.state = None
-        db.commit()
-        raise
-    run.status = result["status"]
+    backend restart / reload and can be continued from any worker process. The row can
+    be gone mid-run (DELETE /state wipes run history), in which case there's nothing to
+    update - looked up fresh by id for that reason, _advance() commits along the way."""
+    run = db.get(models.WorkflowRun, state["db_run_id"])
+    if run is None:
+        return
+    run.status = status
+    # A fresh list / dict, not the live one: SQLAlchemy doesn't notice in-place changes to
+    # a JSON column, so handing it the same (since appended-to) object would never get written.
     run.steps = list(state["steps"])
     run.variables_snapshot = dict(state["variables"])
-    if result["status"] == "awaiting_choice":
+    if status == "awaiting_choice":
         # JSON has no sets - visited goes back to a set in _load_state().
         run.state = {**state, "visited": sorted(state["visited"])}
     else:
         run.state = None
-    db.commit()
-    result["run_id"] = run.public_id
-    return result
-
-
-def _load_state(run: models.WorkflowRun) -> dict:
-    state = dict(run.state)
-    state["visited"] = set(state["visited"])
-    return state
-
-
-def _error(message: str) -> dict:
-    return {"status": "error", "message": message, "steps": [], "variables": {}}
-
-
-def expire_stale_runs(db: Session) -> None:
-    """Called on startup. A run still "running" was cut off by the restart itself (the
-    executor is synchronous, so nothing can still be working on it). Paused runs nobody
-    continued within PENDING_RUN_TTL are dropped - their state blob can be large."""
-    db.query(models.WorkflowRun).filter(models.WorkflowRun.status == "running").update(
-        {"status": "interrupted", "state": None}, synchronize_session=False
-    )
-    cutoff = datetime.now(timezone.utc) - PENDING_RUN_TTL
-    db.query(models.WorkflowRun).filter(
-        models.WorkflowRun.status == "awaiting_choice", models.WorkflowRun.updated_at < cutoff
-    ).update({"status": "expired", "state": None}, synchronize_session=False)
+        run.finished_at = datetime.now(timezone.utc)
     db.commit()
 
 
@@ -1295,29 +1266,56 @@ def _record_crash(db: Session, state: dict, exc: Exception) -> None:
                 "error": True,
             }
         )
-        _save_run(db, state, "failed", _variables_snapshot(db), finished=True)
+        _save_run(db, state, "failed")
     except Exception:
         logger.exception("Could not record the crash of workflow run %s", state.get("db_run_id"))
 
 
 def _advance_and_record(db: Session, state: dict) -> dict:
     """_advance, plus keeping the run's workflow_runs row in step with where it ended up:
-    paused on a choice, finished (failed if any step carries "error": True), or crashed.
-    Blocks report their own failures as step messages, so a crash means a bug or an
-    error nothing caught - it's recorded so the run doesn't sit on "running" forever on
-    the dashboard, then re-raised so the request fails exactly as it did before."""
+    paused on a choice (with its state, so it can be continued later), finished (failed if
+    any step carries "error": True), or crashed. Blocks report their own failures as step
+    messages, so a crash means a bug or an error nothing caught - it's recorded so the run
+    doesn't sit on "running" on the dashboard, then re-raised so the request still fails."""
     try:
         result = _advance(db, state)
     except Exception as exc:
         _record_crash(db, state, exc)
         raise
     if result["status"] == "awaiting_choice":
-        _save_run(db, state, "awaiting_choice", result["variables"], finished=False)
+        _save_run(db, state, "awaiting_choice")
     else:
-        status = "failed" if any(step.get("error") for step in state["steps"]) else "succeeded"
-        _save_run(db, state, status, result["variables"], finished=True)
-        result["run_id"] = state.get("db_run_id")
+        _save_run(db, state, "failed" if any(step.get("error") for step in state["steps"]) else "succeeded")
+    result["run_id"] = state["run_public_id"]
     return result
+
+
+def _load_state(run: models.WorkflowRun) -> dict:
+    state = dict(run.state)
+    state["visited"] = set(state["visited"])
+    # Ids of the row itself, so _save_run() finds it again (and older paused rows that
+    # predate these keys still continue).
+    state["db_run_id"] = run.id
+    state["run_public_id"] = run.public_id
+    return state
+
+
+def _error(message: str) -> dict:
+    return {"status": "error", "message": message, "steps": [], "variables": {}}
+
+
+def expire_stale_runs(db: Session) -> None:
+    """Called on startup. A run still "running" was cut off by the restart itself (the
+    executor is synchronous, so nothing can still be working on it). Paused runs nobody
+    continued within PENDING_RUN_TTL are dropped - their state blob can be large."""
+    now = datetime.now(timezone.utc)
+    db.query(models.WorkflowRun).filter(models.WorkflowRun.status == "running").update(
+        {"status": "interrupted", "state": None, "finished_at": now}, synchronize_session=False
+    )
+    db.query(models.WorkflowRun).filter(
+        models.WorkflowRun.status == "awaiting_choice", models.WorkflowRun.updated_at < now - PENDING_RUN_TTL
+    ).update({"status": "expired", "state": None, "finished_at": now}, synchronize_session=False)
+    db.commit()
 
 
 def run_workflow(
@@ -1353,19 +1351,26 @@ def run_workflow(
         "user_id": user_id,
     }
 
-    # Created up front (not only once finished) so a run cut off mid-way still leaves a
-    # trace, and so later triggers (schedules, webhooks) have a row to report on.
+    # Written before anything runs, so a long run (an AI call, a Discord wait) already
+    # shows up as "running" - and a run cut off mid-way still leaves a trace. Both
+    # timestamps come from this process's clock, so the duration shown on the dashboard
+    # isn't skewed by the database host's clock.
     run = models.WorkflowRun(
         public_id=str(uuid.uuid4()),
         user_id=user_id,
+        flow_id=flow_id,
+        flow_name=flow_name,
         status="running",
-        steps=[],
+        steps=list(state["steps"]),
         variables_snapshot={},
+        created_at=datetime.now(timezone.utc),
     )
     db.add(run)
     db.commit()
+    state["db_run_id"] = run.id
+    state["run_public_id"] = run.public_id
 
-    return _advance_and_save(db, run, state)
+    return _advance_and_record(db, state)
 
 
 def continue_workflow(db: Session, run_id: str, choice: str, user_id: int | None = None) -> dict:
@@ -1387,6 +1392,7 @@ def continue_workflow(db: Session, run_id: str, choice: str, user_id: int | None
     if run.status == "awaiting_choice" and run.updated_at < datetime.now(timezone.utc) - PENDING_RUN_TTL:
         run.status = "expired"
         run.state = None
+        run.finished_at = datetime.now(timezone.utc)
         db.commit()
     if run.status != "awaiting_choice" or not run.state:
         db.rollback()
@@ -1440,4 +1446,4 @@ def continue_workflow(db: Session, run_id: str, choice: str, user_id: int | None
             state["queue"].append(e["target"])
     state.pop("awaiting_node", None)
 
-    return _advance_and_save(db, run, state)
+    return _advance_and_record(db, state)

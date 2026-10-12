@@ -114,17 +114,37 @@ class CalendarConnection(Base):
 
 
 class WorkflowRun(Base):
-    """One row per run, created when the run starts. Variables are scoped to the run
-    (no global variables table any more - see DECISIONS.md), and a run paused on a
-    Choice / Activity Suggestion block keeps its full executor state in `state` so it
+    """One execution of a workflow, written when the run starts and updated when it
+    pauses, finishes or crashes (see executor._advance_and_record) - so the dashboard's
+    run overview can show a run that's still going or waiting for a choice too.
+    Variables are scoped to the run (no global variables table any more - see
+    DECISIONS.md), and a paused run keeps its full executor state in `state` so it
     survives a backend restart and can be continued from any process."""
 
     __tablename__ = "workflow_runs"
 
     id = Column(Integer, primary_key=True)
+    # The id /state and /workflows/continue take. A uuid rather than the integer id,
+    # because anonymous runs can be continued by whoever holds it - it must not be
+    # guessable. The integer id stays internal / for the signed-in-only /runs endpoints.
+    public_id = Column(String, unique=True, nullable=True, index=True)
+    # Null for anonymous runs - those are still logged, they just don't belong on
+    # anyone's dashboard.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Which saved flow was open in the editor, if any. Deliberately not a foreign key:
+    # deleting a flow must not delete (or be blocked by) its run history, and flow_name
+    # keeps the run labeled after the flow is renamed or gone.
+    flow_id = Column(Integer, nullable=True)
+    flow_name = Column(String, nullable=True)
+    # running -> awaiting_choice -> succeeded | failed. "failed" means at least one step
+    # carries "error": True (or the run crashed). "interrupted" (cut off by a backend
+    # restart) and "expired" (paused too long) are set by executor.expire_stale_runs().
+    # Rows from before this lifecycle existed just say "completed".
     status = Column(String, nullable=False)
     steps = Column(JSON, nullable=False)
     variables_snapshot = Column(JSON, nullable=False)
     # Executor state while status == "awaiting_choice", cleared once the run moves on.
     state = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    finished_at = Column(DateTime(timezone=True), nullable=True)

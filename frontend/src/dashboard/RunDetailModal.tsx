@@ -98,6 +98,22 @@ export default function RunDetailModal({ runId, onClose }: { runId: number; onCl
               </li>
             ))}
           </ol>
+
+          {Object.keys(run.variables).length > 0 && (
+            <>
+              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Variables
+              </h3>
+              <ul className="divide-y divide-gray-100 rounded-lg bg-gray-50 text-xs dark:divide-gray-700 dark:bg-gray-900">
+                {Object.entries(run.variables).map(([name, v]) => (
+                  <li key={name} className="flex gap-3 px-2.5 py-1.5">
+                    <span className="shrink-0 font-mono font-medium text-gray-700 dark:text-gray-200">{name}</span>
+                    <span className="min-w-0 break-words text-gray-600 dark:text-gray-300">{v.value}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </Modal>
