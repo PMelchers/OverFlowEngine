@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from . import models, providers, calendar_providers, tripsummary
+from . import models, profile_learning, providers, calendar_providers, tripsummary
 from .accommodation_prices import AccommodationPriceError, fetch_accommodation_price
 from .fuel_prices import FuelPriceError, estimate_fuel_cost, is_own_car
 from .conditions import evaluate_conditions
@@ -559,16 +559,21 @@ def _advance(db: Session, state: dict) -> dict:
                     .order_by(models.UserPreference.category, models.UserPreference.key)
                     .all()
                 )
+                # Balance: the user's own preferences always go in. What the app has learned
+                # is a few strong hints only (see profile_learning). Recent comments are kept
+                # short, since the AI only needs the gist.
+                learned = profile_learning.hints(db, state["user_id"])
                 recent_feedback = (
                     db.query(models.UserFeedback)
                     .filter_by(user_id=state["user_id"])
                     .order_by(models.UserFeedback.created_at.desc())
-                    .limit(10)
+                    .limit(5)
                     .all()
                 )
-                if prefs or recent_feedback:
-                    lines = ["About this user (their saved preferences and feedback - take them into account):"]
+                if prefs or learned or recent_feedback:
+                    lines = ["About this user (take this into account, but don't mention it unless relevant):"]
                     lines += [f"- [{p.category}] {p.key}: {p.value}" for p in prefs]
+                    lines += [f"- learned: {hint}" for hint in learned]
                     for fb in recent_feedback:
                         rating = f" rated {fb.rating}/5" if fb.rating is not None else ""
                         text = f': "{fb.text}"' if fb.text else ""

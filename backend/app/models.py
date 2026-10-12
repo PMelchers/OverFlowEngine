@@ -10,7 +10,24 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
+    # Off until the user switches it on from their profile page (opt-in learning).
+    learning_enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserSignal(Base):
+    """Something learned about a user: how often they keep a block type or app (kind
+    "block"/"app", count = workflows it appeared in), or their ratings of a reply type
+    (kind "rating", count = ratings, total = sum of stars)."""
+
+    __tablename__ = "user_signals"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)
+    key = Column(String, nullable=False)
+    count = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
 
 
 class AiCredential(Base):

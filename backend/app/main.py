@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from . import auth, calendar_providers, discord_mcp_client, executor, models, providers
+from . import auth, calendar_providers, discord_mcp_client, executor, models, profile_learning, providers
 from .db import Base, SessionLocal, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
@@ -37,6 +37,7 @@ def on_startup():
         )
         conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS description VARCHAR"))
         conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS privacy_mode BOOLEAN NOT NULL DEFAULT false"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS learning_enabled BOOLEAN NOT NULL DEFAULT false"))
         # calendar_connections started out with a shared server-wide OAuth app in mind
         # (access/refresh_token required); now every user brings their own app, so the
         # tokens aren't known until they finish connecting, and each row also needs its
@@ -584,6 +585,8 @@ def create_flow(
     db.add(flow)
     db.commit()
     db.refresh(flow)
+    # Keeping a workflow is one of the signals the profile learns from (only if learning is on)
+    profile_learning.record_saved_flow(db, current_user, body.nodes, body.privacy_mode)
     return _flow_summary(flow)
 
 
@@ -833,7 +836,15 @@ def get_profile(current_user: models.User = Depends(auth.get_current_user), db: 
         .limit(100)
         .all()
     )
-    return {"preferences": [_preference_out(p) for p in prefs], "feedback": [_feedback_out(f) for f in feedback]}
+    return {
+        "preferences": [_preference_out(p) for p in prefs],
+        "feedback": [_feedback_out(f) for f in feedback],
+        "learning": {
+            "enabled": profile_learning.learning_enabled(current_user),
+            "signals": profile_learning.signals_out(db, current_user.id),
+            "hints": profile_learning.hints(db, current_user.id),
+        },
+    }
 
 
 @app.put("/profile/preferences/{key}")
@@ -896,6 +907,8 @@ def add_feedback(
     db.add(fb)
     db.commit()
     db.refresh(fb)
+    if body.rating is not None:
+        profile_learning.record_rating(db, current_user, fb.result_type, body.rating)
     return _feedback_out(fb)
 
 
@@ -911,6 +924,44 @@ def delete_feedback(
     if fb is None:
         raise HTTPException(status_code=404, detail="Feedback not found")
     db.delete(fb)
+    db.commit()
+    return {"status": "ok"}
+
+
+class LearningIn(BaseModel):
+    enabled: bool
+
+
+@app.put("/profile/learning")
+def set_learning(
+    body: LearningIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    """Switch learning from kept workflows and ratings on or off. Turning it off stops new
+    learning and stops hints being used; what was already learned stays until it is reset."""
+    current_user.learning_enabled = body.enabled
+    db.commit()
+    return {"enabled": current_user.learning_enabled}
+
+
+@app.delete("/profile/learning/{signal_id}")
+def delete_signal(
+    signal_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    row = (
+        db.query(models.UserSignal)
+        .filter(models.UserSignal.id == signal_id, models.UserSignal.user_id == current_user.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Learned item not found")
+    db.delete(row)
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.delete("/profile/learning")
+def reset_learning(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    db.query(models.UserSignal).filter(models.UserSignal.user_id == current_user.id).delete()
     db.commit()
     return {"status": "ok"}
 
