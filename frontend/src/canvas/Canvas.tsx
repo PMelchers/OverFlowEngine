@@ -119,6 +119,9 @@ function CanvasInner({
 
   const nodesRef = useRef<Node<BlockNodeData>[]>([])
   const edgesRef = useRef<Edge[]>([])
+  // Synced below once useFlowPersistence and useCustomBlockEditing have run - read by
+  // runWorkflow, which is created before either of them.
+  const runFlowIdRef = useRef<number | null>(null)
   useEffect(() => {
     nodesRef.current = nodes
   }, [nodes])
@@ -143,7 +146,7 @@ function CanvasInner({
   )
 
   const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
-    useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, authedFetch })
+    useWorkflowRun({ nodesRef, edgesRef, flowIdRef: runFlowIdRef, setNodes, updateNodeData, authedFetch })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
   // have an OAuth flow - everything else in APP_TRIGGER_SOURCES stays unconnected until
@@ -305,7 +308,7 @@ function CanvasInner({
     screenToFlowPosition,
   })
 
-  const { saveCurrentFlow, loadFlow } = useFlowPersistence({
+  const { saveCurrentFlow, loadFlow, currentFlowId } = useFlowPersistence({
     nodesRef,
     edgesRef,
     setNodes,
@@ -324,6 +327,12 @@ function CanvasInner({
     initialTemplateId,
     insertTemplate,
   })
+
+  // While a saved custom block is open for editing, the canvas shows that block's chain,
+  // not the flow - so a run there isn't labeled with the flow's name.
+  useEffect(() => {
+    runFlowIdRef.current = editingBlock ? null : currentFlowId
+  }, [editingBlock, currentFlowId])
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
