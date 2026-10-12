@@ -536,6 +536,35 @@ def _advance(db: Session, state: dict) -> dict:
                 )
                 user_message = instructions
 
+            # Opt-in profile: the agent only sees the signed-in user's saved preferences and
+            # feedback when a Profile Block is wired to its "profile" handle. No wire, no data -
+            # and anonymous runs have no profile to read at all.
+            profile_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "profile"]
+            profile_summary = ""
+            if profile_edges and state.get("user_id"):
+                prefs = (
+                    db.query(models.UserPreference)
+                    .filter_by(user_id=state["user_id"])
+                    .order_by(models.UserPreference.category, models.UserPreference.key)
+                    .all()
+                )
+                recent_feedback = (
+                    db.query(models.UserFeedback)
+                    .filter_by(user_id=state["user_id"])
+                    .order_by(models.UserFeedback.created_at.desc())
+                    .limit(10)
+                    .all()
+                )
+                if prefs or recent_feedback:
+                    lines = ["About this user (their saved preferences and feedback - take them into account):"]
+                    lines += [f"- [{p.category}] {p.key}: {p.value}" for p in prefs]
+                    for fb in recent_feedback:
+                        rating = f" rated {fb.rating}/5" if fb.rating is not None else ""
+                        text = f': "{fb.text}"' if fb.text else ""
+                        lines.append(f"- feedback on {fb.result_type}{rating}{text}")
+                    profile_summary = "\n".join(lines)
+                    system_prompt = f"{profile_summary}\n\n{system_prompt}" if system_prompt else profile_summary
+
             if not user_message:
                 message = f'AI Agent "{label}" has no input or instructions to send, skipping'
             elif not credential_id or not model:

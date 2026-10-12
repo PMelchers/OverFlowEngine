@@ -225,6 +225,17 @@ class TaskPatchIn(BaseModel):
     done: bool | None = None
 
 
+class PreferenceIn(BaseModel):
+    category: str = "general"
+    value: str
+
+
+class FeedbackIn(BaseModel):
+    result_type: str
+    rating: int | None = None
+    text: str | None = None
+
+
 class AssignmentIn(BaseModel):
     name: str
     description: str | None = None
@@ -773,6 +784,122 @@ def _assignment_out(assignment: models.Assignment, flows: list[models.SavedFlow]
         "created_at": assignment.created_at,
         "flows": [{"id": f.id, "name": f.name} for f in flows],
     }
+
+
+# --- User profile: saved feedback and preferences ---
+# Only the signed-in owner can read or write their own profile. The AI Agent never reads
+# it directly - the executor includes it only when a Profile Block is wired to that agent
+# (opt-in, see executor.py), so saving here does not by itself change what any AI sees.
+
+def _preference_out(p: models.UserPreference) -> dict:
+    return {"id": p.id, "category": p.category, "key": p.key, "value": p.value, "updated_at": p.updated_at}
+
+
+def _feedback_out(f: models.UserFeedback) -> dict:
+    return {
+        "id": f.id,
+        "result_type": f.result_type,
+        "rating": f.rating,
+        "text": f.text,
+        "created_at": f.created_at,
+    }
+
+
+@app.get("/profile")
+def get_profile(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    prefs = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id)
+        .order_by(models.UserPreference.category, models.UserPreference.key)
+        .all()
+    )
+    feedback = (
+        db.query(models.UserFeedback)
+        .filter(models.UserFeedback.user_id == current_user.id)
+        .order_by(models.UserFeedback.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return {"preferences": [_preference_out(p) for p in prefs], "feedback": [_feedback_out(f) for f in feedback]}
+
+
+@app.put("/profile/preferences/{key}")
+def set_preference(
+    key: str,
+    body: PreferenceIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    key = key.strip()
+    if not key or not body.value.strip():
+        raise HTTPException(status_code=400, detail="A preference needs a name and a value")
+    pref = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id, models.UserPreference.key == key)
+        .first()
+    )
+    if pref is None:
+        pref = models.UserPreference(user_id=current_user.id, key=key)
+        db.add(pref)
+    pref.category = body.category.strip() or "general"
+    pref.value = body.value.strip()
+    db.commit()
+    db.refresh(pref)
+    return _preference_out(pref)
+
+
+@app.delete("/profile/preferences/{key}")
+def delete_preference(
+    key: str, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    pref = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id, models.UserPreference.key == key)
+        .first()
+    )
+    if pref is None:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    db.delete(pref)
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.post("/profile/feedback", status_code=status.HTTP_201_CREATED)
+def add_feedback(
+    body: FeedbackIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    if not body.result_type.strip():
+        raise HTTPException(status_code=400, detail="Feedback needs a result type")
+    if body.rating is None and not (body.text or "").strip():
+        raise HTTPException(status_code=400, detail="Feedback needs a rating or some text")
+    if body.rating is not None and not 1 <= body.rating <= 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    fb = models.UserFeedback(
+        user_id=current_user.id,
+        result_type=body.result_type.strip(),
+        rating=body.rating,
+        text=(body.text or "").strip() or None,
+    )
+    db.add(fb)
+    db.commit()
+    db.refresh(fb)
+    return _feedback_out(fb)
+
+
+@app.delete("/profile/feedback/{feedback_id}")
+def delete_feedback(
+    feedback_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    fb = (
+        db.query(models.UserFeedback)
+        .filter(models.UserFeedback.id == feedback_id, models.UserFeedback.user_id == current_user.id)
+        .first()
+    )
+    if fb is None:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    db.delete(fb)
+    db.commit()
+    return {"status": "ok"}
 
 
 @app.get("/assignments")

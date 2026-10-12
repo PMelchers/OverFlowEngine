@@ -68,6 +68,34 @@ class Task(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class UserFeedback(Base):
+    """One piece of feedback a user gave on an AI result (rating and/or text). Kept as a
+    history rather than overwritten, so later code can see how opinions changed over time."""
+
+    __tablename__ = "user_feedback"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    result_type = Column(String, nullable=False)  # e.g. "agent_reply", "trip_cost" - what it was about
+    rating = Column(Integer, nullable=True)  # 1-5, optional
+    text = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserPreference(Base):
+    """A learned or stated preference, one row per (user, key). Upserted, so the latest
+    value wins. The Profile Block only reads these when it is wired to an AI Agent."""
+
+    __tablename__ = "user_preferences"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    category = Column(String, nullable=False, default="general")
+    key = Column(String, nullable=False)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class Assignment(Base):
     """A big-picture piece of work that one or more saved flows can be labeled as
     belonging to, so related flows can be found and tracked together on the dashboard."""
