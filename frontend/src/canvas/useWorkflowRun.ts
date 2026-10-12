@@ -32,6 +32,28 @@ export interface RunResult {
   message?: string
 }
 
+// Variables are scoped to a single run (no global variables on the backend), so the
+// panel shows the last run's. Remembered here because anonymous runs aren't tied to an
+// account - this id is the only way to ask /state for them again after a reload.
+const LAST_RUN_KEY = 'overflow.lastRunId'
+
+function readLastRunId(): string | null {
+  try {
+    return localStorage.getItem(LAST_RUN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeLastRunId(runId: string | null) {
+  try {
+    if (runId) localStorage.setItem(LAST_RUN_KEY, runId)
+    else localStorage.removeItem(LAST_RUN_KEY)
+  } catch {
+    // storage blocked - the panel just starts empty after a reload
+  }
+}
+
 export interface PendingChoice {
   runId: string
   nodeId: string
@@ -61,13 +83,14 @@ export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, a
 
   const fetchState = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/state`)
+      const lastRunId = readLastRunId()
+      const res = await authedFetch(lastRunId ? `/state?run_id=${encodeURIComponent(lastRunId)}` : '/state')
       const data = await res.json()
       setVariables(data.variables ?? {})
     } catch {
       // backend unreachable; leave last known state as-is
     }
-  }, [])
+  }, [authedFetch])
 
   const activateNode = useCallback(
     (id: string) => {
@@ -113,6 +136,7 @@ export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, a
       }
 
       setVariables(result.variables ?? {})
+      if (result.run_id) writeLastRunId(String(result.run_id))
 
       if (result.status === 'awaiting_choice' && result.run_id && result.node_id && result.options) {
         setPendingChoice({
@@ -210,15 +234,16 @@ export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, a
 
   const wipeData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/state`, { method: 'DELETE' })
+      const res = await authedFetch('/state', { method: 'DELETE' })
       if (!res.ok) throw new Error(`backend returned ${res.status}`)
+      writeLastRunId(null)
       setVariables({})
       setLogs([])
       addLog('Saved data wiped')
     } catch {
       addLog('Error: could not reach backend, nothing was wiped')
     }
-  }, [addLog])
+  }, [addLog, authedFetch])
 
   useEffect(() => {
     fetchState()

@@ -113,21 +113,25 @@ class CalendarConnection(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class Variable(Base):
-    __tablename__ = "variables"
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
-    var_type = Column(String, nullable=False, default="string")
-    value = Column(String, nullable=True)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
 class WorkflowRun(Base):
+    """One row per run, created when the run starts. Variables are scoped to the run
+    (no global variables table any more - see DECISIONS.md), and a run paused on a
+    Choice / Activity Suggestion block keeps its full executor state in `state` so it
+    survives a backend restart and can be continued from any process."""
+
     __tablename__ = "workflow_runs"
 
     id = Column(Integer, primary_key=True)
+    # The id the frontend sees and continues with. A uuid rather than the integer id,
+    # because anonymous runs can be continued by whoever holds it - it must not be guessable.
+    public_id = Column(String, unique=True, nullable=True, index=True)
+    # Null for anonymous runs.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # running | awaiting_choice | completed | expired | interrupted
     status = Column(String, nullable=False)
     steps = Column(JSON, nullable=False)
     variables_snapshot = Column(JSON, nullable=False)
+    # Executor state while status == "awaiting_choice", cleared once the run moves on.
+    state = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
