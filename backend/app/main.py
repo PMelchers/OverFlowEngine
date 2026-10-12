@@ -1,12 +1,12 @@
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from . import auth, calendar_providers, discord_mcp_client, executor, models, providers
 from .db import Base, SessionLocal, engine, get_db
@@ -44,6 +44,14 @@ def on_startup():
         conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS client_secret VARCHAR"))
         conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN access_token DROP NOT NULL"))
         conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN refresh_token DROP NOT NULL"))
+        # workflow_runs gained an owner, the flow it ran, and a finish time for the
+        # dashboard's run overview. The index name matches what create_all generates for
+        # index=True, so fresh and patched databases end up identical.
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_id INTEGER"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_name VARCHAR"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workflow_runs_user_id ON workflow_runs (user_id)"))
         conn.commit()
     _seed_demo_marketplace_flow()
 
@@ -159,6 +167,9 @@ class EdgeIn(BaseModel):
 class Workflow(BaseModel):
     nodes: list[NodeIn]
     edges: list[EdgeIn]
+    # The saved flow open in the editor, if any - only used to label the run in the
+    # dashboard's run overview. Ignored for anonymous runs and flows the caller doesn't own.
+    flow_id: int | None = None
 
 
 class ChoiceContinue(BaseModel):
@@ -1012,12 +1023,86 @@ def run_workflow(
 ):
     nodes = [n.model_dump() for n in workflow.nodes]
     edges = [e.model_dump() for e in workflow.edges]
-    return executor.run_workflow(db, nodes, edges, user_id=current_user.id if current_user else None)
+    flow = None
+    if current_user and workflow.flow_id is not None:
+        flow = (
+            db.query(models.SavedFlow)
+            .filter(models.SavedFlow.id == workflow.flow_id, models.SavedFlow.user_id == current_user.id)
+            .first()
+        )
+    return executor.run_workflow(
+        db,
+        nodes,
+        edges,
+        user_id=current_user.id if current_user else None,
+        flow_id=flow.id if flow else None,
+        flow_name=flow.name if flow else None,
+    )
 
 
 @app.post("/workflows/continue")
 def continue_workflow(body: ChoiceContinue, db: Session = Depends(get_db)):
     return executor.continue_workflow(db, body.run_id, body.choice)
+
+
+def _run_summary(run: models.WorkflowRun) -> dict:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "flow_id": run.flow_id,
+        "flow_name": run.flow_name,
+        "created_at": run.created_at,
+        "finished_at": run.finished_at,
+    }
+
+
+@app.get("/runs")
+def list_runs(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    runs = (
+        db.query(models.WorkflowRun)
+        # Not steps/variables_snapshot: a run's steps can carry a whole base64 trip PDF,
+        # and the overview only needs the summary columns. GET /runs/{id} has the rest.
+        .options(
+            load_only(
+                models.WorkflowRun.id,
+                models.WorkflowRun.status,
+                models.WorkflowRun.flow_id,
+                models.WorkflowRun.flow_name,
+                models.WorkflowRun.created_at,
+                models.WorkflowRun.finished_at,
+            )
+        )
+        .filter(models.WorkflowRun.user_id == current_user.id)
+        .order_by(models.WorkflowRun.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return [_run_summary(r) for r in runs]
+
+
+@app.get("/runs/{run_id}")
+def get_run(
+    run_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    # 404 rather than 403 for someone else's run, like every other per-user resource -
+    # and never 401, which the frontend treats as "this session is dead" and signs out.
+    run = (
+        db.query(models.WorkflowRun)
+        .filter(models.WorkflowRun.id == run_id, models.WorkflowRun.user_id == current_user.id)
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    # Not variables_snapshot: variables are one global store shared by every user's runs,
+    # so it would show this user other people's values. Each block's output is already
+    # in its step message.
+    return {**_run_summary(run), "steps": run.steps}
 
 
 @app.get("/state")

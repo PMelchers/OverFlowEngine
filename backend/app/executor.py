@@ -292,15 +292,18 @@ def _discord_await_reply(
     incoming: dict,
     node_by_id: dict,
     data: dict,
-) -> str:
+) -> tuple[str, bool]:
     """Sends one message, waits (briefly, bounded) for the first human reply in that
     channel, then answers it with one short AI-generated reply and stops - a single
     question/answer exchange, not an ongoing conversation. Both the wait time and the
     reply length are hard-capped (DISCORD_AWAIT_REPLY_MAX_SECONDS/_MAX_TOKENS) so this
-    can't turn into an open-ended, unbounded-cost listener no matter what's configured."""
+    can't turn into an open-ended, unbounded-cost listener no matter what's configured.
+
+    Returns (step message, failed). Nobody replying in time is not a failure - the
+    message went out and there was simply nothing to answer."""
     ok, detail = send_discord_message(channel_id, outgoing_content, bot_token=bot_token)
     if not ok:
-        return f'"{label}" failed to send to Discord channel "{channel_id}": {detail}'
+        return f'"{label}" failed to send to Discord channel "{channel_id}": {detail}', True
     sent_message_id = detail
     base = f'"{label}" sent to Discord channel "{channel_id}": "{outgoing_content}" (message id {sent_message_id})'
 
@@ -323,7 +326,7 @@ def _discord_await_reply(
                 break
 
     if reply_content is None:
-        return f"{base}, but got no reply within {wait_seconds}s"
+        return f"{base}, but got no reply within {wait_seconds}s", False
 
     model_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "model"]
     model_node = node_by_id.get(model_edges[0]["source"]) if model_edges else None
@@ -331,13 +334,13 @@ def _discord_await_reply(
     model = model_data.get("model")
     model_credential_id = model_data.get("credentialId")
     if not model or not model_credential_id:
-        return f'{base}. Got a reply ("{reply_content}") but no AI Model block is connected to answer it'
+        return f'{base}. Got a reply ("{reply_content}") but no AI Model block is connected to answer it', True
 
     ai_cred = (
         db.query(models.AiCredential).filter_by(id=model_credential_id, user_id=state.get("user_id")).one_or_none()
     )
     if ai_cred is None:
-        return f'{base}. Got a reply but could not use its linked API key - log in as the account that added it'
+        return f'{base}. Got a reply but could not use its linked API key - log in as the account that added it', True
 
     # Supports {variableName} like every other text field, so background facts from
     # earlier in the workflow (e.g. an upstream AI Agent's output) can be threaded in.
@@ -365,12 +368,12 @@ def _discord_await_reply(
             max_tokens=DISCORD_AWAIT_REPLY_MAX_TOKENS,
         )
     except providers.ModelCallError as exc:
-        return f'{base}. Got a reply ("{reply_content}") but the AI call failed: {exc}'
+        return f'{base}. Got a reply ("{reply_content}") but the AI call failed: {exc}', True
 
     ok, send_detail = send_discord_message(channel_id, reply_text, bot_token=bot_token)
     if ok:
-        return f'{base}. Got a reply ("{reply_content}") and answered via {model}: "{reply_text}"'
-    return f'{base}. Got a reply ("{reply_content}") but failed to send the answer: {send_detail}'
+        return f'{base}. Got a reply ("{reply_content}") and answered via {model}: "{reply_text}"', False
+    return f'{base}. Got a reply ("{reply_content}") but failed to send the answer: {send_detail}', True
 
 
 def _advance(db: Session, state: dict) -> dict:
@@ -403,6 +406,11 @@ def _advance(db: Session, state: dict) -> dict:
         data = node.get("data", {}) or {}
         label = data.get("label", node_id)
         next_edges = adjacency.get(node_id, [])
+        # Set by a branch below when its block couldn't do its job - a failed call, or a
+        # missing setting that made it skip. Applied to the step that branch appended (see
+        # the end of this loop), which is what makes the run "failed" on the dashboard.
+        # A fallback that still produces a result (e.g. a simulated suggestion) is not one.
+        failed = False
 
         if ntype == "variable":
             var_type = data.get("varType", "string")
@@ -454,6 +462,7 @@ def _advance(db: Session, state: dict) -> dict:
                     }
                 )
                 next_edges = []
+                failed = True
             else:
                 steps.append(
                     {
@@ -485,6 +494,7 @@ def _advance(db: Session, state: dict) -> dict:
             user_id = state.get("user_id")
             if not title:
                 message = f'"{label}" has no task title configured, skipping'
+                failed = True
             elif user_id is None:
                 message = (
                     f'"{label}" would add the task "{title}", but this run is anonymous - '
@@ -538,8 +548,10 @@ def _advance(db: Session, state: dict) -> dict:
 
             if not user_message:
                 message = f'AI Agent "{label}" has no input or instructions to send, skipping'
+                failed = True
             elif not credential_id or not model:
                 message = f'AI Agent "{label}" has no AI Model block connected/unlocked, skipping'
+                failed = True
             else:
                 cred = (
                     db.query(models.AiCredential)
@@ -548,6 +560,7 @@ def _advance(db: Session, state: dict) -> dict:
                 )
                 if cred is None:
                     message = f'AI Agent "{label}" could not use its linked API key - log in as the account that added it'
+                    failed = True
                 else:
                     try:
                         reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
@@ -555,6 +568,7 @@ def _advance(db: Session, state: dict) -> dict:
                         message = f'AI Agent "{label}" replied via {model}: "{reply}"'
                     except providers.ModelCallError as exc:
                         message = f'AI Agent "{label}" call to {model} failed: {exc}'
+                        failed = True
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "aiOutput":
@@ -568,6 +582,7 @@ def _advance(db: Session, state: dict) -> dict:
                         "message": f'AI Output "{label}" found no agent reply yet, nothing saved',
                     }
                 )
+                failed = True
             else:
                 _upsert_variable(db, label, "string", output_text)
                 eval_vars[label] = output_text
@@ -616,6 +631,7 @@ def _advance(db: Session, state: dict) -> dict:
                 output_var = (data.get("outputVariable") or "").strip()
                 if not prompt.strip():
                     message = f'"{label}" has no prompt configured for its AI call'
+                    failed = True
                 else:
                     simulated_output = f'[preview reply from {model}] responding to: "{prompt}"'
                     if output_var:
@@ -655,8 +671,9 @@ def _advance(db: Session, state: dict) -> dict:
 
                     if credential_error:
                         message = f'"{label}" failed to send to Discord channel "{to}": {credential_error}'
+                        failed = True
                     elif (data.get("targetAction") or "sendMessage") == "awaitReply":
-                        message = _discord_await_reply(
+                        message, failed = _discord_await_reply(
                             db, state, eval_vars, node_id, label, to, body, bot_token, incoming, node_by_id, data
                         )
                     else:
@@ -665,6 +682,7 @@ def _advance(db: Session, state: dict) -> dict:
                             message = f'"{label}" sent to Discord channel "{to}": "{body}" (message id {detail})'
                         else:
                             message = f'"{label}" failed to send to Discord channel "{to}": {detail}'
+                            failed = True
                 else:
                     message = (
                         f'"{label}" would send{subject_part} to "{to}" via {target_app}: "{body}" '
@@ -679,6 +697,7 @@ def _advance(db: Session, state: dict) -> dict:
                 connection, error = _get_calendar_connection(db, state.get("user_id"), calendar_provider)
                 if error:
                     message = f'"{label}" - {error}'
+                    failed = True
                 elif action == "fetchEvents":
                     try:
                         days_ahead_raw = _render_message(data.get("daysAhead") or "7", eval_vars)
@@ -698,6 +717,7 @@ def _advance(db: Session, state: dict) -> dict:
                         message = f'"{label}" fetched {len(events)} event(s) from {target_app}'
                     except (httpx.HTTPError, ValueError, KeyError) as exc:
                         message = f'"{label}" could not reach {target_app}: {exc}'
+                        failed = True
                 elif action == "createEvent":
                     title = _render_message(data.get("eventTitle", ""), eval_vars)
                     start = _render_message(data.get("startTime", ""), eval_vars)
@@ -705,6 +725,7 @@ def _advance(db: Session, state: dict) -> dict:
                     description = _render_message(data.get("eventDescription", ""), eval_vars)
                     if not title.strip() or not start.strip() or not end.strip():
                         message = f'"{label}" needs a title, start time, and end time to create an event'
+                        failed = True
                     else:
                         try:
                             access_token = calendar_providers.get_valid_access_token(db, connection)
@@ -717,6 +738,7 @@ def _advance(db: Session, state: dict) -> dict:
                             message = f'"{label}" created "{title}" on {target_app} ({start} - {end})'
                         except httpx.HTTPError as exc:
                             message = f'"{label}" could not create the event on {target_app}: {exc}'
+                            failed = True
                 elif action == "deleteEvent":
                     event_id = _render_message(data.get("eventId", ""), eval_vars).strip()
                     if not event_id:
@@ -724,6 +746,7 @@ def _advance(db: Session, state: dict) -> dict:
                             f'"{label}" has no event ID to delete - connect it to an output from '
                             "a Create/Fetch block"
                         )
+                        failed = True
                     else:
                         try:
                             access_token = calendar_providers.get_valid_access_token(db, connection)
@@ -731,8 +754,10 @@ def _advance(db: Session, state: dict) -> dict:
                             message = f'"{label}" deleted event "{event_id}" from {target_app}'
                         except httpx.HTTPError as exc:
                             message = f'"{label}" could not delete that event on {target_app}: {exc}'
+                            failed = True
                 else:
                     message = f'"{label}" has an unrecognized action "{action}"'
+                    failed = True
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": message})
 
         elif ntype == "activitySuggestion":
@@ -1110,6 +1135,7 @@ def _advance(db: Session, state: dict) -> dict:
 
             if error:
                 message = f'"{label}" could not estimate costs: {error}'
+                failed = True
             else:
                 budget_note = ""
                 if budget_value is not None:
@@ -1166,6 +1192,7 @@ def _advance(db: Session, state: dict) -> dict:
             if not destination and not itinerary and not route_links and not cost_breakdown:
                 message = f'"{label}" has nothing to put in a PDF yet - connect an itinerary, route, or cost block first'
                 pdf_payload = None
+                failed = True
             else:
                 pdf_bytes = tripsummary.build_trip_pdf(
                     destination=destination,
@@ -1208,21 +1235,80 @@ def _advance(db: Session, state: dict) -> dict:
         else:
             steps.append({"node_id": node_id, "type": ntype, "label": label, "message": f'"{label}" activated'})
 
+        if failed:
+            steps[-1]["error"] = True
+
         for e in next_edges:
             queue.append(e["target"])
 
     steps.append({"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow finished"})
 
-    variables_snapshot = _variables_snapshot(db)
-    run = models.WorkflowRun(status="completed", steps=steps, variables_snapshot=variables_snapshot)
-    db.add(run)
+    return {"status": "completed", "steps": flush_new_steps(), "variables": _variables_snapshot(db)}
+
+
+def _save_run(db: Session, state: dict, status: str, variables: dict, finished: bool) -> None:
+    """Writes the run's progress so far to its workflow_runs row. The row can be gone
+    mid-run (DELETE /state wipes run history), in which case there's nothing to update."""
+    run = db.get(models.WorkflowRun, state.get("db_run_id")) if state.get("db_run_id") else None
+    if run is None:
+        return
+    run.status = status
+    # A fresh list, not the live one: SQLAlchemy doesn't notice in-place changes to a
+    # JSON column, so handing it the same (since appended-to) list would never get written.
+    run.steps = list(state["steps"])
+    run.variables_snapshot = variables
+    if finished:
+        run.finished_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(run)
-
-    return {"status": "completed", "run_id": run.id, "steps": flush_new_steps(), "variables": variables_snapshot}
 
 
-def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int | None = None) -> dict:
+def _record_crash(db: Session, state: dict, exc: Exception) -> None:
+    """Marks the run failed after an exception nothing inside _advance caught. Never
+    raises itself, so the caller can still re-raise the original error."""
+    try:
+        db.rollback()
+        state["steps"].append(
+            {
+                "node_id": None,
+                "type": "system",
+                "label": "Workflow",
+                "message": f"Workflow stopped on an unexpected error: {exc}",
+                "error": True,
+            }
+        )
+        _save_run(db, state, "failed", _variables_snapshot(db), finished=True)
+    except Exception:
+        logger.exception("Could not record the crash of workflow run %s", state.get("db_run_id"))
+
+
+def _advance_and_record(db: Session, state: dict) -> dict:
+    """_advance, plus keeping the run's workflow_runs row in step with where it ended up:
+    paused on a choice, finished (failed if any step carries "error": True), or crashed.
+    Blocks report their own failures as step messages, so a crash means a bug or an
+    error nothing caught - it's recorded so the run doesn't sit on "running" forever on
+    the dashboard, then re-raised so the request fails exactly as it did before."""
+    try:
+        result = _advance(db, state)
+    except Exception as exc:
+        _record_crash(db, state, exc)
+        raise
+    if result["status"] == "awaiting_choice":
+        _save_run(db, state, "awaiting_choice", result["variables"], finished=False)
+    else:
+        status = "failed" if any(step.get("error") for step in state["steps"]) else "succeeded"
+        _save_run(db, state, status, result["variables"], finished=True)
+        result["run_id"] = state.get("db_run_id")
+    return result
+
+
+def run_workflow(
+    db: Session,
+    nodes: list[dict],
+    edges: list[dict],
+    user_id: int | None = None,
+    flow_id: int | None = None,
+    flow_name: str | None = None,
+) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
     incoming: dict[str, list[dict]] = {}
@@ -1247,7 +1333,23 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int
         "user_id": user_id,
     }
 
-    result = _advance(db, state)
+    # Written before anything runs, so a long run (an AI call, a Discord wait) already
+    # shows up as "running". Both timestamps come from this process's clock, so the
+    # duration shown on the dashboard isn't skewed by the database host's clock.
+    run = models.WorkflowRun(
+        user_id=user_id,
+        flow_id=flow_id,
+        flow_name=flow_name,
+        status="running",
+        steps=list(state["steps"]),
+        variables_snapshot={},
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    db.commit()
+    state["db_run_id"] = run.id
+
+    result = _advance_and_record(db, state)
     if result["status"] == "awaiting_choice":
         run_id = str(uuid.uuid4())
         PENDING_RUNS[run_id] = state
@@ -1305,7 +1407,7 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
             state["queue"].append(e["target"])
     state.pop("awaiting_node", None)
 
-    result = _advance(db, state)
+    result = _advance_and_record(db, state)
     if result["status"] == "awaiting_choice":
         result["run_id"] = run_id
     else:
