@@ -335,8 +335,10 @@ def reauth(
     """Step-up check for sensitive settings (API keys, connected apps, security) -
     confirms the current password without changing anything. The frontend gates
     those pages behind this, separate from the long-lived login session."""
+    # 403, not 401: the session itself is fine here, only the typed password is wrong.
+    # The frontend's authedFetch treats any 401 as "this session is dead" and signs out.
     if not auth.verify_password(body.password, current_user.password_hash):
-        raise HTTPException(status_code=401, detail="Incorrect password")
+        raise HTTPException(status_code=403, detail="Incorrect password")
     return {"status": "ok"}
 
 
