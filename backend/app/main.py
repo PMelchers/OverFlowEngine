@@ -44,15 +44,24 @@ def on_startup():
         conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS client_secret VARCHAR"))
         conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN access_token DROP NOT NULL"))
         conn.execute(text("ALTER TABLE calendar_connections ALTER COLUMN refresh_token DROP NOT NULL"))
-        # workflow_runs gained an owner, the flow it ran, and a finish time for the
-        # dashboard's run overview. The index name matches what create_all generates for
-        # index=True, so fresh and patched databases end up identical.
-        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
-        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_id INTEGER"))
-        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_name VARCHAR"))
-        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"))
+        # Run-scoped variables + paused runs persisted in Postgres instead of the old
+        # global `variables` table and in-memory PENDING_RUNS (see DECISIONS.md). The
+        # old `variables` table is left in place, just no longer read or written.
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS public_id VARCHAR"))
+        conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_workflow_runs_public_id ON workflow_runs (public_id)")
+        )
+        conn.execute(
+            text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
+        )
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workflow_runs_user_id ON workflow_runs (user_id)"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS state JSON"))
+        conn.execute(
+            text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()")
+        )
         conn.commit()
+    with SessionLocal() as db:
+        executor.expire_stale_runs(db)
     _seed_demo_marketplace_flow()
 
 
@@ -1041,8 +1050,14 @@ def run_workflow(
 
 
 @app.post("/workflows/continue")
-def continue_workflow(body: ChoiceContinue, db: Session = Depends(get_db)):
-    return executor.continue_workflow(db, body.run_id, body.choice)
+def continue_workflow(
+    body: ChoiceContinue,
+    current_user: models.User | None = Depends(auth.get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    return executor.continue_workflow(
+        db, body.run_id, body.choice, user_id=current_user.id if current_user else None
+    )
 
 
 def _run_summary(run: models.WorkflowRun) -> dict:
@@ -1106,31 +1121,49 @@ def get_run(
 
 
 @app.get("/state")
-def get_state(db: Session = Depends(get_db)):
-    variables = {
-        v.name: {"type": v.var_type, "value": v.value} for v in db.query(models.Variable).all()
-    }
-    last_run = (
-        db.query(models.WorkflowRun).order_by(models.WorkflowRun.id.desc()).first()
-    )
+def get_state(
+    run_id: str | None = None,
+    current_user: models.User | None = Depends(auth.get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Variables + steps of one run - there are no global variables any more. With
+    `run_id` (the frontend remembers its last one) that run, as long as it is anonymous
+    or yours; without it, a signed-in user's latest run. Anonymous callers never get to
+    see a run they don't hold the id of."""
+    user_id = current_user.id if current_user else None
+    query = db.query(models.WorkflowRun)
+    if run_id:
+        run = query.filter(models.WorkflowRun.public_id == run_id).one_or_none()
+        if run is not None and run.user_id is not None and run.user_id != user_id:
+            run = None
+    elif user_id is not None:
+        run = query.filter(models.WorkflowRun.user_id == user_id).order_by(models.WorkflowRun.id.desc()).first()
+    else:
+        run = None
     return {
-        "variables": variables,
+        "variables": run.variables_snapshot if run else {},
         "last_run": (
             {
-                "run_id": last_run.id,
-                "status": last_run.status,
-                "steps": last_run.steps,
-                "created_at": last_run.created_at,
+                "run_id": run.public_id,
+                "status": run.status,
+                "steps": run.steps,
+                "created_at": run.created_at,
             }
-            if last_run
+            if run
             else None
         ),
     }
 
 
 @app.delete("/state")
-def wipe_state(db: Session = Depends(get_db)):
-    db.query(models.Variable).delete()
-    db.query(models.WorkflowRun).delete()
-    db.commit()
+def wipe_state(
+    current_user: models.User | None = Depends(auth.get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Wipes the caller's own run history. Anonymous runs aren't tied to anyone, so for
+    an anonymous caller there is nothing to wipe server-side - the frontend just forgets
+    its last run id."""
+    if current_user is not None:
+        db.query(models.WorkflowRun).filter(models.WorkflowRun.user_id == current_user.id).delete()
+        db.commit()
     return {"status": "wiped"}

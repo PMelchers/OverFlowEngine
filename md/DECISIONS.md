@@ -2,6 +2,32 @@
 
 Architectural decisions that aren't obvious from reading the code, kept here so the reasoning survives past the PR that made them.
 
+## Variables scoped per run, paused runs in Postgres (2026-10-12)
+
+**Decision**: A workflow's variables live only in that run's own state. There are no global variables any more. Every run starts with no variables, and what it ends with is kept as `workflow_runs.variables_snapshot`. A run paused on a Choice or Activity Suggestion block keeps its full executor state in `workflow_runs.state` (Postgres), not in an in-memory dict.
+
+### Context
+
+Variables used to be rows in one global `variables` table, shared by every user and every run. Two runs at the same time overwrote each other's values, and a run silently inherited values from earlier runs, including other users' runs. Paused runs lived in `PENDING_RUNS`, a dict in the backend process, so a restart or a `--reload` lost them, and they only worked with a single worker process. Scheduled triggers, webhooks and tool-calling all need runs that can run side by side and outlive one HTTP request, so this had to change first.
+
+### Only run variables, no persistent ones (for now)
+
+No flow in `templates.ts` relied on a variable from an earlier run: everything a flow reads, it sets itself, through Variable blocks, Form Trigger fields or an `outputVariable`. Keeping a second, persistent kind of variable would have brought the cross-run leaking back unless it had a separate name space. If a flow ever needs to remember something between runs, add it as a **separate** concept: a `user_variables` table per user (or per flow) with an explicit syntax such as `{user.name}`, so a flow always shows which kind it reads. It should not be a fallback on plain `{name}`.
+
+The old `variables` table is left in the database, unused. There is no migration tool, and dropping it gains nothing.
+
+### Postgres, not Redis, for paused runs
+
+`workflow_runs` already existed, and a paused run is just a run with another status. Postgres is durable, while Redis as configured in `docker-compose.yml` isn't. One row per run also gives a run history that can be queried, for example by user. The executor state is plain data apart from `visited` (a set), which is stored as a list. Redis may still earn a place later as the job queue for scheduled triggers and webhooks. That is a different job.
+
+### How a run moves through `workflow_runs`
+
+- `running`: the row is created when the run starts, not only when it finishes, so a run cut off half-way still leaves a trace. On startup, `expire_stale_runs()` turns any `running` row into `interrupted`. The executor is synchronous, so nothing can still be working on it.
+- `awaiting_choice`: `state` holds the executor state. `/workflows/continue` locks the row (`FOR UPDATE`) and immediately flips it back to `running` before doing anything else. The lock alone isn't enough because `_advance()` commits along the way, which releases the lock. The status flip is what stops a double-clicked choice from running the rest of the flow twice. Paused runs older than `PENDING_RUN_TTL` (24 h) become `expired`.
+- `completed` / `failed`: `state` is cleared.
+
+The id the frontend sees (`run_id`) is `public_id`, a uuid, not the integer primary key. Anonymous runs can be read and continued by whoever holds that id, so it must not be guessable. A signed-in user's run can only be read (`GET /state`) and continued by that user. Because anonymous runs belong to no account, the frontend keeps its last `run_id` in `localStorage` (`overflow.lastRunId`) to show that run's variables again after a reload.
+
 ## Discord notifications via an MCP server (2026-09-07)
 
 **Decision**: Add real Discord sending as a target app on the existing `appAction` block, backed by a small standalone Discord MCP server (`mcp-servers/discord/`) that the backend calls as an MCP client - not a direct API call embedded in the backend, and not a new node type.

@@ -32,10 +32,9 @@ DISCORD_AWAIT_REPLY_MAX_SECONDS = 120
 DISCORD_AWAIT_REPLY_POLL_INTERVAL = 4
 DISCORD_AWAIT_REPLY_MAX_TOKENS = 150
 
-# Runs paused on a Choice block, keyed by run_id. Holds only plain data (no
-# SQLAlchemy objects) so it survives across the separate HTTP requests /
-# DB sessions of the run -> continue -> continue ... sequence.
-PENDING_RUNS: dict[str, dict] = {}
+# How long a run paused on a Choice / Activity Suggestion block can still be continued.
+# The paused state lives in workflow_runs.state, so this only bounds how long we keep it.
+PENDING_RUN_TTL = timedelta(hours=24)
 
 
 def _render_message(template: str, variables: dict) -> str:
@@ -250,18 +249,13 @@ def _coerce(var_type: str, raw: str | None):
     return raw
 
 
-def _variables_snapshot(db: Session) -> dict:
-    return {v.name: {"type": v.var_type, "value": v.value} for v in db.query(models.Variable).all()}
-
-
-def _upsert_variable(db: Session, name: str, var_type: str, value: str):
-    existing = db.query(models.Variable).filter_by(name=name).one_or_none()
-    if existing:
-        existing.var_type = var_type
-        existing.value = value
-    else:
-        db.add(models.Variable(name=name, var_type=var_type, value=value))
-    db.commit()
+def _set_var(state: dict, name: str, var_type: str, value: str):
+    """Variables live only in the run's own state - two runs never see each other's
+    values and a run never inherits values from an earlier one (see DECISIONS.md).
+    `variables` keeps the raw string + type (what the step log / snapshot show);
+    `eval_vars` keeps the coerced value that interpolation and If-blocks work on."""
+    state["variables"][name] = {"type": var_type, "value": value}
+    state["eval_vars"][name] = _coerce(var_type, value)
 
 
 def _get_calendar_connection(db: Session, user_id: int | None, provider: str):
@@ -415,8 +409,7 @@ def _advance(db: Session, state: dict) -> dict:
         if ntype == "variable":
             var_type = data.get("varType", "string")
             value = data.get("value", "")
-            _upsert_variable(db, label, var_type, value)
-            eval_vars[label] = _coerce(var_type, value)
+            _set_var(state, label, var_type, value)
             steps.append(
                 {"node_id": node_id, "type": ntype, "label": label, "message": f'"{label}" = {value} ({var_type})'}
             )
@@ -432,8 +425,7 @@ def _advance(db: Session, state: dict) -> dict:
                     continue
                 var_type = field.get("varType", "string")
                 value = field.get("value", "")
-                _upsert_variable(db, name, var_type, value)
-                eval_vars[name] = _coerce(var_type, value)
+                _set_var(state, name, var_type, value)
                 parts.append(f"{name}={value}")
             summary = ", ".join(parts) if parts else "no fields"
             steps.append(
@@ -480,7 +472,7 @@ def _advance(db: Session, state: dict) -> dict:
                     "label": label,
                     "options": options,
                     "steps": flush_new_steps(),
-                    "variables": _variables_snapshot(db),
+                    "variables": dict(state["variables"]),
                 }
 
         elif ntype == "log":
@@ -584,8 +576,7 @@ def _advance(db: Session, state: dict) -> dict:
                 )
                 failed = True
             else:
-                _upsert_variable(db, label, "string", output_text)
-                eval_vars[label] = output_text
+                _set_var(state, label, "string", output_text)
                 steps.append(
                     {
                         "node_id": node_id,
@@ -601,15 +592,13 @@ def _advance(db: Session, state: dict) -> dict:
             from_address = (data.get("fromAddress") or "").strip()
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
-                _upsert_variable(db, output_var, "string", payload)
-                eval_vars[output_var] = payload
+                _set_var(state, output_var, "string", payload)
                 message = (
                     f'"{label}" received a message from {source_app}, saved as "{output_var}" = "{payload}"'
                 )
                 if from_address:
                     from_var = f"{output_var}From"
-                    _upsert_variable(db, from_var, "string", from_address)
-                    eval_vars[from_var] = from_address
+                    _set_var(state, from_var, "string", from_address)
                     message += f', sender saved as "{from_var}" = "{from_address}"'
             else:
                 message = f'"{label}" received a message from {source_app}: "{payload}"'
@@ -635,8 +624,7 @@ def _advance(db: Session, state: dict) -> dict:
                 else:
                     simulated_output = f'[preview reply from {model}] responding to: "{prompt}"'
                     if output_var:
-                        _upsert_variable(db, output_var, "string", simulated_output)
-                        eval_vars[output_var] = simulated_output
+                        _set_var(state, output_var, "string", simulated_output)
                         message = (
                             f'"{label}" ran an AI call with {model}, saved as "{output_var}" '
                             "(simulated - real model calls not wired up yet)"
@@ -712,8 +700,7 @@ def _advance(db: Session, state: dict) -> dict:
                         )
                         summary = "; ".join(f'{e["title"]} ({e["start"]})' for e in events) or "No events found"
                         if output_var:
-                            _upsert_variable(db, output_var, "string", summary)
-                            eval_vars[output_var] = summary
+                            _set_var(state, output_var, "string", summary)
                         message = f'"{label}" fetched {len(events)} event(s) from {target_app}'
                     except (httpx.HTTPError, ValueError, KeyError) as exc:
                         message = f'"{label}" could not reach {target_app}: {exc}'
@@ -733,8 +720,7 @@ def _advance(db: Session, state: dict) -> dict:
                                 calendar_provider, access_token, title, start, end, description
                             )
                             if output_var:
-                                _upsert_variable(db, output_var, "string", event_id)
-                                eval_vars[output_var] = event_id
+                                _set_var(state, output_var, "string", event_id)
                             message = f'"{label}" created "{title}" on {target_app} ({start} - {end})'
                         except httpx.HTTPError as exc:
                             message = f'"{label}" could not create the event on {target_app}: {exc}'
@@ -850,7 +836,7 @@ def _advance(db: Session, state: dict) -> dict:
                 "label": label,
                 "options": ["Accept", "Reject"],
                 "steps": flush_new_steps(),
-                "variables": _variables_snapshot(db),
+                "variables": dict(state["variables"]),
             }
 
         elif ntype == "costEstimate":
@@ -1130,8 +1116,7 @@ def _advance(db: Session, state: dict) -> dict:
 
             if output_var:
                 serialized = json.dumps(breakdown)
-                _upsert_variable(db, output_var, "string", serialized)
-                eval_vars[output_var] = serialized
+                _set_var(state, output_var, "string", serialized)
 
             if error:
                 message = f'"{label}" could not estimate costs: {error}'
@@ -1221,8 +1206,7 @@ def _advance(db: Session, state: dict) -> dict:
             url = build_maps_url(provider, origin, destination, mode, waypoints)
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
-                _upsert_variable(db, output_var, "string", url)
-                eval_vars[output_var] = url
+                _set_var(state, output_var, "string", url)
             provider_label = "Apple Maps" if provider == "apple" else "Google Maps"
             origin_part = f' from "{origin}"' if origin else ""
             stops_part = f" via {len(waypoints)} stop(s)" if waypoints else ""
@@ -1242,23 +1226,58 @@ def _advance(db: Session, state: dict) -> dict:
             queue.append(e["target"])
 
     steps.append({"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow finished"})
+    return {"status": "completed", "steps": flush_new_steps(), "variables": dict(state["variables"])}
 
-    return {"status": "completed", "steps": flush_new_steps(), "variables": _variables_snapshot(db)}
 
-
-def _save_run(db: Session, state: dict, status: str, variables: dict, finished: bool) -> None:
-    """Writes the run's progress so far to its workflow_runs row. The row can be gone
-    mid-run (DELETE /state wipes run history), in which case there's nothing to update."""
-    run = db.get(models.WorkflowRun, state.get("db_run_id")) if state.get("db_run_id") else None
-    if run is None:
-        return
-    run.status = status
-    # A fresh list, not the live one: SQLAlchemy doesn't notice in-place changes to a
-    # JSON column, so handing it the same (since appended-to) list would never get written.
+def _advance_and_save(db: Session, run: models.WorkflowRun, state: dict) -> dict:
+    """Run _advance() and write its outcome onto the run's row. A paused run keeps its
+    whole executor state in the row (instead of an in-memory dict) so it survives a
+    backend restart / reload and can be continued from any worker process."""
+    try:
+        result = _advance(db, state)
+    except Exception:
+        # Block errors are meant to land in the step log, so this is a bug - still mark
+        # the row, otherwise it sits on "running" until the next restart.
+        db.rollback()
+        run.status = "failed"
+        run.steps = list(state["steps"])
+        run.state = None
+        db.commit()
+        raise
+    run.status = result["status"]
     run.steps = list(state["steps"])
-    run.variables_snapshot = variables
-    if finished:
-        run.finished_at = datetime.now(timezone.utc)
+    run.variables_snapshot = dict(state["variables"])
+    if result["status"] == "awaiting_choice":
+        # JSON has no sets - visited goes back to a set in _load_state().
+        run.state = {**state, "visited": sorted(state["visited"])}
+    else:
+        run.state = None
+    db.commit()
+    result["run_id"] = run.public_id
+    return result
+
+
+def _load_state(run: models.WorkflowRun) -> dict:
+    state = dict(run.state)
+    state["visited"] = set(state["visited"])
+    return state
+
+
+def _error(message: str) -> dict:
+    return {"status": "error", "message": message, "steps": [], "variables": {}}
+
+
+def expire_stale_runs(db: Session) -> None:
+    """Called on startup. A run still "running" was cut off by the restart itself (the
+    executor is synchronous, so nothing can still be working on it). Paused runs nobody
+    continued within PENDING_RUN_TTL are dropped - their state blob can be large."""
+    db.query(models.WorkflowRun).filter(models.WorkflowRun.status == "running").update(
+        {"status": "interrupted", "state": None}, synchronize_session=False
+    )
+    cutoff = datetime.now(timezone.utc) - PENDING_RUN_TTL
+    db.query(models.WorkflowRun).filter(
+        models.WorkflowRun.status == "awaiting_choice", models.WorkflowRun.updated_at < cutoff
+    ).update({"status": "expired", "state": None}, synchronize_session=False)
     db.commit()
 
 
@@ -1316,14 +1335,15 @@ def run_workflow(
         adjacency.setdefault(e["source"], []).append(e)
         incoming.setdefault(e["target"], []).append(e)
 
-    eval_vars = {name: _coerce(v["type"], v["value"]) for name, v in _variables_snapshot(db).items()}
     trigger_ids = [n["id"] for n in nodes if n.get("type") in ("trigger", "appTrigger", "formTrigger")]
 
     state = {
         "node_by_id": node_by_id,
         "adjacency": adjacency,
         "incoming": incoming,
-        "eval_vars": eval_vars,
+        # Every run starts with no variables - see _set_var().
+        "variables": {},
+        "eval_vars": {},
         "queue": list(trigger_ids),
         "visited": set(),
         "steps": [{"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow triggered"}],
@@ -1333,38 +1353,53 @@ def run_workflow(
         "user_id": user_id,
     }
 
-    # Written before anything runs, so a long run (an AI call, a Discord wait) already
-    # shows up as "running". Both timestamps come from this process's clock, so the
-    # duration shown on the dashboard isn't skewed by the database host's clock.
+    # Created up front (not only once finished) so a run cut off mid-way still leaves a
+    # trace, and so later triggers (schedules, webhooks) have a row to report on.
     run = models.WorkflowRun(
+        public_id=str(uuid.uuid4()),
         user_id=user_id,
-        flow_id=flow_id,
-        flow_name=flow_name,
         status="running",
-        steps=list(state["steps"]),
+        steps=[],
         variables_snapshot={},
-        created_at=datetime.now(timezone.utc),
     )
     db.add(run)
     db.commit()
-    state["db_run_id"] = run.id
 
-    result = _advance_and_record(db, state)
-    if result["status"] == "awaiting_choice":
-        run_id = str(uuid.uuid4())
-        PENDING_RUNS[run_id] = state
-        result["run_id"] = run_id
-    return result
+    return _advance_and_save(db, run, state)
 
 
-def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
-    state = PENDING_RUNS.get(run_id)
-    if state is None:
-        return {"status": "error", "message": f"unknown or expired run '{run_id}'", "steps": [], "variables": {}}
+def continue_workflow(db: Session, run_id: str, choice: str, user_id: int | None = None) -> dict:
+    # FOR UPDATE + flipping the status to "running" before anything else claims the run:
+    # a double-clicked choice sends two continues at once, and the second one waits here,
+    # then sees "running" and gets a readable error. The status flip (not just the lock)
+    # matters because _advance() commits along the way, which releases the lock.
+    run = (
+        db.query(models.WorkflowRun)
+        .filter(models.WorkflowRun.public_id == run_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    # A signed-in user's run can only be continued by them; anonymous runs by whoever
+    # holds the (unguessable) run id.
+    if run is None or (run.user_id is not None and run.user_id != user_id):
+        db.rollback()
+        return _error(f"unknown run '{run_id}'")
+    if run.status == "awaiting_choice" and run.updated_at < datetime.now(timezone.utc) - PENDING_RUN_TTL:
+        run.status = "expired"
+        run.state = None
+        db.commit()
+    if run.status != "awaiting_choice" or not run.state:
+        db.rollback()
+        return _error(f"this run is not waiting on a choice (status: {run.status})")
 
+    state = _load_state(run)
     node_id = state.get("awaiting_node")
     if not node_id:
-        return {"status": "error", "message": "this run is not waiting on a choice", "steps": [], "variables": {}}
+        db.rollback()
+        return _error("this run is not waiting on a choice")
+    run.status = "running"
+    run.state = None
+    db.commit()
 
     node = state["node_by_id"].get(node_id, {})
     ntype = node.get("type", "choice")
@@ -1379,13 +1414,11 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
             saved: list[str] = []
             if pending.get("output_var"):
                 stops_value = " | ".join(pending.get("stops") or [])
-                _upsert_variable(db, pending["output_var"], "string", stops_value)
-                state["eval_vars"][pending["output_var"]] = stops_value
+                _set_var(state, pending["output_var"], "string", stops_value)
                 saved.append(f'route stops to "{pending["output_var"]}"')
             if pending.get("destination_output_var"):
                 dest_value = " | ".join(pending.get("destination_stops") or [])
-                _upsert_variable(db, pending["destination_output_var"], "string", dest_value)
-                state["eval_vars"][pending["destination_output_var"]] = dest_value
+                _set_var(state, pending["destination_output_var"], "string", dest_value)
                 saved.append(f'destination activities to "{pending["destination_output_var"]}"')
             message = f'Accepted the suggestion at "{label}" - saved {" and ".join(saved)}'
         elif accepted:
@@ -1407,9 +1440,4 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
             state["queue"].append(e["target"])
     state.pop("awaiting_node", None)
 
-    result = _advance_and_record(db, state)
-    if result["status"] == "awaiting_choice":
-        result["run_id"] = run_id
-    else:
-        PENDING_RUNS.pop(run_id, None)
-    return result
+    return _advance_and_save(db, run, state)

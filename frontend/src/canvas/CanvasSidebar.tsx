@@ -67,7 +67,7 @@ export default function CanvasSidebar({
           className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
         >
           <span className="flex items-center gap-1.5">
-            <Package className="h-4 w-4" /> Saved Variables
+            <Package className="h-4 w-4" /> Last Run Variables
             <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
               {Object.keys(variables).length}
             </span>
@@ -79,7 +79,7 @@ export default function CanvasSidebar({
         {variablesOpen && (
           <div className="mt-1.5 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
             {Object.keys(variables).length === 0 ? (
-              <p className="p-3 text-sm text-gray-400 dark:text-gray-500">Nothing saved yet.</p>
+              <p className="p-3 text-sm text-gray-400 dark:text-gray-500">No variables set in the last run.</p>
             ) : (
               <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                 {Object.entries(variables).map(([name, v]) => (
