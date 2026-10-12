@@ -192,7 +192,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'pickDestAgent',
         type: 'aiAgent',
-        position: { x: 0 * STEP, y: 420 },
+        position: { x: 4 * STEP, y: 0 },
         data: {
           kind: 'aiAgent',
           label: 'Pick Destination Agent',
@@ -205,13 +205,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'destinationAddress',
         type: 'aiOutput',
-        position: { x: 1 * STEP, y: 420 },
+        position: { x: 5 * STEP, y: 0 },
         data: { kind: 'aiOutput', label: 'destinationAddress' },
       },
       {
         id: 'planInput',
         type: 'aiInput',
-        position: { x: 2 * STEP, y: 420 },
+        position: { x: 6 * STEP, y: 0 },
         data: {
           kind: 'aiInput',
           label: 'planInput',
@@ -225,7 +225,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 3 * STEP, y: 420 },
+        position: { x: 7 * STEP, y: 0 },
         data: {
           kind: 'aiAgent',
           label: 'Vacation Planner Agent',
@@ -235,19 +235,19 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planModel',
         type: 'aiModel',
-        position: { x: 5 * STEP, y: 420 },
+        position: { x: 4 * STEP, y: 700 },
         data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
-        position: { x: 0 * STEP, y: 840 },
+        position: { x: 8 * STEP, y: 0 },
         data: { kind: 'aiOutput', label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 1 * STEP, y: 840 },
+        position: { x: 9 * STEP, y: 0 },
         data: {
           kind: 'activitySuggestion',
           label: 'Suggest Activities',
@@ -261,13 +261,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'suggestModel',
         type: 'aiModel',
-        position: { x: 4 * STEP, y: 840 },
+        position: { x: 9 * STEP, y: 700 },
         data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 2 * STEP, y: 840 },
+        position: { x: 10 * STEP, y: 0 },
         data: {
           kind: 'mapsAction',
           label: 'Google Maps Route',
@@ -282,7 +282,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 3 * STEP, y: 840 },
+        position: { x: 11 * STEP, y: 0 },
         data: {
           kind: 'mapsAction',
           label: 'Apple Maps Route',
@@ -297,7 +297,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'costEstimate',
         type: 'costEstimate',
-        position: { x: 0 * STEP, y: 1260 },
+        position: { x: 12 * STEP, y: 0 },
         data: {
           kind: 'costEstimate',
           label: 'Trip Cost',
@@ -319,7 +319,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'tripSummary',
         type: 'tripSummary',
-        position: { x: 1 * STEP, y: 1260 },
+        position: { x: 13 * STEP, y: 0 },
         data: {
           kind: 'tripSummary',
           label: 'Trip PDF',
