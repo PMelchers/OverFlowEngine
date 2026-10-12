@@ -9,8 +9,8 @@ Balance, in short:
 - Only short, plain values are kept. Anything that looks private is skipped: fields named like
   address, email, phone, name, key, token, password, account or card, and values that are long,
   contain an email, or are template placeholders such as {tripBudget}.
-- A value only becomes a hint once it is repeated (in several saved or run workflows), and ratings
-  only count once they agree. One-off choices are ignored.
+- Values are saved right away, from the first saved or run workflow. Ratings only count once there are
+  a couple of them that agree.
 - At most MAX_HINTS hints go to the AI, and only through a connected Profile block.
 - The user can see, delete or reset everything that was learned.
 """
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from . import models
 
 MAX_HINTS = 5
-MIN_VALUE_COUNT = 3  # a value must appear in this many workflows to count as a habit
+MIN_VALUE_COUNT = 1  # values are saved and used right away; the MAX_HINTS cap keeps the AI's list short
 MIN_RATINGS = 2  # a reply type needs this many ratings before its rating counts as a preference
 MAX_VALUE_LENGTH = 60
 
@@ -129,7 +129,8 @@ def hints(db: Session, user_id: int) -> list[str]:
     for row in db.query(models.UserSignal).filter_by(user_id=user_id).all():
         if row.kind == "field" and row.count >= MIN_VALUE_COUNT:
             name, _, value = row.key.partition("=")
-            scored.append((row.count, f"Usually sets {name} to '{value}' (in {row.count} workflows)"))
+            times = "once" if row.count == 1 else f"{row.count} times"
+            scored.append((row.count, f"Usually sets {name} to '{value}' (used {times})"))
         elif row.kind == "rating" and row.count >= MIN_RATINGS:
             average = row.total / row.count
             if average >= 4:
