@@ -163,7 +163,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
         // activity suggestion is rejected (no accepted stops to weave in yet).
         id: 'routeActivitiesSeed',
         type: 'variable',
-        position: { x: 6 * STEP, y: 0 },
+        position: { x: 1 * STEP, y: 0 },
         data: { kind: 'variable', label: 'routeActivities', varType: 'string', value: '' },
       },
       {
@@ -171,13 +171,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
         // "at the destination" input if the suggestion is rejected.
         id: 'destinationStopsSeed',
         type: 'variable',
-        position: { x: 1 * STEP, y: 200 },
+        position: { x: 2 * STEP, y: 0 },
         data: { kind: 'variable', label: 'destinationStops', varType: 'string', value: '' },
       },
       {
         id: 'pickDestInput',
         type: 'aiInput',
-        position: { x: 2 * STEP, y: 0 },
+        position: { x: 3 * STEP, y: 0 },
         data: {
           kind: 'aiInput',
           label: 'pickDestInput',
@@ -192,7 +192,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'pickDestAgent',
         type: 'aiAgent',
-        position: { x: 3 * STEP, y: 0 },
+        position: { x: 0 * STEP, y: 420 },
         data: {
           kind: 'aiAgent',
           label: 'Pick Destination Agent',
@@ -205,13 +205,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'destinationAddress',
         type: 'aiOutput',
-        position: { x: 4 * STEP, y: 0 },
+        position: { x: 1 * STEP, y: 420 },
         data: { kind: 'aiOutput', label: 'destinationAddress' },
       },
       {
         id: 'planInput',
         type: 'aiInput',
-        position: { x: 5 * STEP, y: 0 },
+        position: { x: 2 * STEP, y: 420 },
         data: {
           kind: 'aiInput',
           label: 'planInput',
@@ -225,7 +225,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planAgent',
         type: 'aiAgent',
-        position: { x: 6 * STEP, y: 0 },
+        position: { x: 3 * STEP, y: 420 },
         data: {
           kind: 'aiAgent',
           label: 'Vacation Planner Agent',
@@ -235,19 +235,19 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'planModel',
         type: 'aiModel',
-        position: { x: 8 * STEP + 120, y: 280 },
+        position: { x: 5 * STEP, y: 420 },
         data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'vacationPlan',
         type: 'aiOutput',
-        position: { x: 9 * STEP, y: 0 },
+        position: { x: 0 * STEP, y: 840 },
         data: { kind: 'aiOutput', label: 'vacationPlan' },
       },
       {
         id: 'suggestActivities',
         type: 'activitySuggestion',
-        position: { x: 8 * STEP, y: 0 },
+        position: { x: 1 * STEP, y: 840 },
         data: {
           kind: 'activitySuggestion',
           label: 'Suggest Activities',
@@ -261,13 +261,13 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'suggestModel',
         type: 'aiModel',
-        position: { x: 2800, y: 640 },
+        position: { x: 4 * STEP, y: 840 },
         data: { kind: 'aiModel', label: 'Model', credentialId: null },
       },
       {
         id: 'googleRoute',
         type: 'mapsAction',
-        position: { x: 9 * STEP, y: 0 },
+        position: { x: 2 * STEP, y: 840 },
         data: {
           kind: 'mapsAction',
           label: 'Google Maps Route',
@@ -282,7 +282,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'appleRoute',
         type: 'mapsAction',
-        position: { x: 10 * STEP, y: 0 },
+        position: { x: 3 * STEP, y: 840 },
         data: {
           kind: 'mapsAction',
           label: 'Apple Maps Route',
@@ -297,7 +297,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'costEstimate',
         type: 'costEstimate',
-        position: { x: 9 * STEP, y: 400 },
+        position: { x: 0 * STEP, y: 1260 },
         data: {
           kind: 'costEstimate',
           label: 'Trip Cost',
@@ -319,7 +319,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       {
         id: 'tripSummary',
         type: 'tripSummary',
-        position: { x: 10 * STEP, y: 400 },
+        position: { x: 1 * STEP, y: 1260 },
         data: {
           kind: 'tripSummary',
           label: 'Trip PDF',
