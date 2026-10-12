@@ -55,6 +55,15 @@ export default function AiAgentNode({ data }: NodeProps<AiAgentBlockData>) {
 
       <Handle type="source" position={Position.Right} className="!bg-fuchsia-500" />
       <Handle type="target" position={Position.Bottom} id="model" className="!bg-fuchsia-500" />
+      {/* Opt-in: only a Profile block wired here lets this agent see the user's saved profile. */}
+      <Handle
+        type="target"
+        position={Position.Bottom}
+        id="profile"
+        className="!bg-sky-500"
+        style={{ left: '78%' }}
+        title="Profile - connect My Profile here to share your saved preferences with this agent"
+      />
     </GridSnapBox>
   )
 }

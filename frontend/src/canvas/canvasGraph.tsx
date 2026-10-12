@@ -3,6 +3,7 @@ import AiAgentNode from '../nodes/ai/AiAgentNode'
 import AiInputNode from '../nodes/ai/AiInputNode'
 import AiModelNode from '../nodes/ai/AiModelNode'
 import AiOutputNode from '../nodes/ai/AiOutputNode'
+import ProfileNode from '../nodes/ai/ProfileNode'
 import AppActionNode from '../nodes/apps/AppActionNode'
 import AppTriggerNode from '../nodes/apps/AppTriggerNode'
 import BlockNode from '../nodes/core/BlockNode'
@@ -68,6 +69,7 @@ export const nodeTypes = {
   aiInput: withQuickAdd(AiInputNode),
   aiOutput: withQuickAdd(AiOutputNode),
   aiModel: AiModelNode,
+  profile: ProfileNode,
 }
 
 /** Blocks that can start a workflow run - React Flow's `type` field, not the BlockKind palette id. */
@@ -116,6 +118,8 @@ export function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
       return { kind, label: 'agentReply' }
     case 'aiModel':
       return { kind, label: 'Model', credentialId: null }
+    case 'profile':
+      return { kind, label: 'My Profile' }
     case 'appTrigger':
       return { kind, label, value: '', outputVariable: 'incomingMessage', fromAddress: '' }
     case 'formTrigger':
