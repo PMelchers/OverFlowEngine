@@ -83,6 +83,9 @@ export interface FormField {
   varType: VariableType
   /** design-time default shown in the modal; overwritten with whatever the user typed once submitted */
   value: string
+  /** may be left empty in the modal (every field is required otherwise) - for answers like
+   *  "websites to exclude", where "none" is a valid answer */
+  optional?: boolean
 }
 
 /** One priced line in a Cost Estimate block's result - carried on the matching run step
@@ -352,6 +355,9 @@ export interface ActivitySuggestionBlockData extends BaseBlockData, WithAvailabl
   /** variable name the accepted DESTINATION activities (once-arrived, not en-route
    *  stops) are saved into, also "|"-separated */
   destinationOutputVariable?: string
+  /** websites the suggestions mustn't be based on or point to, e.g. "tripadvisor.com,
+   *  pinterest.com" or "{tripExcludedSites}" - parsed by backend/app/excluded_sites.py */
+  excludedSites?: string
   onChange?: (patch: Partial<ActivitySuggestionBlockData>) => void
 }
 
@@ -401,6 +407,10 @@ export interface CostEstimateBlockData extends BaseBlockData, WithAvailableVaria
   /** every price is converted to this currency (default "EUR") - an item the AI
    *  couldn't actually convert is flagged in its note rather than silently trusted */
   currency?: string
+  /** websites no price may come from, e.g. "booking.com, tripadvisor.com" or
+   *  "{tripExcludedSites}": their live booking rates are left out, and the AI's web search
+   *  is blocked from them (or told to avoid them, on providers that can't block) */
+  excludedSites?: string
   /** variable name the JSON cost breakdown is saved into */
   outputVariable?: string
   onChange?: (patch: Partial<CostEstimateBlockData>) => void

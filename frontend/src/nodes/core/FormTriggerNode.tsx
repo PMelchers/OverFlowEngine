@@ -108,13 +108,24 @@ export default function FormTriggerNode({ data }: NodeProps<FormTriggerBlockData
               onChange={(e) => updateField(i, { name: e.target.value })}
               className="mb-1 w-full rounded border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[11px] text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
             />
-            <input
-              type="text"
-              value={f.value}
-              placeholder="default value"
-              onChange={(e) => updateField(i, { value: e.target.value })}
-              className="w-full rounded border border-blue-300 bg-white px-2 py-1 text-xs dark:border-blue-700 dark:bg-gray-900 dark:text-gray-100"
-            />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={f.value}
+                placeholder="default value"
+                onChange={(e) => updateField(i, { value: e.target.value })}
+                className="min-w-0 flex-1 rounded border border-blue-300 bg-white px-2 py-1 text-xs dark:border-blue-700 dark:bg-gray-900 dark:text-gray-100"
+              />
+              <label className="flex shrink-0 items-center gap-1 text-[10px] text-blue-700 dark:text-blue-300">
+                <input
+                  type="checkbox"
+                  checked={f.optional ?? false}
+                  onChange={(e) => updateField(i, { optional: e.target.checked })}
+                  className="h-3 w-3"
+                />
+                optional
+              </label>
+            </div>
           </div>
         ))}
         {fields.length === 0 && <p className="text-xs text-gray-400 dark:text-gray-500">No fields yet.</p>}

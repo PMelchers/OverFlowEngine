@@ -58,6 +58,11 @@ const VACATION_FORM_FIELDS: FormField[] = [
   { name: 'tripKmPerStop', label: 'Max driving per stop', varType: 'string', value: 'max 150 km per day' },
   { name: 'tripDestinationRadius', label: 'Radius around destination', varType: 'string', value: '20 km around the final destination' },
   { name: 'tripExcludedSiteTypes', label: 'Sources to avoid', varType: 'string', value: 'social media, ad-heavy blogs' },
+  // Unlike the hints above, this one is enforced: concrete websites (domains) that Trip
+  // Cost takes no prices from and Suggest Activities doesn't base suggestions on - see
+  // backend/app/excluded_sites.py. The default is harmless on purpose: excluding
+  // tripadvisor.com, say, would switch off the live hotel prices for everyone.
+  { name: 'tripExcludedSites', label: 'Websites to exclude', varType: 'string', value: 'pinterest.com', optional: true },
 ]
 
 export const TEMPLATES: WorkflowTemplate[] = [
@@ -219,7 +224,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
             'Plan a {stayType} vacation in {destinationCountry}, starting the trip from {startingAddress} and ending in {destinationAddress}, from {tripStartDate} to {tripEndDate}. ' +
             'Travelers: {tripAdults} adult(s) and {tripChildren} child(ren), budget {tripBudget}. We are traveling by {transportMode} and enjoy {destinationActivities}. ' +
             'Preferred weather: {tripWeatherPreference}. Keep driving to roughly {tripKmPerStop}, and favor stops within {tripDestinationRadius}. ' +
-            "Don't base suggestions on {tripExcludedSiteTypes}. Suggest a day-by-day itinerary with the best stops to visit.",
+            "Don't base suggestions on {tripExcludedSiteTypes}, or on anything from these websites: {tripExcludedSites}. " +
+            'Suggest a day-by-day itinerary with the best stops to visit.',
         },
       },
       {
@@ -256,6 +262,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
           interests: '{destinationActivities}',
           outputVariable: 'routeActivities',
           destinationOutputVariable: 'destinationStops',
+          excludedSites: '{tripExcludedSites}',
         },
       },
       {
@@ -313,6 +320,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
           children: '{tripChildren}',
           budget: '{tripBudget}',
           currency: 'EUR',
+          excludedSites: '{tripExcludedSites}',
           outputVariable: 'tripCostEstimate',
         },
       },
