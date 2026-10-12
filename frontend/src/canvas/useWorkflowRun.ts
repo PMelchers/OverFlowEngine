@@ -63,6 +63,8 @@ export function useWorkflowRun({
   const [running, setRunning] = useState(false)
   const [variables, setVariables] = useState<Record<string, StoredVariable>>({})
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
+  /** an AI reply from the last finished run, waiting for the user to rate it */
+  const [ratingRequest, setRatingRequest] = useState<{ label: string; reply: string } | null>(null)
 
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
@@ -133,9 +135,14 @@ export function useWorkflowRun({
       } else {
         setPendingChoice(null)
         setRunning(false)
+        // A finished run that produced an AI reply asks the user to rate it - unless privacy
+        // mode is on, since a rating would be saved to their profile.
+        const lastReply = [...result.steps].reverse().find((s) => s.type === 'aiAgent' && s.message.includes('replied via'))
+        const match = lastReply?.message.match(/^AI Agent "(.+?)" replied via .+?: "([\s\S]*)"$/)
+        if (match && !privacyModeRef.current) setRatingRequest({ label: match[1], reply: match[2] })
       }
     },
-    [addLog, activateNode, nodesRef],
+    [addLog, activateNode, nodesRef, privacyModeRef],
   )
 
   const runWorkflow = useCallback(
@@ -252,6 +259,8 @@ export function useWorkflowRun({
     running,
     variables,
     pendingChoice,
+    ratingRequest,
+    dismissRating: () => setRatingRequest(null),
     addLog,
     runWorkflow,
     resolveChoice,

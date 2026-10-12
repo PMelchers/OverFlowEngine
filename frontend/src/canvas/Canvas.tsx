@@ -22,6 +22,7 @@ import AuthModal from '../shared/AuthModal'
 import { useAuth } from '../shared/auth'
 import CanvasHeader from './CanvasHeader'
 import CanvasSidebar from './CanvasSidebar'
+import RatingPrompt from './RatingPrompt'
 import { nodeTypes } from './canvasGraph'
 import FlowsPanel from './FlowsPanel'
 import GroupNameModal from './GroupNameModal'
@@ -151,7 +152,7 @@ function CanvasInner({
     setPrivacyModeState(on)
   }, [])
 
-  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
+  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, ratingRequest, dismissRating, addLog, runWorkflow, resolveChoice, wipeData } =
     useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, authedFetch, privacyModeRef })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
@@ -386,6 +387,14 @@ function CanvasInner({
         onTogglePrivacy={() => setPrivacyMode(!privacyMode)}
       />
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {ratingRequest && user && (
+        <RatingPrompt
+          label={ratingRequest.label}
+          reply={ratingRequest.reply}
+          authedFetch={authedFetch}
+          onClose={dismissRating}
+        />
+      )}
       {pendingGroup && (
         <GroupNameModal
           defaultLabel={pendingGroup.defaultLabel}
