@@ -124,10 +124,26 @@ class Variable(Base):
 
 
 class WorkflowRun(Base):
+    """One execution of a workflow, written when the run starts and updated when it
+    pauses, finishes or crashes (see executor._advance_and_record) - so the dashboard's
+    run overview can show a run that's still going or waiting for a choice too."""
+
     __tablename__ = "workflow_runs"
 
     id = Column(Integer, primary_key=True)
+    # Null for anonymous runs - those are still logged, they just don't belong on
+    # anyone's dashboard.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Which saved flow was open in the editor, if any. Deliberately not a foreign key:
+    # deleting a flow must not delete (or be blocked by) its run history, and flow_name
+    # keeps the run labeled after the flow is renamed or gone.
+    flow_id = Column(Integer, nullable=True)
+    flow_name = Column(String, nullable=True)
+    # running -> awaiting_choice -> succeeded | failed. "failed" means at least one step
+    # carries "error": True (or the run crashed). Rows from before this column's
+    # lifecycle existed just say "completed".
     status = Column(String, nullable=False)
     steps = Column(JSON, nullable=False)
     variables_snapshot = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    finished_at = Column(DateTime(timezone=True), nullable=True)

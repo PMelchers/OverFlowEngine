@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Edge, Node, useReactFlow } from 'reactflow'
 import { TRIGGER_NODE_TYPES, defaultDataFor, nextId, sanitizeData } from './canvasGraph'
 import type { BlockDataPatch, BlockNodeData, FormField, SubgraphEdge, SubgraphNode, VariableType } from '../nodes/types'
@@ -43,6 +43,11 @@ export function useFlowPersistence({
   initialTemplateId,
   insertTemplate,
 }: UseFlowPersistenceArgs) {
+  // The saved flow this canvas came from (opened or just saved), so a run can be
+  // labeled with it in the dashboard's run overview. Null for a blank canvas or a
+  // template that hasn't been saved yet.
+  const [currentFlowId, setCurrentFlowId] = useState<number | null>(null)
+
   const saveCurrentFlow = useCallback(
     async (name: string) => {
       const currentNodes = nodesRef.current
@@ -75,13 +80,15 @@ export function useFlowPersistence({
         const body = await res.json().catch(() => null)
         throw new Error(body?.detail ?? 'Could not save this flow')
       }
+      const saved = await res.json()
+      setCurrentFlowId(saved.id)
       addLog(`Saved flow "${name}"`)
     },
     [authedFetch, addLog, nodesRef, edgesRef],
   )
 
   const loadFlow = useCallback(
-    (flowNodes: SubgraphNode[], flowEdges: SubgraphEdge[]) => {
+    (flowNodes: SubgraphNode[], flowEdges: SubgraphEdge[], flowId: number) => {
       if (nodesRef.current.length > 0 && !window.confirm('Loading this flow will replace your current canvas. Continue?')) {
         return
       }
@@ -124,6 +131,7 @@ export function useFlowPersistence({
       setNodes(loadedNodes)
       setEdges(loadedEdges)
       setSelectedIds(new Set())
+      setCurrentFlowId(flowId)
       addLog('Loaded flow')
       requestAnimationFrame(() => fitView({ padding: 0.3 }))
     },
@@ -154,7 +162,7 @@ export function useFlowPersistence({
         const res = await authedFetch(`/flows/${initialFlowId}`)
         if (!res.ok || cancelled) return
         const body = await res.json()
-        if (!cancelled) loadFlow(body.nodes, body.edges)
+        if (!cancelled) loadFlow(body.nodes, body.edges, body.id)
       } catch {
         // Ignore - the user just starts from an empty canvas instead.
       }
@@ -229,5 +237,5 @@ export function useFlowPersistence({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { saveCurrentFlow, loadFlow }
+  return { saveCurrentFlow, loadFlow, currentFlowId }
 }
