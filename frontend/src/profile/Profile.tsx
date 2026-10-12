@@ -12,13 +12,16 @@ type Feedback = {
   text: string | null
   created_at: string | null
 }
-type LearnedSignal = { id: number; kind: 'block' | 'app' | 'rating'; key: string; count: number; average: number | null }
+type LearnedSignal = { id: number; kind: 'field' | 'rating'; key: string; count: number; average: number | null }
 type Learning = { enabled: boolean; signals: LearnedSignal[]; hints: string[] }
 type ProfileData = { preferences: Preference[]; feedback: Feedback[]; learning: Learning }
 
 function describeSignal(s: LearnedSignal): string {
-  if (s.kind === 'block') return `Uses ${s.key} blocks (${s.count} saved workflows)`
-  if (s.kind === 'app') return `Connects ${s.key} (${s.count} saved workflows)`
+  if (s.kind === 'field') {
+    // key is "fieldName=value", e.g. "destinationCountry=Italy"
+    const [name, ...rest] = s.key.split('=')
+    return `${name} is '${rest.join('=')}' (${s.count} workflows)`
+  }
   return `Replies from '${s.key}': average ${s.average ?? '-'} / 5 (${s.count} ratings)`
 }
 
@@ -98,7 +101,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen w-screen flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
       <header className="flex shrink-0 items-center gap-3 border-b border-gray-200/80 bg-white/95 px-5 py-2.5 shadow-sm dark:border-gray-800 dark:bg-gray-900/95">
         <button
           type="button"
@@ -112,7 +115,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
         </h1>
       </header>
 
-      <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 content-start gap-4 overflow-hidden px-5 py-6 md:grid-cols-2">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-4 px-5 py-6 md:grid-cols-2">
         <p className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100">
           Your preferences and feedback are saved only in your account. An AI Agent sees them only when you connect
           a <b>My Profile</b> block to that agent's Profile handle. Nothing is shared by default.
@@ -139,8 +142,9 @@ export default function Profile({ onBack }: { onBack: () => void }) {
           </label>
           </div>
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-            When on, the app notices the blocks and apps you keep in workflows and the replies you rate. Only habits
-            that repeat are used, and only by an AI Agent you connect to your profile. Workflows saved in privacy mode
+            When on, the app notices the values you fill in to blocks (like a destination or a budget) and the replies
+            you rate. Only values that repeat are used, and only by an AI Agent you connect to your profile. Names,
+            emails, addresses, keys and dates are never learned. Workflows saved in privacy mode
             and ratings given in privacy mode are never counted.
           </p>
 
