@@ -12,7 +12,15 @@ type Feedback = {
   text: string | null
   created_at: string | null
 }
-type ProfileData = { preferences: Preference[]; feedback: Feedback[] }
+type LearnedSignal = { id: number; kind: 'block' | 'app' | 'rating'; key: string; count: number; average: number | null }
+type Learning = { enabled: boolean; signals: LearnedSignal[]; hints: string[] }
+type ProfileData = { preferences: Preference[]; feedback: Feedback[]; learning: Learning }
+
+function describeSignal(s: LearnedSignal): string {
+  if (s.kind === 'block') return `Uses ${s.key} blocks (${s.count} saved workflows)`
+  if (s.kind === 'app') return `Connects ${s.key} (${s.count} saved workflows)`
+  return `Replies from '${s.key}': average ${s.average ?? '-'} / 5 (${s.count} ratings)`
+}
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100'
@@ -20,7 +28,28 @@ const inputClass =
 export default function Profile({ onBack }: { onBack: () => void }) {
   const { authedFetch } = useAuth()
   const { data, loading, error, reload } = useAuthedResource<ProfileData>('/profile', 'Could not load your profile')
-  const profile = data ?? { preferences: [], feedback: [] }
+  const profile: ProfileData = data ?? { preferences: [], feedback: [], learning: { enabled: false, signals: [], hints: [] } }
+  const learning = profile.learning
+
+  const setLearning = async (enabled: boolean) => {
+    await authedFetch('/profile/learning', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    })
+    await reload()
+  }
+
+  const deleteSignal = async (id: number) => {
+    await authedFetch(`/profile/learning/${id}`, { method: 'DELETE' })
+    await reload()
+  }
+
+  const resetLearning = async () => {
+    if (!window.confirm('Forget everything the app has learned about you?')) return
+    await authedFetch('/profile/learning', { method: 'DELETE' })
+    await reload()
+  }
 
   const [prefCategory, setPrefCategory] = useState('')
   const [prefKey, setPrefKey] = useState('')
@@ -82,6 +111,73 @@ export default function Profile({ onBack }: { onBack: () => void }) {
 
         {loading && <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Learn from my workflows</h2>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={learning.enabled}
+              onClick={() => setLearning(!learning.enabled)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                learning.enabled ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}
+            >
+              {learning.enabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            When on, the app notices the blocks and apps you keep in workflows and the replies you rate. Only habits
+            that repeat are used, and only by an AI Agent you connect to your profile. Workflows saved in privacy mode
+            and ratings given in privacy mode are never counted.
+          </p>
+
+          {learning.enabled && learning.hints.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1 text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">
+                What an AI Agent would be told
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5 text-sm text-gray-700 dark:text-gray-300">
+                {learning.hints.map((h) => (
+                  <li key={h}>{h}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {learning.signals.length === 0 ? (
+            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">Nothing learned yet.</p>
+          ) : (
+            <ul className="mb-3 space-y-1.5">
+              {learning.signals.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                >
+                  <span className="text-gray-700 dark:text-gray-200">{describeSignal(s)}</span>
+                  <button
+                    type="button"
+                    onClick={() => deleteSignal(s.id)}
+                    className="text-red-500 hover:text-red-700 dark:text-red-400"
+                    title="Forget this"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {learning.signals.length > 0 && (
+            <button
+              type="button"
+              onClick={resetLearning}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              Forget everything learned
+            </button>
+          )}
+        </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
           <h2 className="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-100">Preferences</h2>
