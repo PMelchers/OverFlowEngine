@@ -55,7 +55,10 @@ export default function FormSubmissionModal({
           <div className="mb-4 space-y-3">
             {fields.map((f, i) => (
               <div key={f.name || i}>
-                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">{f.label || f.name}</label>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">
+                  {f.label || f.name}
+                  {f.optional && <span className="font-normal text-gray-400 dark:text-gray-500"> (optional)</span>}
+                </label>
                 {f.varType === 'boolean' ? (
                   <input
                     type="checkbox"
@@ -67,7 +70,7 @@ export default function FormSubmissionModal({
                 ) : (
                   <input
                     type={f.varType === 'int' ? 'number' : 'text'}
-                    required
+                    required={!f.optional}
                     autoFocus={i === 0}
                     value={values[f.name] ?? ''}
                     onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}

@@ -98,6 +98,17 @@ export default function ActivitySuggestionNode({ data }: NodeProps<ActivitySugge
       />
 
       <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
+        Websites to exclude (optional)
+      </label>
+      <input
+        type="text"
+        value={data.excludedSites ?? ''}
+        placeholder="e.g. tripadvisor.com, {tripExcludedSites}"
+        onChange={(e) => data.onChange?.({ excludedSites: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-orange-300 bg-white px-2 py-1 text-sm dark:border-orange-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
+      <label className="mb-1 block text-[11px] font-medium text-orange-800 dark:text-orange-300">
         Save accepted route stops as
       </label>
       <input
