@@ -45,9 +45,18 @@ interface UseWorkflowRunArgs {
   setNodes: Dispatch<SetStateAction<Node<BlockNodeData>[]>>
   updateNodeData: (id: string, patch: BlockDataPatch) => void
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>
+  /** the open workflow's privacy switch - sent with every run so the server skips saving */
+  privacyModeRef: RefObject<boolean>
 }
 
-export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, authedFetch }: UseWorkflowRunArgs) {
+export function useWorkflowRun({
+  nodesRef,
+  edgesRef,
+  setNodes,
+  updateNodeData,
+  authedFetch,
+  privacyModeRef,
+}: UseWorkflowRunArgs) {
   const [logs, setLogs] = useState<string[]>([])
   const [costSummary, setCostSummary] = useState<CostBreakdown | null>(null)
   const [tripPdf, setTripPdf] = useState<TripPdf | null>(null)
@@ -167,6 +176,7 @@ export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, a
           body: JSON.stringify({
             nodes: flatNodes.map((n) => ({ id: n.id, type: n.type, data: sanitizeData(n.data) })),
             edges: flatEdges,
+            privacy_mode: privacyModeRef.current,
           }),
         })
         if (!res.ok) throw new Error(`backend returned ${res.status}`)
@@ -179,7 +189,7 @@ export function useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, a
 
       await playResult(result)
     },
-    [running, addLog, playResult, authedFetch, updateNodeData, nodesRef, edgesRef],
+    [running, addLog, playResult, authedFetch, updateNodeData, nodesRef, edgesRef, privacyModeRef],
   )
 
   const resolveChoice = useCallback(

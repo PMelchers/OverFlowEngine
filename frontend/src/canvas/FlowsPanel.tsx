@@ -13,7 +13,7 @@ export default function FlowsPanel({
   onSaveCurrent,
 }: {
   onClose: () => void
-  onLoad: (nodes: SubgraphNode[], edges: SubgraphEdge[]) => void
+  onLoad: (nodes: SubgraphNode[], edges: SubgraphEdge[], privacyMode: boolean) => void
   onSaveCurrent: (name: string) => Promise<void>
 }) {
   const { authedFetch } = useAuth()
@@ -51,7 +51,7 @@ export default function FlowsPanel({
       const res = await authedFetch(`/flows/${id}`)
       if (!res.ok) throw new Error('Could not load that flow')
       const body = await res.json()
-      onLoad(body.nodes, body.edges)
+      onLoad(body.nodes, body.edges, !!body.privacy_mode)
       onClose()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not load that flow')

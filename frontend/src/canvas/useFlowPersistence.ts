@@ -22,6 +22,9 @@ interface UseFlowPersistenceArgs {
   initialFlowId: number | null
   initialTemplateId: string | null
   insertTemplate: (template: WorkflowTemplate, dropPosition?: { x: number; y: number }) => void
+  /** the open workflow's privacy switch - saved with the flow */
+  privacyModeRef: RefObject<boolean>
+  setPrivacyMode: (on: boolean) => void
 }
 
 export function useFlowPersistence({
@@ -42,6 +45,8 @@ export function useFlowPersistence({
   initialFlowId,
   initialTemplateId,
   insertTemplate,
+  privacyModeRef,
+  setPrivacyMode,
 }: UseFlowPersistenceArgs) {
   const saveCurrentFlow = useCallback(
     async (name: string) => {
@@ -52,6 +57,7 @@ export function useFlowPersistence({
       }
       const payload = {
         name,
+        privacy_mode: privacyModeRef.current,
         nodes: currentNodes.map((n) => ({
           id: n.id,
           type: n.type ?? 'block',
@@ -77,14 +83,15 @@ export function useFlowPersistence({
       }
       addLog(`Saved flow "${name}"`)
     },
-    [authedFetch, addLog, nodesRef, edgesRef],
+    [authedFetch, addLog, nodesRef, edgesRef, privacyModeRef],
   )
 
   const loadFlow = useCallback(
-    (flowNodes: SubgraphNode[], flowEdges: SubgraphEdge[]) => {
+    (flowNodes: SubgraphNode[], flowEdges: SubgraphEdge[], privacyMode = false) => {
       if (nodesRef.current.length > 0 && !window.confirm('Loading this flow will replace your current canvas. Continue?')) {
         return
       }
+      setPrivacyMode(privacyMode)
       const loadedNodes: Node<BlockNodeData>[] = flowNodes.map((n) => ({
         id: n.id,
         type: n.type,
@@ -140,6 +147,7 @@ export function useFlowPersistence({
       setSelectedIds,
       availableVariablesRef,
       appConnectionsRef,
+      setPrivacyMode,
     ],
   )
 
@@ -154,7 +162,7 @@ export function useFlowPersistence({
         const res = await authedFetch(`/flows/${initialFlowId}`)
         if (!res.ok || cancelled) return
         const body = await res.json()
-        if (!cancelled) loadFlow(body.nodes, body.edges)
+        if (!cancelled) loadFlow(body.nodes, body.edges, !!body.privacy_mode)
       } catch {
         // Ignore - the user just starts from an empty canvas instead.
       }

@@ -1,4 +1,4 @@
-import { Blocks, FolderOpen, Home, Layers, Pencil, Save, Store, Trash2, X, Zap } from 'lucide-react'
+import { Blocks, FolderOpen, Home, Layers, Lock, LockOpen, Pencil, Save, Store, Trash2, X, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import AboutDropdown from '../shared/AboutDropdown'
@@ -22,6 +22,8 @@ interface CanvasHeaderProps {
   onOpenMarketplace?: () => void
   onOpenSettings?: (subPage?: 'connected-apps') => void
   onOpenAuthModal: () => void
+  privacyMode: boolean
+  onTogglePrivacy: () => void
 }
 
 export default function CanvasHeader({
@@ -39,6 +41,8 @@ export default function CanvasHeader({
   onOpenMarketplace,
   onOpenSettings,
   onOpenAuthModal,
+  privacyMode,
+  onTogglePrivacy,
 }: CanvasHeaderProps) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
@@ -181,6 +185,24 @@ export default function CanvasHeader({
             <Home className="h-4 w-4" /> Dashboard
           </button>
         )}
+        <button
+          type="button"
+          onClick={onTogglePrivacy}
+          aria-pressed={privacyMode}
+          title={
+            privacyMode
+              ? 'Privacy mode is on: running this workflow saves no variables, run history or tasks'
+              : 'Turn on privacy mode so running this workflow saves nothing'
+          }
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition-all duration-150 active:scale-[0.97] ${
+            privacyMode
+              ? 'border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+          }`}
+        >
+          {privacyMode ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+          Privacy {privacyMode ? 'on' : 'off'}
+        </button>
         {user && (
           <button
             type="button"

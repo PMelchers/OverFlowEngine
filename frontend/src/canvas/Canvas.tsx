@@ -142,8 +142,17 @@ function CanvasInner({
     [setNodes],
   )
 
+  // Privacy mode for the open workflow: while on, runs save nothing to the server. The ref
+  // is what the run and save requests read; the state only drives the header switch.
+  const [privacyMode, setPrivacyModeState] = useState(false)
+  const privacyModeRef = useRef(false)
+  const setPrivacyMode = useCallback((on: boolean) => {
+    privacyModeRef.current = on
+    setPrivacyModeState(on)
+  }, [])
+
   const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
-    useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, authedFetch })
+    useWorkflowRun({ nodesRef, edgesRef, setNodes, updateNodeData, authedFetch, privacyModeRef })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
   // have an OAuth flow - everything else in APP_TRIGGER_SOURCES stays unconnected until
@@ -323,6 +332,8 @@ function CanvasInner({
     initialFlowId,
     initialTemplateId,
     insertTemplate,
+    privacyModeRef,
+    setPrivacyMode,
   })
 
   const onConnect = useCallback(
@@ -371,6 +382,8 @@ function CanvasInner({
         onOpenMarketplace={onOpenMarketplace}
         onOpenSettings={onOpenSettings}
         onOpenAuthModal={() => setAuthModalOpen(true)}
+        privacyMode={privacyMode}
+        onTogglePrivacy={() => setPrivacyMode(!privacyMode)}
       />
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
       {pendingGroup && (
