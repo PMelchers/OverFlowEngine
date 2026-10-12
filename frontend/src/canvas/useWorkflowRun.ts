@@ -30,6 +30,8 @@ export interface RunResult {
   steps: RunStep[]
   variables?: Record<string, StoredVariable>
   message?: string
+  /** what the profile learned from this run (empty unless learning is on) */
+  learned?: string[]
 }
 
 export interface PendingChoice {
@@ -65,6 +67,8 @@ export function useWorkflowRun({
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
   /** an AI reply from the last finished run, waiting for the user to rate it */
   const [ratingRequest, setRatingRequest] = useState<{ label: string; reply: string } | null>(null)
+  /** what the profile learned from the last finished run, shown until dismissed */
+  const [learnedNotes, setLearnedNotes] = useState<string[]>([])
 
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
@@ -135,6 +139,10 @@ export function useWorkflowRun({
       } else {
         setPendingChoice(null)
         setRunning(false)
+        if (result.learned?.length) {
+          setLearnedNotes(result.learned)
+          result.learned.forEach((note) => addLog(`Learned: ${note}`))
+        }
         // A finished run that produced an AI reply asks the user to rate it - unless privacy
         // mode is on, since a rating would be saved to their profile.
         const lastReply = [...result.steps].reverse().find((s) => s.type === 'aiAgent' && s.message.includes('replied via'))
@@ -261,6 +269,8 @@ export function useWorkflowRun({
     pendingChoice,
     ratingRequest,
     dismissRating: () => setRatingRequest(null),
+    learnedNotes,
+    dismissLearned: () => setLearnedNotes([]),
     addLog,
     runWorkflow,
     resolveChoice,
