@@ -27,11 +27,6 @@ export default function Profile({ onBack }: { onBack: () => void }) {
   const [prefValue, setPrefValue] = useState('')
   const [prefError, setPrefError] = useState<string | null>(null)
 
-  const [fbType, setFbType] = useState('')
-  const [fbRating, setFbRating] = useState('')
-  const [fbText, setFbText] = useState('')
-  const [fbError, setFbError] = useState<string | null>(null)
-
   const savePreference = async (e: React.FormEvent) => {
     e.preventDefault()
     setPrefError(null)
@@ -56,33 +51,6 @@ export default function Profile({ onBack }: { onBack: () => void }) {
 
   const deletePreference = async (key: string) => {
     await authedFetch(`/profile/preferences/${encodeURIComponent(key)}`, { method: 'DELETE' })
-    await reload()
-  }
-
-  const addFeedback = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setFbError(null)
-    const rating = fbRating ? Number(fbRating) : null
-    if (!fbType.trim()) {
-      setFbError('Say what the feedback is about')
-      return
-    }
-    if (rating === null && !fbText.trim()) {
-      setFbError('Add a rating or some text')
-      return
-    }
-    const res = await authedFetch('/profile/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ result_type: fbType.trim(), rating, text: fbText.trim() || null }),
-    })
-    if (!res.ok) {
-      setFbError('Could not save that feedback')
-      return
-    }
-    setFbType('')
-    setFbRating('')
-    setFbText('')
     await reload()
   }
 
@@ -161,7 +129,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
             <MessageSquare className="h-4 w-4 text-sky-600 dark:text-sky-400" /> Feedback history
           </h2>
           {profile.feedback.length === 0 ? (
-            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">No feedback yet.</p>
+            <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">No feedback yet. After a workflow run that gives an AI reply, you'll be asked to rate it, and it will appear here.</p>
           ) : (
             <ul className="mb-4 space-y-1.5">
               {profile.feedback.map((f) => (
@@ -189,26 +157,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
               ))}
             </ul>
           )}
-          <form onSubmit={addFeedback} className="space-y-2 border-t border-gray-200 pt-3 dark:border-gray-700">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input className={inputClass} placeholder="What is it about (e.g. agent reply, trip cost)" value={fbType} onChange={(e) => setFbType(e.target.value)} />
-              <select className={inputClass} value={fbRating} onChange={(e) => setFbRating(e.target.value)}>
-                <option value="">No rating</option>
-                {[1, 2, 3, 4, 5].map((r) => (
-                  <option key={r} value={r}>
-                    {r} / 5
-                  </option>
-                ))}
-              </select>
-            </div>
-            <textarea className={inputClass} rows={2} placeholder="What did you think?" value={fbText} onChange={(e) => setFbText(e.target.value)} />
-            <div className="flex items-center gap-3">
-              <button type="submit" className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
-                Save feedback
-              </button>
-              {fbError && <span className="text-sm text-red-600 dark:text-red-400">{fbError}</span>}
-            </div>
-          </form>
+
         </section>
       </div>
     </div>
