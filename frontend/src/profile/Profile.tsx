@@ -22,7 +22,7 @@ export default function Profile({ onBack }: { onBack: () => void }) {
   const { data, loading, error, reload } = useAuthedResource<ProfileData>('/profile', 'Could not load your profile')
   const profile = data ?? { preferences: [], feedback: [] }
 
-  const [prefCategory, setPrefCategory] = useState('general')
+  const [prefCategory, setPrefCategory] = useState('')
   const [prefKey, setPrefKey] = useState('')
   const [prefValue, setPrefValue] = useState('')
   const [prefError, setPrefError] = useState<string | null>(null)
