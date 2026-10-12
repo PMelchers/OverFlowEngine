@@ -31,13 +31,22 @@ export default function Profile({ onBack }: { onBack: () => void }) {
   const profile: ProfileData = data ?? { preferences: [], feedback: [], learning: { enabled: false, signals: [], hints: [] } }
   const learning = profile.learning
 
+  // Shown straight away on click; the server answer then replaces it, so the switch never waits on a reload.
+  const [learnOverride, setLearnOverride] = useState<boolean | null>(null)
+  const learningOn = learnOverride ?? learning.enabled
+
   const setLearning = async (enabled: boolean) => {
-    await authedFetch('/profile/learning', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    })
-    await reload()
+    setLearnOverride(enabled)
+    try {
+      await authedFetch('/profile/learning', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      await reload()
+    } finally {
+      setLearnOverride(null)
+    }
   }
 
   const deleteSignal = async (id: number) => {
@@ -109,23 +118,23 @@ export default function Profile({ onBack }: { onBack: () => void }) {
           a <b>My Profile</b> block to that agent's Profile handle. Nothing is shared by default.
         </p>
 
-        {loading && <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>}
+        {loading && !data && <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Learn from my workflows</h2>
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-            <span>{learning.enabled ? 'On' : 'Off'}</span>
+            <span>{learningOn ? 'On' : 'Off'}</span>
             <button
               type="button"
               role="switch"
-              aria-checked={learning.enabled}
+              aria-checked={learningOn}
               aria-label="Learn from my workflows"
-              onClick={() => setLearning(!learning.enabled)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${learning.enabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              onClick={() => setLearning(!learningOn)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${learningOn ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
             >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${learning.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${learningOn ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
           </label>
           </div>
