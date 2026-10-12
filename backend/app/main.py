@@ -36,6 +36,7 @@ def on_startup():
             text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false")
         )
         conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS description VARCHAR"))
+        conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS privacy_mode BOOLEAN NOT NULL DEFAULT false"))
         # calendar_connections started out with a shared server-wide OAuth app in mind
         # (access/refresh_token required); now every user brings their own app, so the
         # tokens aren't known until they finish connecting, and each row also needs its
@@ -159,6 +160,7 @@ class EdgeIn(BaseModel):
 class Workflow(BaseModel):
     nodes: list[NodeIn]
     edges: list[EdgeIn]
+    privacy_mode: bool = False
 
 
 class ChoiceContinue(BaseModel):
@@ -205,11 +207,13 @@ class FlowIn(BaseModel):
     name: str
     nodes: list[dict]
     edges: list[dict]
+    privacy_mode: bool = False
 
 
 class FlowPatchIn(BaseModel):
     is_public: bool | None = None
     description: str | None = None
+    privacy_mode: bool | None = None
 
 
 class MarketplaceCopyIn(BaseModel):
@@ -506,6 +510,7 @@ def _flow_summary(flow: models.SavedFlow) -> dict:
         "name": flow.name,
         "description": flow.description,
         "is_public": flow.is_public,
+        "privacy_mode": bool(flow.privacy_mode),
         "created_at": flow.created_at,
     }
 
@@ -569,7 +574,13 @@ def create_flow(
         raise HTTPException(status_code=400, detail="A flow name is required")
     if not body.nodes:
         raise HTTPException(status_code=400, detail="Add at least one block before saving")
-    flow = models.SavedFlow(user_id=current_user.id, name=body.name.strip(), nodes=body.nodes, edges=body.edges)
+    flow = models.SavedFlow(
+        user_id=current_user.id,
+        name=body.name.strip(),
+        nodes=body.nodes,
+        edges=body.edges,
+        privacy_mode=body.privacy_mode,
+    )
     db.add(flow)
     db.commit()
     db.refresh(flow)
@@ -594,6 +605,8 @@ def update_flow(
         flow.is_public = body.is_public
     if body.description is not None:
         flow.description = body.description.strip() or None
+    if body.privacy_mode is not None:
+        flow.privacy_mode = body.privacy_mode
     db.commit()
     db.refresh(flow)
     return _flow_summary(flow)
@@ -1139,7 +1152,13 @@ def run_workflow(
 ):
     nodes = [n.model_dump() for n in workflow.nodes]
     edges = [e.model_dump() for e in workflow.edges]
-    return executor.run_workflow(db, nodes, edges, user_id=current_user.id if current_user else None)
+    return executor.run_workflow(
+        db,
+        nodes,
+        edges,
+        user_id=current_user.id if current_user else None,
+        privacy_mode=workflow.privacy_mode,
+    )
 
 
 @app.post("/workflows/continue")

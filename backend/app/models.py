@@ -52,6 +52,9 @@ class SavedFlow(Base):
     # Marketplace: a flow the owner has chosen to publish, visible to every user.
     is_public = Column(Boolean, nullable=False, default=False)
     description = Column(String, nullable=True)
+    # Privacy mode: while on, running this workflow saves nothing - no variables, run
+    # history or dashboard tasks. Stored per workflow so it stays on whenever it is reopened.
+    privacy_mode = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

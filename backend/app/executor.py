@@ -264,6 +264,15 @@ def _upsert_variable(db: Session, name: str, var_type: str, value: str):
     db.commit()
 
 
+def _save_variable(db: Session, state: dict, name: str, var_type: str, value: str):
+    """Every block writes its variables through here. In privacy mode the value still lives
+    in the run's own in-memory scope (so later blocks in the same run can use it) but is
+    never written to the database, so it is not kept after the run."""
+    if state.get("privacy_mode"):
+        return
+    _upsert_variable(db, name, var_type, value)
+
+
 def _get_calendar_connection(db: Session, user_id: int | None, provider: str):
     """Returns (connection, error_message) - exactly one is non-None."""
     if user_id is None:
@@ -407,7 +416,7 @@ def _advance(db: Session, state: dict) -> dict:
         if ntype == "variable":
             var_type = data.get("varType", "string")
             value = data.get("value", "")
-            _upsert_variable(db, label, var_type, value)
+            _save_variable(db, state, label, var_type, value)
             eval_vars[label] = _coerce(var_type, value)
             steps.append(
                 {"node_id": node_id, "type": ntype, "label": label, "message": f'"{label}" = {value} ({var_type})'}
@@ -424,7 +433,7 @@ def _advance(db: Session, state: dict) -> dict:
                     continue
                 var_type = field.get("varType", "string")
                 value = field.get("value", "")
-                _upsert_variable(db, name, var_type, value)
+                _save_variable(db, state, name, var_type, value)
                 eval_vars[name] = _coerce(var_type, value)
                 parts.append(f"{name}={value}")
             summary = ", ".join(parts) if parts else "no fields"
@@ -485,6 +494,8 @@ def _advance(db: Session, state: dict) -> dict:
             user_id = state.get("user_id")
             if not title:
                 message = f'"{label}" has no task title configured, skipping'
+            elif state.get("privacy_mode"):
+                message = f'"{label}" would add the task "{title}", but privacy mode is on for this workflow - not saved'
             elif user_id is None:
                 message = (
                     f'"{label}" would add the task "{title}", but this run is anonymous - '
@@ -598,7 +609,7 @@ def _advance(db: Session, state: dict) -> dict:
                     }
                 )
             else:
-                _upsert_variable(db, label, "string", output_text)
+                _save_variable(db, state, label, "string", output_text)
                 eval_vars[label] = output_text
                 steps.append(
                     {
@@ -615,14 +626,14 @@ def _advance(db: Session, state: dict) -> dict:
             from_address = (data.get("fromAddress") or "").strip()
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
-                _upsert_variable(db, output_var, "string", payload)
+                _save_variable(db, state, output_var, "string", payload)
                 eval_vars[output_var] = payload
                 message = (
                     f'"{label}" received a message from {source_app}, saved as "{output_var}" = "{payload}"'
                 )
                 if from_address:
                     from_var = f"{output_var}From"
-                    _upsert_variable(db, from_var, "string", from_address)
+                    _save_variable(db, state, from_var, "string", from_address)
                     eval_vars[from_var] = from_address
                     message += f', sender saved as "{from_var}" = "{from_address}"'
             else:
@@ -648,7 +659,7 @@ def _advance(db: Session, state: dict) -> dict:
                 else:
                     simulated_output = f'[preview reply from {model}] responding to: "{prompt}"'
                     if output_var:
-                        _upsert_variable(db, output_var, "string", simulated_output)
+                        _save_variable(db, state, output_var, "string", simulated_output)
                         eval_vars[output_var] = simulated_output
                         message = (
                             f'"{label}" ran an AI call with {model}, saved as "{output_var}" '
@@ -722,7 +733,7 @@ def _advance(db: Session, state: dict) -> dict:
                         )
                         summary = "; ".join(f'{e["title"]} ({e["start"]})' for e in events) or "No events found"
                         if output_var:
-                            _upsert_variable(db, output_var, "string", summary)
+                            _save_variable(db, state, output_var, "string", summary)
                             eval_vars[output_var] = summary
                         message = f'"{label}" fetched {len(events)} event(s) from {target_app}'
                     except (httpx.HTTPError, ValueError, KeyError) as exc:
@@ -741,7 +752,7 @@ def _advance(db: Session, state: dict) -> dict:
                                 calendar_provider, access_token, title, start, end, description
                             )
                             if output_var:
-                                _upsert_variable(db, output_var, "string", event_id)
+                                _save_variable(db, state, output_var, "string", event_id)
                                 eval_vars[output_var] = event_id
                             message = f'"{label}" created "{title}" on {target_app} ({start} - {end})'
                         except httpx.HTTPError as exc:
@@ -1134,7 +1145,7 @@ def _advance(db: Session, state: dict) -> dict:
 
             if output_var:
                 serialized = json.dumps(breakdown)
-                _upsert_variable(db, output_var, "string", serialized)
+                _save_variable(db, state, output_var, "string", serialized)
                 eval_vars[output_var] = serialized
 
             if error:
@@ -1223,7 +1234,7 @@ def _advance(db: Session, state: dict) -> dict:
             url = build_maps_url(provider, origin, destination, mode, waypoints)
             output_var = (data.get("outputVariable") or "").strip()
             if output_var:
-                _upsert_variable(db, output_var, "string", url)
+                _save_variable(db, state, output_var, "string", url)
                 eval_vars[output_var] = url
             provider_label = "Apple Maps" if provider == "apple" else "Google Maps"
             origin_part = f' from "{origin}"' if origin else ""
@@ -1243,6 +1254,14 @@ def _advance(db: Session, state: dict) -> dict:
     steps.append({"node_id": None, "type": "system", "label": "Workflow", "message": "Workflow finished"})
 
     variables_snapshot = _variables_snapshot(db)
+    if state.get("privacy_mode"):
+        # Privacy mode: no run history is written. The steps still come back to the canvas
+        # console for this one session, but nothing about the run is kept on the server.
+        steps.append(
+            {"node_id": None, "type": "system", "label": "Privacy", "message": "Privacy mode: this run was not saved"}
+        )
+        return {"status": "completed", "run_id": None, "steps": flush_new_steps(), "variables": variables_snapshot}
+
     run = models.WorkflowRun(status="completed", steps=steps, variables_snapshot=variables_snapshot)
     db.add(run)
     db.commit()
@@ -1251,7 +1270,9 @@ def _advance(db: Session, state: dict) -> dict:
     return {"status": "completed", "run_id": run.id, "steps": flush_new_steps(), "variables": variables_snapshot}
 
 
-def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int | None = None) -> dict:
+def run_workflow(
+    db: Session, nodes: list[dict], edges: list[dict], user_id: int | None = None, privacy_mode: bool = False
+) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
     incoming: dict[str, list[dict]] = {}
@@ -1274,6 +1295,9 @@ def run_workflow(db: Session, nodes: list[dict], edges: list[dict], user_id: int
         # Only set when the run was made while signed in - lets a Task block save
         # tasks to that user's dashboard. Anonymous runs still work, tasks just aren't saved.
         "user_id": user_id,
+        # Set per run from the workflow's privacy switch. Read by _save_variable, the Task
+        # block and the run-history write so each one can skip saving.
+        "privacy_mode": privacy_mode,
     }
 
     result = _advance(db, state)
@@ -1306,12 +1330,12 @@ def continue_workflow(db: Session, run_id: str, choice: str) -> dict:
             saved: list[str] = []
             if pending.get("output_var"):
                 stops_value = " | ".join(pending.get("stops") or [])
-                _upsert_variable(db, pending["output_var"], "string", stops_value)
+                _save_variable(db, state, pending["output_var"], "string", stops_value)
                 state["eval_vars"][pending["output_var"]] = stops_value
                 saved.append(f'route stops to "{pending["output_var"]}"')
             if pending.get("destination_output_var"):
                 dest_value = " | ".join(pending.get("destination_stops") or [])
-                _upsert_variable(db, pending["destination_output_var"], "string", dest_value)
+                _save_variable(db, state, pending["destination_output_var"], "string", dest_value)
                 state["eval_vars"][pending["destination_output_var"]] = dest_value
                 saved.append(f'destination activities to "{pending["destination_output_var"]}"')
             message = f'Accepted the suggestion at "{label}" - saved {" and ".join(saved)}'
