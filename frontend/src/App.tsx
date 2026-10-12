@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Canvas from './canvas/Canvas'
 import Dashboard from './dashboard/Dashboard'
 import Marketplace from './marketplace/Marketplace'
+import Profile from './profile/Profile'
 import OAuthPopupBridge from './nodes/apps/OAuthPopupBridge'
 import Settings from './settings/Settings'
 import { AuthProvider, useAuth } from './shared/auth'
@@ -12,6 +13,7 @@ type View =
   | { kind: 'editor'; flowId: number | null; templateId?: string | null }
   | { kind: 'settings'; from: View; initialSubPage?: 'connected-apps' }
   | { kind: 'marketplace'; from: View }
+  | { kind: 'profile'; from: View }
 
 function AppShell() {
   const { user } = useAuth()
@@ -51,6 +53,10 @@ function AppShell() {
     return <Marketplace onBack={() => setView(view.from)} />
   }
 
+  if (view.kind === 'profile') {
+    return <Profile onBack={() => setView(view.from)} />
+  }
+
   if (view.kind === 'editor') {
     return (
       <Canvas
@@ -70,6 +76,7 @@ function AppShell() {
       onOpenFlow={(flowId) => setView({ kind: 'editor', flowId })}
       onOpenSettings={() => setView({ kind: 'settings', from: view })}
       onOpenMarketplace={() => setView({ kind: 'marketplace', from: view })}
+      onOpenProfile={() => setView({ kind: 'profile', from: view })}
     />
   )
 }
