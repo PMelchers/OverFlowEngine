@@ -14,6 +14,7 @@ from .accommodation_prices import AccommodationPriceError, fetch_accommodation_p
 from .fuel_prices import FuelPriceError, estimate_fuel_cost, is_own_car
 from .conditions import evaluate_conditions
 from .discord_mcp_client import read_discord_messages, send_discord_message
+from .excluded_sites import parse_excluded_sites
 from .maps import build_maps_url
 
 logger = logging.getLogger("overflowengine.workflow")
@@ -752,6 +753,13 @@ def _advance(db: Session, state: dict) -> dict:
             interests = _render_message(data.get("interests", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
             destination_output_var = (data.get("destinationOutputVariable") or "").strip()
+            # This block doesn't search the web - the excluded websites reach the model as an
+            # instruction, so it doesn't base suggestions on (or point people to) those sites.
+            # A "{var}" that never got defined renders back literally; treat it as unset.
+            excluded_raw = _render_message(data.get("excludedSites", ""), eval_vars).strip()
+            excluded_sites, ignored_sites = parse_excluded_sites(
+                "" if _VAR_PATTERN.fullmatch(excluded_raw) else excluded_raw
+            )
 
             # Same "model" handle/lookup pattern as the AI Agent block - connecting an AI
             # Model block below makes this a real, live suggestion instead of a simulated one.
@@ -790,7 +798,14 @@ def _advance(db: Session, state: dict) -> dict:
                     if interests:
                         user_message += f" Traveler interests: {interests}."
                     try:
-                        reply = providers.call_model(cred.provider, cred.api_key, model, system_prompt, user_message)
+                        reply = providers.call_model(
+                            cred.provider,
+                            cred.api_key,
+                            model,
+                            system_prompt,
+                            user_message,
+                            excluded_domains=excluded_sites,
+                        )
                         route_stops, destination_stops = _parse_route_destination(reply)
                         ai_backed = True
                     except providers.ModelCallError as exc:
@@ -813,6 +828,13 @@ def _advance(db: Session, state: dict) -> dict:
             message = f'"{label}" suggests ({source_note}): {suggestion_message}'
             if call_error:
                 message += f" [model call failed: {call_error}, fell back to a simulated suggestion]"
+            if excluded_sites and ai_backed:
+                message += f" [avoided websites: {', '.join(excluded_sites)}]"
+            if ignored_sites:
+                message += (
+                    f" [ignored {', '.join(repr(s) for s in ignored_sites)} in Websites to exclude"
+                    " - not a website address]"
+                )
 
             steps.append(
                 {
@@ -855,6 +877,7 @@ def _advance(db: Session, state: dict) -> dict:
             fuel_type_raw = _render_message(data.get("fuelType", ""), eval_vars)
             consumption_raw = _render_message(data.get("fuelConsumption", ""), eval_vars)
             tank_raw = _render_message(data.get("tankSize", ""), eval_vars)
+            excluded_raw = _render_message(data.get("excludedSites", ""), eval_vars)
             output_var = (data.get("outputVariable") or "").strip()
             stops = [s.strip() for s in stops_raw.split("|") if s.strip()]
             dest_stops = [s.strip() for s in dest_stops_raw.split("|") if s.strip()]
@@ -907,6 +930,16 @@ def _advance(db: Session, state: dict) -> dict:
             error: str | None = None
             skipped_notes: list[str] = []
 
+            # Websites the person doesn't want prices taken from - left out of the live
+            # booking-site rates below and blocked from (or warned off) the AI's web search.
+            excluded_sites, ignored_sites = parse_excluded_sites(resolved(excluded_raw))
+            if excluded_sites:
+                skipped_notes.append(f"excluded websites: {', '.join(excluded_sites)}")
+            if ignored_sites:
+                skipped_notes.append(
+                    f"ignored {', '.join(repr(s) for s in ignored_sites)} in Websites to exclude - not a website address"
+                )
+
             # Accommodation is priced from live booking-site rates first - the AI's
             # web-search estimate is only the fallback for when that lookup fails.
             live_items: list[dict] = []
@@ -914,7 +947,14 @@ def _advance(db: Session, state: dict) -> dict:
                 try:
                     live_items.append(
                         fetch_accommodation_price(
-                            resolved(destination), stay_type, d1.date(), d2.date(), adults, children, target_currency
+                            resolved(destination),
+                            stay_type,
+                            d1.date(),
+                            d2.date(),
+                            adults,
+                            children,
+                            target_currency,
+                            excluded_sites,
                         )
                     )
                     searched = True
@@ -1042,9 +1082,20 @@ def _advance(db: Session, state: dict) -> dict:
                     user_message = "Destination: " + (destination or "unspecified") + ". Price " + "; ".join(lines) + "."
                     try:
                         reply = providers.call_model(
-                            cred.provider, cred.api_key, model, system_prompt, user_message, web_search=True
+                            cred.provider,
+                            cred.api_key,
+                            model,
+                            system_prompt,
+                            user_message,
+                            web_search=True,
+                            excluded_domains=excluded_sites,
                         )
                         searched = True
+                        if excluded_sites and not providers.blocks_excluded_sites(cred.provider):
+                            skipped_notes.append(
+                                f"{cred.provider}'s web search can't block websites, so the AI was only "
+                                "told to avoid the excluded ones"
+                            )
                         items = _try_parse_cost_json(reply, target_currency)
                         used_fallback = False
                         if items is None:
