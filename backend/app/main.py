@@ -59,6 +59,10 @@ def on_startup():
         conn.execute(
             text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()")
         )
+        # The dashboard's run overview: which saved flow ran, and when it finished.
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_id INTEGER"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS flow_name VARCHAR"))
+        conn.execute(text("ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"))
         conn.commit()
     with SessionLocal() as db:
         executor.expire_stale_runs(db)

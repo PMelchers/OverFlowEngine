@@ -1235,23 +1235,38 @@ def _advance_and_save(db: Session, run: models.WorkflowRun, state: dict) -> dict
     backend restart / reload and can be continued from any worker process."""
     try:
         result = _advance(db, state)
-    except Exception:
+    except Exception as exc:
         # Block errors are meant to land in the step log, so this is a bug - still mark
-        # the row, otherwise it sits on "running" until the next restart.
+        # the row, otherwise it sits on "running" until the next restart. The step says
+        # what happened in the dashboard's run detail; the request still fails as before.
         db.rollback()
+        state["steps"].append(
+            {
+                "node_id": None,
+                "type": "system",
+                "label": "Workflow",
+                "message": f"Workflow stopped on an unexpected error: {exc}",
+                "error": True,
+            }
+        )
         run.status = "failed"
         run.steps = list(state["steps"])
         run.state = None
+        run.finished_at = datetime.now(timezone.utc)
         db.commit()
         raise
-    run.status = result["status"]
     run.steps = list(state["steps"])
     run.variables_snapshot = dict(state["variables"])
     if result["status"] == "awaiting_choice":
+        run.status = "awaiting_choice"
         # JSON has no sets - visited goes back to a set in _load_state().
         run.state = {**state, "visited": sorted(state["visited"])}
     else:
+        # The editor still gets "completed" back; the row says whether every block did its
+        # job - a step carries "error": True when one couldn't (see `failed` in _advance).
+        run.status = "failed" if any(step.get("error") for step in state["steps"]) else "succeeded"
         run.state = None
+        run.finished_at = datetime.now(timezone.utc)
     db.commit()
     result["run_id"] = run.public_id
     return result
@@ -1279,45 +1294,6 @@ def expire_stale_runs(db: Session) -> None:
         models.WorkflowRun.status == "awaiting_choice", models.WorkflowRun.updated_at < cutoff
     ).update({"status": "expired", "state": None}, synchronize_session=False)
     db.commit()
-
-
-def _record_crash(db: Session, state: dict, exc: Exception) -> None:
-    """Marks the run failed after an exception nothing inside _advance caught. Never
-    raises itself, so the caller can still re-raise the original error."""
-    try:
-        db.rollback()
-        state["steps"].append(
-            {
-                "node_id": None,
-                "type": "system",
-                "label": "Workflow",
-                "message": f"Workflow stopped on an unexpected error: {exc}",
-                "error": True,
-            }
-        )
-        _save_run(db, state, "failed", _variables_snapshot(db), finished=True)
-    except Exception:
-        logger.exception("Could not record the crash of workflow run %s", state.get("db_run_id"))
-
-
-def _advance_and_record(db: Session, state: dict) -> dict:
-    """_advance, plus keeping the run's workflow_runs row in step with where it ended up:
-    paused on a choice, finished (failed if any step carries "error": True), or crashed.
-    Blocks report their own failures as step messages, so a crash means a bug or an
-    error nothing caught - it's recorded so the run doesn't sit on "running" forever on
-    the dashboard, then re-raised so the request fails exactly as it did before."""
-    try:
-        result = _advance(db, state)
-    except Exception as exc:
-        _record_crash(db, state, exc)
-        raise
-    if result["status"] == "awaiting_choice":
-        _save_run(db, state, "awaiting_choice", result["variables"], finished=False)
-    else:
-        status = "failed" if any(step.get("error") for step in state["steps"]) else "succeeded"
-        _save_run(db, state, status, result["variables"], finished=True)
-        result["run_id"] = state.get("db_run_id")
-    return result
 
 
 def run_workflow(
@@ -1358,6 +1334,8 @@ def run_workflow(
     run = models.WorkflowRun(
         public_id=str(uuid.uuid4()),
         user_id=user_id,
+        flow_id=flow_id,
+        flow_name=flow_name,
         status="running",
         steps=[],
         variables_snapshot={},

@@ -22,6 +22,18 @@ const STATUS_STYLES: Record<RunStatus, { label: string; className: string; Icon:
     className: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     Icon: Loader2,
   },
+  // The backend restarted while this run was still going.
+  interrupted: {
+    label: 'Interrupted',
+    className: 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
+    Icon: XCircle,
+  },
+  // Paused on a choice nobody answered within the backend's PENDING_RUN_TTL.
+  expired: {
+    label: 'Expired',
+    className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    Icon: PauseCircle,
+  },
   completed: {
     label: 'Completed',
     className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',

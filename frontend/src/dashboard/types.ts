@@ -8,9 +8,16 @@ export type Assignment = {
   flows: { id: number; name: string }[]
 }
 
-/** Lifecycle of a workflow_runs row (see the backend's executor._advance_and_record).
- *  "completed" only appears on rows logged before runs had this lifecycle. */
-export type RunStatus = 'running' | 'awaiting_choice' | 'succeeded' | 'failed' | 'completed'
+/** Lifecycle of a workflow_runs row (see the backend's executor._advance_and_save and
+ *  expire_stale_runs). "completed" only appears on rows logged before succeeded/failed. */
+export type RunStatus =
+  | 'running'
+  | 'awaiting_choice'
+  | 'succeeded'
+  | 'failed'
+  | 'interrupted'
+  | 'expired'
+  | 'completed'
 
 export type RunSummary = {
   id: number
