@@ -83,12 +83,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const authedFetch = useCallback(
-    (path: string, init: RequestInit = {}) => {
+    async (path: string, init: RequestInit = {}) => {
       const headers = new Headers(init.headers)
       if (token) headers.set('Authorization', `Bearer ${token}`)
-      return fetch(`${API_BASE}${path}`, { ...init, headers })
+      const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+      // A 401 on a request that carried a token means the stored session is dead (bad
+      // signature after a SECRET_KEY change, expired, or the user row is gone after a DB
+      // reset). Without this the stale user in localStorage keeps the app "signed in"
+      // and every page keeps firing requests that 401. Signing out drops back to the
+      // anonymous mode, which the editor and run paths support.
+      if (res.status === 401 && token) logout()
+      return res
     },
-    [token],
+    [token, logout],
   )
 
   const updateProfile = useCallback(
