@@ -6,6 +6,7 @@ import { TEMPLATES } from '../shared/templates'
 import AssignmentModal from './AssignmentModal'
 import AssignmentsPanel from './AssignmentsPanel'
 import DashboardSidebar from './DashboardSidebar'
+import RunsPanel from './RunsPanel'
 import TasksPanel from './TasksPanel'
 import type { Assignment, FlowSummary, Task } from './types'
 
@@ -207,6 +208,10 @@ export default function Dashboard({
                 onEditAssignment={(a) => setAssignmentModal(a)}
                 onDeleteAssignment={deleteAssignment}
               />
+              {/* Keyed on the user so switching accounts starts the list over. */}
+              <div className="sm:col-span-2">
+                <RunsPanel key={user.id} />
+              </div>
             </div>
           )}
         </div>
