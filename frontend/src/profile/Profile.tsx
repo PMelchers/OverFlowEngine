@@ -115,16 +115,19 @@ export default function Profile({ onBack }: { onBack: () => void }) {
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Learn from my workflows</h2>
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+            <span>{learning.enabled ? 'On' : 'Off'}</span>
             <button
               type="button"
               role="switch"
               aria-checked={learning.enabled}
+              aria-label="Learn from my workflows"
               onClick={() => setLearning(!learning.enabled)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                learning.enabled ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${learning.enabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
             >
-              {learning.enabled ? 'On' : 'Off'}
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${learning.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
+          </label>
           </div>
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
             When on, the app notices the blocks and apps you keep in workflows and the replies you rate. Only habits
