@@ -22,6 +22,7 @@ from datetime import date
 
 import httpx
 
+from .excluded_sites import is_excluded
 from .geo import geocode, haversine_km
 
 XOTELO_BASE = "https://data.xotelo.com/api"
@@ -131,16 +132,26 @@ def _wanted_types(stay_type: str) -> set[str]:
     return set()
 
 
-def _cheapest_rate(hotel: dict, params: dict) -> dict | None:
+def _cheapest_rate(hotel: dict, params: dict, excluded_domains: list[str]) -> tuple[dict | None, set[str]]:
+    """The hotel's cheapest offer across booking sites, leaving out excluded sites before
+    picking - plus the names of the sites that were left out, for the item's note."""
     try:
         result = _xotelo("rates", {"hotel_key": hotel["key"], **params})
     except AccommodationPriceError:
-        return None
+        return None, set()
     rates = [r for r in (result.get("rates") or []) if isinstance(r.get("rate"), (int, float)) and r["rate"] > 0]
+    # Xotelo names a site either by domain ("Booking.com") or, for a chain's own site, by
+    # brand with a chain code ("ibis" / "Accor"), so both are checked.
+    removed = {
+        r.get("name") or r.get("code")
+        for r in rates
+        if is_excluded(r.get("name"), excluded_domains) or is_excluded(r.get("code"), excluded_domains)
+    }
+    rates = [r for r in rates if (r.get("name") or r.get("code")) not in removed]
     if not rates:
-        return None
+        return None, removed
     best = min(rates, key=lambda r: r["rate"])
-    return {"hotel": hotel["name"], "site": best.get("name") or best.get("code"), "rate": float(best["rate"])}
+    return {"hotel": hotel["name"], "site": best.get("name") or best.get("code"), "rate": float(best["rate"])}, removed
 
 
 def fetch_accommodation_price(
@@ -151,12 +162,23 @@ def fetch_accommodation_price(
     adults: int,
     children: int,
     currency: str,
+    excluded_domains: list[str] | None = None,
 ) -> dict:
     """Returns one Trip Cost item ({name, category, estimated_cost, currency, note, live})
-    priced from live booking-site rates, or raises AccommodationPriceError."""
+    priced from live booking-site rates, or raises AccommodationPriceError.
+
+    excluded_domains are websites the person doesn't want information from: their rates
+    are left out, and since every hotel list here comes from TripAdvisor (through Xotelo),
+    excluding either of those means there's nothing this lookup may use at all."""
+    excluded_domains = excluded_domains or []
     nights = (check_out - check_in).days
     if nights <= 0:
         raise AccommodationPriceError("check-out must be after check-in")
+    blocked_sources = [s for s in ("tripadvisor.com", "xotelo.com") if is_excluded(s, excluded_domains)]
+    if blocked_sources:
+        raise AccommodationPriceError(
+            f"live prices are built on TripAdvisor listings, and {', '.join(blocked_sources)} is excluded"
+        )
 
     location_key = find_location_key(destination)
     wanted = _wanted_types(stay_type)
@@ -184,8 +206,14 @@ def fetch_accommodation_price(
         "currency": currency,
     }
     with ThreadPoolExecutor(max_workers=HOTELS_TO_PRICE) as pool:
-        offers = [o for o in pool.map(lambda h: _cheapest_rate(h, params), matching[:HOTELS_TO_PRICE]) if o]
+        results = list(pool.map(lambda h: _cheapest_rate(h, params, excluded_domains), matching[:HOTELS_TO_PRICE]))
+    offers = [offer for offer, _ in results if offer]
+    removed_sites = set().union(*(removed for _, removed in results))
     if not offers:
+        if removed_sites:
+            raise AccommodationPriceError(
+                f"no rates left in {destination} after leaving out excluded sites ({', '.join(sorted(removed_sites))})"
+            )
         raise AccommodationPriceError(f"no hotel in {destination} had rates for {params['chk_in']} - {params['chk_out']}")
 
     per_night = statistics.median(o["rate"] for o in offers)
@@ -199,6 +227,8 @@ def fetch_accommodation_price(
         f'Range {cheapest["rate"]:g} ("{cheapest["hotel"]}") to {priciest["rate"]:g} '
         f'("{priciest["hotel"]}") per night.{type_note}'
     )
+    if removed_sites:
+        note += f" Left out rates from {', '.join(sorted(removed_sites))} (excluded)."
     return {
         "name": f"{nights} night(s) of {stay_type or 'accommodation'} in {destination}",
         "category": "accommodation",

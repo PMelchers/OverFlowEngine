@@ -85,6 +85,15 @@ def verify_api_key(provider: str, api_key: str) -> bool | None:
     return None
 
 
+def blocks_excluded_sites(provider: str) -> bool:
+    """Whether this provider's web search can be told to never fetch certain websites.
+    Anthropic's web search tool takes blocked_domains. The OpenAI chat completions
+    web_search_options and Gemini's google_search tool used below have no domain filter,
+    so for those the excluded sites only reach the model as an instruction it could still
+    ignore - the Trip Cost block says so in its step message."""
+    return provider.strip().lower() == "anthropic"
+
+
 def call_model(
     provider: str,
     api_key: str,
@@ -93,6 +102,7 @@ def call_model(
     user_message: str,
     max_tokens: int | None = None,
     web_search: bool = False,
+    excluded_domains: list[str] | None = None,
 ) -> str:
     """Sends one message to the given provider/model and returns the reply text.
 
@@ -101,16 +111,29 @@ def call_model(
     for a full-length response. Web search adds provider-side search tool use,
     so a larger cap is needed for the extra tool output and final answer.
 
+    excluded_domains (bare hostnames, see excluded_sites.parse_excluded_sites) are
+    websites the reply must not draw on. Every provider is told so in the system
+    prompt; Anthropic's web search additionally never fetches them (see
+    blocks_excluded_sites).
+
     Raises ModelCallError with a step-log-safe message on any failure - bad
     key, rate limit, network error, or an unrecognized provider.
     """
     provider = provider.strip().lower()
+    if excluded_domains:
+        avoid = (
+            "Do not use, cite, or base anything on information from these websites or their "
+            f"subdomains, and do not recommend them: {', '.join(excluded_domains)}."
+        )
+        system_prompt = f"{system_prompt}\n\n{avoid}" if system_prompt else avoid
     try:
         if provider == "test":
             # No real provider to call - mirrors the shape of a real reply so
             # the rest of the workflow (AI Output, downstream blocks) can be
             # exercised without a real API key.
             suffix = " [web search: simulated]" if web_search else ""
+            if excluded_domains:
+                suffix += f" [excluding: {', '.join(excluded_domains)}]"
             return f'[test reply from {model}] responding to: "{user_message}"{suffix}'
 
         if provider == "anthropic":
@@ -125,7 +148,16 @@ def call_model(
                 max_tokens=max_tokens or (16384 if web_search else 8192),
                 system=system_prompt or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": user_message}],
-                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]
+                tools=[
+                    {
+                        "type": "web_search_20250305",
+                        "name": "web_search",
+                        "max_uses": 5,
+                        # Never fetched at all, unlike the system-prompt instruction above,
+                        # which the model could still ignore. Subdomains are included.
+                        **({"blocked_domains": excluded_domains} if excluded_domains else {}),
+                    }
+                ]
                 if web_search
                 else anthropic.NOT_GIVEN,
             )
