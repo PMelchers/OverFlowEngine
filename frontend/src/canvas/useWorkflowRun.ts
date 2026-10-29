@@ -30,6 +30,8 @@ export interface RunResult {
   steps: RunStep[]
   variables?: Record<string, StoredVariable>
   message?: string
+  /** what the profile learned from this run (empty unless learning is on) */
+  learned?: string[]
 }
 
 // Variables are scoped to a single run (no global variables on the backend), so the
@@ -71,6 +73,8 @@ interface UseWorkflowRunArgs {
   setNodes: Dispatch<SetStateAction<Node<BlockNodeData>[]>>
   updateNodeData: (id: string, patch: BlockDataPatch) => void
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>
+  /** the open workflow's privacy switch - sent with every run so the server skips saving */
+  privacyModeRef: RefObject<boolean>
 }
 
 export function useWorkflowRun({
@@ -80,6 +84,7 @@ export function useWorkflowRun({
   setNodes,
   updateNodeData,
   authedFetch,
+  privacyModeRef,
 }: UseWorkflowRunArgs) {
   const [logs, setLogs] = useState<string[]>([])
   const [costSummary, setCostSummary] = useState<CostBreakdown | null>(null)
@@ -87,6 +92,10 @@ export function useWorkflowRun({
   const [running, setRunning] = useState(false)
   const [variables, setVariables] = useState<Record<string, StoredVariable>>({})
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
+  /** an AI reply from the last finished run, waiting for the user to rate it */
+  const [ratingRequest, setRatingRequest] = useState<{ label: string; reply: string } | null>(null)
+  /** what the profile learned from the last finished run, shown until dismissed */
+  const [learnedNotes, setLearnedNotes] = useState<string[]>([])
 
   const addLog = useCallback((message: string) => {
     setLogs((l) => [...l, `[${timestamp()}] ${message}`])
@@ -159,9 +168,18 @@ export function useWorkflowRun({
       } else {
         setPendingChoice(null)
         setRunning(false)
+        if (result.learned?.length) {
+          setLearnedNotes(result.learned)
+          result.learned.forEach((note) => addLog(`Learned: ${note}`))
+        }
+        // A finished run that produced an AI reply asks the user to rate it - unless privacy
+        // mode is on, since a rating would be saved to their profile.
+        const lastReply = [...result.steps].reverse().find((s) => s.type === 'aiAgent' && s.message.includes('replied via'))
+        const match = lastReply?.message.match(/^AI Agent "(.+?)" replied via .+?: "([\s\S]*)"$/)
+        if (match && !privacyModeRef.current) setRatingRequest({ label: match[1], reply: match[2] })
       }
     },
-    [addLog, activateNode, nodesRef],
+    [addLog, activateNode, nodesRef, privacyModeRef],
   )
 
   const runWorkflow = useCallback(
@@ -203,6 +221,7 @@ export function useWorkflowRun({
             nodes: flatNodes.map((n) => ({ id: n.id, type: n.type, data: sanitizeData(n.data) })),
             edges: flatEdges,
             flow_id: flowIdRef.current,
+            privacy_mode: privacyModeRef.current,
           }),
         })
         if (!res.ok) throw new Error(`backend returned ${res.status}`)
@@ -215,7 +234,7 @@ export function useWorkflowRun({
 
       await playResult(result)
     },
-    [running, addLog, playResult, authedFetch, updateNodeData, nodesRef, edgesRef, flowIdRef],
+    [running, addLog, playResult, authedFetch, updateNodeData, nodesRef, edgesRef, flowIdRef, privacyModeRef],
   )
 
   const resolveChoice = useCallback(
@@ -279,6 +298,10 @@ export function useWorkflowRun({
     running,
     variables,
     pendingChoice,
+    ratingRequest,
+    dismissRating: () => setRatingRequest(null),
+    learnedNotes,
+    dismissLearned: () => setLearnedNotes([]),
     addLog,
     runWorkflow,
     resolveChoice,

@@ -10,7 +10,24 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
+    # Off until the user switches it on from their profile page (opt-in learning).
+    learning_enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserSignal(Base):
+    """Something learned about a user: how often they keep a block type or app (kind
+    "block"/"app", count = workflows it appeared in), or their ratings of a reply type
+    (kind "rating", count = ratings, total = sum of stars)."""
+
+    __tablename__ = "user_signals"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)
+    key = Column(String, nullable=False)
+    count = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
 
 
 class AiCredential(Base):
@@ -52,6 +69,9 @@ class SavedFlow(Base):
     # Marketplace: a flow the owner has chosen to publish, visible to every user.
     is_public = Column(Boolean, nullable=False, default=False)
     description = Column(String, nullable=True)
+    # Privacy mode: while on, running this workflow saves nothing - no variables, run
+    # history or dashboard tasks. Stored per workflow so it stays on whenever it is reopened.
+    privacy_mode = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -66,6 +86,34 @@ class Task(Base):
     title = Column(String, nullable=False)
     done = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserFeedback(Base):
+    """One piece of feedback a user gave on an AI result (rating and/or text). Kept as a
+    history rather than overwritten, so later code can see how opinions changed over time."""
+
+    __tablename__ = "user_feedback"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    result_type = Column(String, nullable=False)  # e.g. "agent_reply", "trip_cost" - what it was about
+    rating = Column(Integer, nullable=True)  # 1-5, optional
+    text = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserPreference(Base):
+    """A learned or stated preference, one row per (user, key). Upserted, so the latest
+    value wins. The Profile Block only reads these when it is wired to an AI Agent."""
+
+    __tablename__ = "user_preferences"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    category = Column(String, nullable=False, default="general")
+    key = Column(String, nullable=False)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class Assignment(Base):

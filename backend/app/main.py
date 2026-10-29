@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session, load_only
 
-from . import auth, calendar_providers, discord_mcp_client, executor, models, providers
+from . import auth, calendar_providers, discord_mcp_client, executor, models, profile_learning, providers
 from .db import Base, SessionLocal, engine, get_db
 
 app = FastAPI(title="OverFlowEngine API")
@@ -36,6 +36,8 @@ def on_startup():
             text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false")
         )
         conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS description VARCHAR"))
+        conn.execute(text("ALTER TABLE saved_flows ADD COLUMN IF NOT EXISTS privacy_mode BOOLEAN NOT NULL DEFAULT false"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS learning_enabled BOOLEAN NOT NULL DEFAULT false"))
         # calendar_connections started out with a shared server-wide OAuth app in mind
         # (access/refresh_token required); now every user brings their own app, so the
         # tokens aren't known until they finish connecting, and each row also needs its
@@ -183,6 +185,7 @@ class Workflow(BaseModel):
     # The saved flow open in the editor, if any - only used to label the run in the
     # dashboard's run overview. Ignored for anonymous runs and flows the caller doesn't own.
     flow_id: int | None = None
+    privacy_mode: bool = False
 
 
 class ChoiceContinue(BaseModel):
@@ -229,11 +232,13 @@ class FlowIn(BaseModel):
     name: str
     nodes: list[dict]
     edges: list[dict]
+    privacy_mode: bool = False
 
 
 class FlowPatchIn(BaseModel):
     is_public: bool | None = None
     description: str | None = None
+    privacy_mode: bool | None = None
 
 
 class MarketplaceCopyIn(BaseModel):
@@ -247,6 +252,17 @@ class TaskIn(BaseModel):
 class TaskPatchIn(BaseModel):
     title: str | None = None
     done: bool | None = None
+
+
+class PreferenceIn(BaseModel):
+    category: str = "general"
+    value: str
+
+
+class FeedbackIn(BaseModel):
+    result_type: str
+    rating: int | None = None
+    text: str | None = None
 
 
 class AssignmentIn(BaseModel):
@@ -519,6 +535,7 @@ def _flow_summary(flow: models.SavedFlow) -> dict:
         "name": flow.name,
         "description": flow.description,
         "is_public": flow.is_public,
+        "privacy_mode": bool(flow.privacy_mode),
         "created_at": flow.created_at,
     }
 
@@ -582,10 +599,18 @@ def create_flow(
         raise HTTPException(status_code=400, detail="A flow name is required")
     if not body.nodes:
         raise HTTPException(status_code=400, detail="Add at least one block before saving")
-    flow = models.SavedFlow(user_id=current_user.id, name=body.name.strip(), nodes=body.nodes, edges=body.edges)
+    flow = models.SavedFlow(
+        user_id=current_user.id,
+        name=body.name.strip(),
+        nodes=body.nodes,
+        edges=body.edges,
+        privacy_mode=body.privacy_mode,
+    )
     db.add(flow)
     db.commit()
     db.refresh(flow)
+    # Keeping a workflow is one of the signals the profile learns from (only if learning is on)
+    profile_learning.record_saved_flow(db, current_user, body.nodes, body.privacy_mode)
     return _flow_summary(flow)
 
 
@@ -607,6 +632,8 @@ def update_flow(
         flow.is_public = body.is_public
     if body.description is not None:
         flow.description = body.description.strip() or None
+    if body.privacy_mode is not None:
+        flow.privacy_mode = body.privacy_mode
     db.commit()
     db.refresh(flow)
     return _flow_summary(flow)
@@ -797,6 +824,170 @@ def _assignment_out(assignment: models.Assignment, flows: list[models.SavedFlow]
         "created_at": assignment.created_at,
         "flows": [{"id": f.id, "name": f.name} for f in flows],
     }
+
+
+# --- User profile: saved feedback and preferences ---
+# Only the signed-in owner can read or write their own profile. The AI Agent never reads
+# it directly - the executor includes it only when a Profile Block is wired to that agent
+# (opt-in, see executor.py), so saving here does not by itself change what any AI sees.
+
+def _preference_out(p: models.UserPreference) -> dict:
+    return {"id": p.id, "category": p.category, "key": p.key, "value": p.value, "updated_at": p.updated_at}
+
+
+def _feedback_out(f: models.UserFeedback) -> dict:
+    return {
+        "id": f.id,
+        "result_type": f.result_type,
+        "rating": f.rating,
+        "text": f.text,
+        "created_at": f.created_at,
+    }
+
+
+@app.get("/profile")
+def get_profile(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    prefs = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id)
+        .order_by(models.UserPreference.category, models.UserPreference.key)
+        .all()
+    )
+    feedback = (
+        db.query(models.UserFeedback)
+        .filter(models.UserFeedback.user_id == current_user.id)
+        .order_by(models.UserFeedback.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return {
+        "preferences": [_preference_out(p) for p in prefs],
+        "feedback": [_feedback_out(f) for f in feedback],
+        "learning": {
+            "enabled": profile_learning.learning_enabled(current_user),
+            "signals": profile_learning.signals_out(db, current_user.id),
+            "hints": profile_learning.hints(db, current_user.id),
+        },
+    }
+
+
+@app.put("/profile/preferences/{key}")
+def set_preference(
+    key: str,
+    body: PreferenceIn,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    key = key.strip()
+    if not key or not body.value.strip():
+        raise HTTPException(status_code=400, detail="A preference needs a name and a value")
+    pref = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id, models.UserPreference.key == key)
+        .first()
+    )
+    if pref is None:
+        pref = models.UserPreference(user_id=current_user.id, key=key)
+        db.add(pref)
+    pref.category = body.category.strip() or "general"
+    pref.value = body.value.strip()
+    db.commit()
+    db.refresh(pref)
+    return _preference_out(pref)
+
+
+@app.delete("/profile/preferences/{key}")
+def delete_preference(
+    key: str, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    pref = (
+        db.query(models.UserPreference)
+        .filter(models.UserPreference.user_id == current_user.id, models.UserPreference.key == key)
+        .first()
+    )
+    if pref is None:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    db.delete(pref)
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.post("/profile/feedback", status_code=status.HTTP_201_CREATED)
+def add_feedback(
+    body: FeedbackIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    if not body.result_type.strip():
+        raise HTTPException(status_code=400, detail="Feedback needs a result type")
+    if body.rating is None and not (body.text or "").strip():
+        raise HTTPException(status_code=400, detail="Feedback needs a rating or some text")
+    if body.rating is not None and not 1 <= body.rating <= 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    fb = models.UserFeedback(
+        user_id=current_user.id,
+        result_type=body.result_type.strip(),
+        rating=body.rating,
+        text=(body.text or "").strip() or None,
+    )
+    db.add(fb)
+    db.commit()
+    db.refresh(fb)
+    if body.rating is not None:
+        profile_learning.record_rating(db, current_user, fb.result_type, body.rating)
+    return _feedback_out(fb)
+
+
+@app.delete("/profile/feedback/{feedback_id}")
+def delete_feedback(
+    feedback_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    fb = (
+        db.query(models.UserFeedback)
+        .filter(models.UserFeedback.id == feedback_id, models.UserFeedback.user_id == current_user.id)
+        .first()
+    )
+    if fb is None:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    db.delete(fb)
+    db.commit()
+    return {"status": "ok"}
+
+
+class LearningIn(BaseModel):
+    enabled: bool
+
+
+@app.put("/profile/learning")
+def set_learning(
+    body: LearningIn, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    """Switch learning from kept workflows and ratings on or off. Turning it off stops new
+    learning and stops hints being used; what was already learned stays until it is reset."""
+    current_user.learning_enabled = body.enabled
+    db.commit()
+    return {"enabled": current_user.learning_enabled}
+
+
+@app.delete("/profile/learning/{signal_id}")
+def delete_signal(
+    signal_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)
+):
+    row = (
+        db.query(models.UserSignal)
+        .filter(models.UserSignal.id == signal_id, models.UserSignal.user_id == current_user.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Learned item not found")
+    db.delete(row)
+    db.commit()
+    return {"status": "ok"}
+
+
+@app.delete("/profile/learning")
+def reset_learning(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    db.query(models.UserSignal).filter(models.UserSignal.user_id == current_user.id).delete()
+    db.commit()
+    return {"status": "ok"}
 
 
 @app.get("/assignments")
@@ -1050,6 +1241,7 @@ def run_workflow(
         user_id=current_user.id if current_user else None,
         flow_id=flow.id if flow else None,
         flow_name=flow.name if flow else None,
+        privacy_mode=workflow.privacy_mode,
     )
 
 

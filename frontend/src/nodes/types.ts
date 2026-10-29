@@ -29,6 +29,7 @@ import {
   Sparkles,
   Tag,
   Terminal,
+  User,
   Users,
   Variable as VariableIcon,
   Cpu,
@@ -141,6 +142,7 @@ export type BlockKind =
   | 'aiInput'
   | 'aiOutput'
   | 'aiModel'
+  | 'profile'
   | 'appAction'
   | 'mapsAction'
   | 'activitySuggestion'
@@ -423,6 +425,14 @@ export interface TripSummaryBlockData extends BaseBlockData {
   onChange?: (patch: Partial<TripSummaryBlockData>) => void
 }
 
+/** Opt-in access to the signed-in user's saved preferences and feedback. Wired to an AI
+ *  Agent's "profile" handle (not a regular edge) - only that agent then sees the profile.
+ *  No wire means the AI gets nothing, so it's never on by default. */
+export interface ProfileBlockData extends BaseBlockData {
+  kind: 'profile'
+  onChange?: (patch: Partial<ProfileBlockData>) => void
+}
+
 export type BlockNodeData =
   | TriggerBlockData
   | FormTriggerBlockData
@@ -444,6 +454,7 @@ export type BlockNodeData =
   | AppActionBlockData
   | MapsActionBlockData
   | ActivitySuggestionBlockData
+  | ProfileBlockData
 
 /** T extends unknown, as a naked type parameter, distributes over a union instead of
  *  operating on it as one type - i.e. Partial<A | B> (fields common to both) vs
@@ -590,6 +601,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'aiAgent', label: 'AI Agent Block', description: 'Runs an AI agent using a model connected below it', color: 'bg-fuchsia-100 border-fuchsia-400 dark:bg-fuchsia-950 dark:border-fuchsia-700', icon: Bot, badgeClassName: 'bg-fuchsia-600', category: 'agentic' },
   { kind: 'aiOutput', label: 'AI Output Block', description: 'Captures what the agent responded with', color: 'bg-pink-100 border-pink-400 dark:bg-pink-950 dark:border-pink-700', icon: LogOut, badgeClassName: 'bg-pink-600', category: 'agentic' },
   { kind: 'aiModel', label: 'AI Model', description: 'Unlock with a verified API key, then connect it under an AI Agent block', color: 'bg-fuchsia-50 border-fuchsia-300 dark:bg-fuchsia-950 dark:border-fuchsia-800', icon: Cpu, badgeClassName: 'bg-fuchsia-500', category: 'agentic' },
+  { kind: 'profile', label: 'My Profile', description: 'Opt-in: connect it to an AI Agent to share your saved preferences and feedback with that agent only', color: 'bg-sky-50 border-sky-300 dark:bg-sky-950 dark:border-sky-800', icon: User, badgeClassName: 'bg-sky-600', category: 'agentic' },
 ]
 
 /** Icon for the Group block (created via "Group Selected", not dragged from the palette). */

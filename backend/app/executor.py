@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from . import models, providers, calendar_providers, tripsummary
+from . import models, profile_learning, providers, calendar_providers, tripsummary
 from .accommodation_prices import AccommodationPriceError, fetch_accommodation_price
 from .fuel_prices import FuelPriceError, estimate_fuel_cost, is_own_car
 from .conditions import evaluate_conditions
@@ -258,6 +258,15 @@ def _set_var(state: dict, name: str, var_type: str, value: str):
     state["eval_vars"][name] = _coerce(var_type, value)
 
 
+def _save_variable(db: Session, state: dict, name: str, var_type: str, value: str):
+    """Every block writes its variables through here. In privacy mode the value still lives
+    in the run's own in-memory scope (so later blocks in the same run can use it) but is
+    never written to the database, so it is not kept after the run."""
+    if state.get("privacy_mode"):
+        return
+    _upsert_variable(db, name, var_type, value)
+
+
 def _get_calendar_connection(db: Session, user_id: int | None, provider: str):
     """Returns (connection, error_message) - exactly one is non-None."""
     if user_id is None:
@@ -487,6 +496,8 @@ def _advance(db: Session, state: dict) -> dict:
             if not title:
                 message = f'"{label}" has no task title configured, skipping'
                 failed = True
+            elif state.get("privacy_mode"):
+                message = f'"{label}" would add the task "{title}", but privacy mode is on for this workflow - not saved'
             elif user_id is None:
                 message = (
                     f'"{label}" would add the task "{title}", but this run is anonymous - '
@@ -537,6 +548,40 @@ def _advance(db: Session, state: dict) -> dict:
                     "'Done!'. Just the requested content itself, nothing surrounding it."
                 )
                 user_message = instructions
+
+            # Opt-in profile: the agent only sees the signed-in user's saved preferences and
+            # feedback when a Profile Block is wired to its "profile" handle. No wire, no data -
+            # and anonymous runs have no profile to read at all.
+            profile_edges = [e for e in incoming.get(node_id, []) if (e.get("targetHandle") or "") == "profile"]
+            profile_summary = ""
+            if profile_edges and state.get("user_id"):
+                prefs = (
+                    db.query(models.UserPreference)
+                    .filter_by(user_id=state["user_id"])
+                    .order_by(models.UserPreference.category, models.UserPreference.key)
+                    .all()
+                )
+                # Balance: the user's own preferences always go in. What the app has learned
+                # is a few strong hints only (see profile_learning). Recent comments are kept
+                # short, since the AI only needs the gist.
+                learned = profile_learning.hints(db, state["user_id"])
+                recent_feedback = (
+                    db.query(models.UserFeedback)
+                    .filter_by(user_id=state["user_id"])
+                    .order_by(models.UserFeedback.created_at.desc())
+                    .limit(5)
+                    .all()
+                )
+                if prefs or learned or recent_feedback:
+                    lines = ["About this user (take this into account, but don't mention it unless relevant):"]
+                    lines += [f"- [{p.category}] {p.key}: {p.value}" for p in prefs]
+                    lines += [f"- learned: {hint}" for hint in learned]
+                    for fb in recent_feedback:
+                        rating = f" rated {fb.rating}/5" if fb.rating is not None else ""
+                        text = f': "{fb.text}"' if fb.text else ""
+                        lines.append(f"- feedback on {fb.result_type}{rating}{text}")
+                    profile_summary = "\n".join(lines)
+                    system_prompt = f"{profile_summary}\n\n{system_prompt}" if system_prompt else profile_summary
 
             if not user_message:
                 message = f'AI Agent "{label}" has no input or instructions to send, skipping'
@@ -1325,6 +1370,7 @@ def run_workflow(
     user_id: int | None = None,
     flow_id: int | None = None,
     flow_name: str | None = None,
+    privacy_mode: bool = False,
 ) -> dict:
     node_by_id = {n["id"]: n for n in nodes}
     adjacency: dict[str, list[dict]] = {}
@@ -1349,6 +1395,9 @@ def run_workflow(
         # Only set when the run was made while signed in - lets a Task block save
         # tasks to that user's dashboard. Anonymous runs still work, tasks just aren't saved.
         "user_id": user_id,
+        # Set per run from the workflow's privacy switch. Read by _save_variable, the Task
+        # block and the run-history write so each one can skip saving.
+        "privacy_mode": privacy_mode,
     }
 
     # Written before anything runs, so a long run (an AI call, a Discord wait) already

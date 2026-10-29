@@ -1,4 +1,4 @@
-import { Plus, Settings as SettingsIcon, Store, X, Zap } from 'lucide-react'
+import { Plus, Settings as SettingsIcon, Store, User, X, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
 import AboutDropdown from '../shared/AboutDropdown'
 import type { AuthUser } from '../shared/auth'
@@ -8,6 +8,7 @@ import type { FlowSummary } from './types'
 export default function DashboardSidebar({
   onCreateNew,
   onOpenMarketplace,
+  onOpenProfile,
   onOpenSettings,
   onOpenAuthModal,
   user,
@@ -21,6 +22,7 @@ export default function DashboardSidebar({
 }: {
   onCreateNew: () => void
   onOpenMarketplace: () => void
+  onOpenProfile: () => void
   onOpenSettings: () => void
   onOpenAuthModal: () => void
   user: AuthUser | null
@@ -72,6 +74,15 @@ export default function DashboardSidebar({
         >
           <Store className="h-4 w-4" /> Marketplace
         </button>
+        {user && (
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200/60 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <User className="h-4 w-4" /> My profile
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenSettings}

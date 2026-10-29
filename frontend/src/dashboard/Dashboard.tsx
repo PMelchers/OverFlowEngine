@@ -16,12 +16,14 @@ export default function Dashboard({
   onOpenFlow,
   onOpenSettings,
   onOpenMarketplace,
+  onOpenProfile,
 }: {
   onCreateNew: () => void
   onCreateFromTemplate: (templateId: string) => void
   onOpenFlow: (flowId: number) => void
   onOpenSettings: () => void
   onOpenMarketplace: () => void
+  onOpenProfile: () => void
 }) {
   const { user, authedFetch } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -138,6 +140,7 @@ export default function Dashboard({
       <DashboardSidebar
         onCreateNew={onCreateNew}
         onOpenMarketplace={onOpenMarketplace}
+        onOpenProfile={onOpenProfile}
         onOpenSettings={onOpenSettings}
         onOpenAuthModal={() => setAuthModalOpen(true)}
         user={user}

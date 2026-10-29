@@ -22,6 +22,8 @@ import AuthModal from '../shared/AuthModal'
 import { useAuth } from '../shared/auth'
 import CanvasHeader from './CanvasHeader'
 import CanvasSidebar from './CanvasSidebar'
+import RatingPrompt from './RatingPrompt'
+import LearnedNotice from './LearnedNotice'
 import { nodeTypes } from './canvasGraph'
 import FlowsPanel from './FlowsPanel'
 import GroupNameModal from './GroupNameModal'
@@ -145,8 +147,17 @@ function CanvasInner({
     [setNodes],
   )
 
-  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
-    useWorkflowRun({ nodesRef, edgesRef, flowIdRef: runFlowIdRef, setNodes, updateNodeData, authedFetch })
+  // Privacy mode for the open workflow: while on, runs save nothing to the server. The ref
+  // is what the run and save requests read; the state only drives the header switch.
+  const [privacyMode, setPrivacyModeState] = useState(false)
+  const privacyModeRef = useRef(false)
+  const setPrivacyMode = useCallback((on: boolean) => {
+    privacyModeRef.current = on
+    setPrivacyModeState(on)
+  }, [])
+
+  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, ratingRequest, dismissRating, learnedNotes, dismissLearned, addLog, runWorkflow, resolveChoice, wipeData } =
+    useWorkflowRun({ nodesRef, edgesRef, flowIdRef: runFlowIdRef, setNodes, updateNodeData, authedFetch, privacyModeRef })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
   // have an OAuth flow - everything else in APP_TRIGGER_SOURCES stays unconnected until
@@ -326,6 +337,8 @@ function CanvasInner({
     initialFlowId,
     initialTemplateId,
     insertTemplate,
+    privacyModeRef,
+    setPrivacyMode,
   })
 
   // While a saved custom block is open for editing, the canvas shows that block's chain,
@@ -380,8 +393,19 @@ function CanvasInner({
         onOpenMarketplace={onOpenMarketplace}
         onOpenSettings={onOpenSettings}
         onOpenAuthModal={() => setAuthModalOpen(true)}
+        privacyMode={privacyMode}
+        onTogglePrivacy={() => setPrivacyMode(!privacyMode)}
       />
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {learnedNotes.length > 0 && user && <LearnedNotice notes={learnedNotes} onClose={dismissLearned} />}
+      {ratingRequest && user && (
+        <RatingPrompt
+          label={ratingRequest.label}
+          reply={ratingRequest.reply}
+          authedFetch={authedFetch}
+          onClose={dismissRating}
+        />
+      )}
       {pendingGroup && (
         <GroupNameModal
           defaultLabel={pendingGroup.defaultLabel}
