@@ -138,7 +138,7 @@ export function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
         outputVariable: '',
       }
     case 'activitySuggestion':
-      return { kind, label, activityContext: '', interests: '', outputVariable: '' }
+      return { kind, label, activityContext: '', interests: '', outputVariable: '', excludedSites: '' }
     case 'trigger':
       return { kind, label }
     case 'block':
@@ -161,6 +161,7 @@ export function defaultDataFor(kind: BlockKind, label: string): BlockNodeData {
         children: '',
         budget: '',
         currency: 'EUR',
+        excludedSites: '',
         outputVariable: '',
       }
     case 'tripSummary':

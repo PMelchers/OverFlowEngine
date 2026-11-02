@@ -217,6 +217,17 @@ export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockDa
         </div>
       </div>
 
+      <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">
+        Websites to exclude (no prices from these)
+      </label>
+      <input
+        type="text"
+        value={data.excludedSites ?? ''}
+        placeholder="e.g. booking.com, {tripExcludedSites}"
+        onChange={(e) => data.onChange?.({ excludedSites: e.target.value })}
+        className="nodrag mb-2 w-full rounded border border-yellow-400 bg-white px-2 py-1 text-sm dark:border-yellow-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+
       <label className="mb-1 block text-[11px] font-medium text-yellow-800 dark:text-yellow-300">Save breakdown as</label>
       <input
         type="text"
@@ -233,6 +244,8 @@ export default function CostEstimateNode({ data }: NodeProps<CostEstimateBlockDa
         convert is flagged, not silently trusted. Accommodation uses live booking-site prices, and
         own-car transport uses live fuel prices along the real route (fuel type and consumption
         above, tolls via the AI) - the AI estimate is the fallback if a live lookup fails.
+        Excluded websites never supply a price: their booking rates are left out, and the AI's
+        search skips them (Claude models) or is told to avoid them (other models).
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-yellow-600" />
