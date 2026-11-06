@@ -1,8 +1,8 @@
 import { ChevronDown, Package } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import CostSummaryCard from './CostSummaryCard'
-import type { CostBreakdown } from '../nodes/types'
-import TripPdfCard, { type TripPdf } from './TripPdfCard'
+import type { CostBreakdown, TripSummary } from '../nodes/types'
+import TripSummaryCard from './TripSummaryCard'
 import type { PendingChoice, StoredVariable } from './useWorkflowRun'
 
 interface CanvasSidebarProps {
@@ -11,8 +11,8 @@ interface CanvasSidebarProps {
   variables: Record<string, StoredVariable>
   costSummary: CostBreakdown | null
   onCloseCostSummary: () => void
-  tripPdf: TripPdf | null
-  onCloseTripPdf: () => void
+  tripSummary: TripSummary | null
+  onCloseTripSummary: () => void
   logs: string[]
   onClearLogs: () => void
 }
@@ -23,8 +23,8 @@ export default function CanvasSidebar({
   variables,
   costSummary,
   onCloseCostSummary,
-  tripPdf,
-  onCloseTripPdf,
+  tripSummary,
+  onCloseTripSummary,
   logs,
   onClearLogs,
 }: CanvasSidebarProps) {
@@ -110,7 +110,7 @@ export default function CanvasSidebar({
       </div>
 
       {costSummary && <CostSummaryCard breakdown={costSummary} onClose={onCloseCostSummary} />}
-      {tripPdf && <TripPdfCard pdf={tripPdf} onClose={onCloseTripPdf} />}
+      {tripSummary && <TripSummaryCard summary={tripSummary} onClose={onCloseTripSummary} />}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-800">

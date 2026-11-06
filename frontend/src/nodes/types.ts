@@ -6,7 +6,6 @@ import {
   Circle,
   ClipboardList,
   Diamond,
-  FileDown,
   FileSearch,
   FileText,
   GitFork,
@@ -26,6 +25,7 @@ import {
   Play,
   Receipt,
   Reply,
+  Route,
   Sparkles,
   Tag,
   Terminal,
@@ -123,6 +123,37 @@ export interface CostBreakdown {
   /** true if any item's own currency didn't match `currency` - its number was likely not
    *  actually converted, so the total may be off; check that item's note */
   currencyWarning: boolean
+}
+export interface RouteDirectionsLeg {
+  from: string
+  to: string
+  distanceKm: number
+  durationMin: number
+  /** `arrival` is set on the step that reaches the leg's stop (or the destination) */
+  steps: { instruction: string; distanceM: number; arrival?: string }[]
+}
+/** Turn-by-turn route a Trip Summary block built (backend/app/directions.py). */
+export interface RouteDirections {
+  mode: 'driving' | 'cycling' | 'walking'
+  distanceKm: number
+  durationMin: number
+  legs: RouteDirectionsLeg[]
+  points: { name: string; lat: number; lon: number; kind: 'start' | 'stop' | 'end' }[]
+  /** simplified route line as [lat, lon] pairs, only meant for a small preview */
+  geometry: [number, number][]
+  skippedStops: string[]
+}
+/** What a Trip Summary block's run step carries for the in-app trip view. */
+export interface TripSummary {
+  destination: string
+  origin: string
+  dateRange: string
+  itinerary: string
+  routeLinks: { label: string; url: string }[]
+  costBreakdown: CostBreakdown | null
+  directions: RouteDirections | null
+  /** why `directions` is missing (no origin, train trip, routing failed...) */
+  directionsNote: string
 }
 export type BlockKind =
   | 'trigger'
@@ -408,12 +439,18 @@ export interface CostEstimateBlockData extends BaseBlockData, WithAvailableVaria
   onChange?: (patch: Partial<CostEstimateBlockData>) => void
 }
 
-/** Renders a clean, downloadable PDF (itinerary + route links + cost table) server-side
- *  via reportlab - every field is optional and left out of the PDF if blank. */
+/** Collects the trip (itinerary + turn-by-turn route directions + route links + cost table)
+ *  into one in-app view - every field is optional and left out of the summary if blank. */
 export interface TripSummaryBlockData extends BaseBlockData {
   kind: 'tripSummary'
-  /** destination shown at the top of the PDF */
+  /** destination shown at the top of the summary, and the end of the route */
   activityContext?: string
+  /** start of the route directions, e.g. "{startingAddress}" */
+  origin?: string
+  /** "|"-separated stops on the way, e.g. "{routeActivities}" */
+  waypoints?: string
+  /** free text ("own car", "bike", "train"...); blank means driving */
+  transportMode?: string
   checkInDate?: string
   checkOutDate?: string
   /** itinerary text, e.g. "{vacationPlan}" - a light #/##/-/** markdown subset is understood */
@@ -589,7 +626,7 @@ export const PALETTE_ITEMS: PaletteItem[] = [
   { kind: 'mapsAction', label: 'Maps Route', description: 'Builds a real Google Maps or Apple Maps directions link - no API key needed', color: 'bg-lime-100 border-lime-500 dark:bg-lime-950 dark:border-lime-700', icon: MapPin, badgeClassName: 'bg-lime-600', category: 'core' },
   { kind: 'activitySuggestion', label: 'Suggest Activities', description: 'AI suggests stops along the route, logs the suggestion, and adds it to the route only if accepted', color: 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-700', icon: Lightbulb, badgeClassName: 'bg-orange-600', category: 'agentic' },
   { kind: 'costEstimate', label: 'Trip Cost', description: 'AI searches the web for real prices of your stops and totals them against your budget - connect an AI Model block', color: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-950 dark:border-yellow-700', icon: Receipt, badgeClassName: 'bg-yellow-600', category: 'agentic' },
-  { kind: 'tripSummary', label: 'Trip PDF', description: 'Builds a clean, downloadable PDF - itinerary, route links, and cost table - from earlier blocks in the flow', color: 'bg-slate-100 border-slate-400 dark:bg-slate-800 dark:border-slate-600', icon: FileDown, badgeClassName: 'bg-slate-600', category: 'core' },
+  { kind: 'tripSummary', label: 'Trip Summary', description: 'Shows the trip in the app - itinerary, turn-by-turn route directions, and cost table - from earlier blocks in the flow', color: 'bg-slate-100 border-slate-400 dark:bg-slate-800 dark:border-slate-600', icon: Route, badgeClassName: 'bg-slate-600', category: 'core' },
   { kind: 'block', label: 'Action Block', description: 'Generic function block', color: 'bg-white border-gray-300 dark:bg-gray-800 dark:border-gray-600', icon: Circle, badgeClassName: 'bg-gray-500', category: 'core' },
   { kind: 'ifOne', label: 'If Block (Single)', description: 'Branches Yes/No on one check', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: Diamond, badgeClassName: 'bg-amber-600', category: 'core' },
   { kind: 'if', label: 'If Block (Multiple)', description: 'Branches Yes/No on several checks (AND/OR)', color: 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700', icon: ListChecks, badgeClassName: 'bg-amber-600', category: 'core' },

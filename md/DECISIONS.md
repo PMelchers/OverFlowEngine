@@ -2,6 +2,22 @@
 
 Architectural decisions that aren't obvious from reading the code, kept here so the reasoning survives past the PR that made them.
 
+## Trip summary shown in the app, with our own route directions (2026-10-26)
+
+**Decision**: The Trip Summary block (formerly "Trip PDF", same `tripSummary` node type) no longer produces a PDF. Its run step carries a structured `tripSummary` payload (itinerary, cost breakdown, route links and turn-by-turn directions), and the editor shows it in `canvas/TripSummaryView.tsx`. The directions come from `backend/app/directions.py`, not from a hand-off to Google/Apple Maps.
+
+### Why drop the PDF
+
+A downloaded file ends the experience outside the app, and a PDF can't hold an interactive route (collapsible legs, links that open). The payload is plain JSON, so it is also stored in `workflow_runs.steps` like every other step, where the base64 PDF only bloated the row. `tripsummary.py` and the `reportlab` dependency were removed. If a printable version is wanted later, render it from the same payload rather than reintroducing a second, server-side layout.
+
+### Why OSRM for the directions
+
+Same reasons as the live prices (free, no key, see `fuel_prices.py`): places are geocoded through `geo.geocode` and routed with OSRM, which returns maneuvers that `_instruction()` turns into English sentences. The public `router.project-osrm.org` only has a car profile, so bike and walking routes use FOSSGIS' OSRM instances on `routing.openstreetmap.de`. Transit, train and plane trips get no directions (OSRM has no timetables). The block then says so in a note and keeps the Maps links. The route line is downsampled to 300 points and shown on a Leaflet map with OpenStreetMap's own tiles (`canvas/RouteMap.tsx`). That is allowed for light interactive use as long as the attribution stays visible. A first version drew only the line as a plain SVG, but without a map around it the line meant nothing to the user. Switch the tile URL if usage ever grows past what the OSM tile policy allows.
+
+Every route point is checked against OSRM's snap distance (`geo.far_from_road`, also used by the fuel cost route). A vague start such as "Home" was geocoded to Washington State, and OSRM, which only has European roads, silently started the route in Ireland. A point more than 25 km from a routable road now fails the route with a message naming that point.
+
+A failed geocode or route never fails the block: the summary is still shown, with the reason in `directionsNote`. A stop the geocoder can't place is left out and listed in `skippedStops`, the same rule as the fuel cost route.
+
 ## Variables scoped per run, paused runs in Postgres (2026-10-12)
 
 **Decision**: A workflow's variables live only in that run's own state. There are no global variables any more. Every run starts with no variables, and what it ends with is kept as `workflow_runs.variables_snapshot`. A run paused on a Choice or Activity Suggestion block keeps its full executor state in `workflow_runs.state` (Postgres), not in an in-memory dict.

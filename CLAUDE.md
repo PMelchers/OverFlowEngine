@@ -64,7 +64,7 @@ Important: `start.ps1` (Windows) does **not** start the Discord MCP server, but 
 - **`geo.py`**: shared geo helpers.
   - Nominatim geocoding goes through a process-wide 1 request/second throttle and an in-memory cache. **Always use these helpers for Nominatim calls. Don't call Nominatim directly.**
   - `country_code()` is an offline point-in-polygon lookup on Natural Earth borders, downloaded once to the gitignored `backend/.cache/`.
-- **`maps.py`**: builds Google/Apple Maps directions URLs. **`tripsummary.py`**: generates trip PDFs with reportlab.
+- **`maps.py`**: builds Google/Apple Maps directions URLs. **`directions.py`**: turn-by-turn route directions for the Trip Summary block (OSRM via the `geo.py` geocoder; car, bike, walking). The block's result is a `tripSummary` step payload that the editor shows in `canvas/TripSummaryView.tsx`. It is not a PDF any more (see DECISIONS.md).
 
 Config comes from `backend/.env` (copied from `.env.example` and gitignored). It uses `DATABASE_URL` with the `postgresql+psycopg://` scheme (psycopg v3, not psycopg2), plus `SECRET_KEY`, `DISCORD_MCP_URL`, `BACKEND_BASE_URL`, and `FRONTEND_BASE_URL`.
 

@@ -42,7 +42,7 @@ from datetime import date, timedelta
 
 import httpx
 
-from .geo import BordersUnavailable, country_code, geocode, haversine_km
+from .geo import BordersUnavailable, country_code, far_from_road, geocode, haversine_km
 
 _TIMEOUT = 20.0
 _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"
@@ -161,7 +161,7 @@ class RoutePoint:
     country: str = "??"
 
 
-def _osrm_route(points: list[tuple[float, float]]) -> tuple[float, float, list[RoutePoint]]:
+def _osrm_route(points: list[tuple[float, float]], names: list[str]) -> tuple[float, float, list[RoutePoint]]:
     """(driving km, ferry km, points every ~SAMPLE_KM of driving) for a route through
     `points`. Ferry steps are skipped: they add no driving km and get no points, so the
     car neither burns nor buys fuel on board."""
@@ -171,6 +171,9 @@ def _osrm_route(points: list[tuple[float, float]]) -> tuple[float, float, list[R
     ).json()
     if body.get("code") != "Ok" or not body.get("routes"):
         raise FuelPriceError(f"no driving route found ({body.get('message') or body.get('code')})")
+    misplaced = far_from_road(body, names)
+    if misplaced:
+        raise FuelPriceError(misplaced)
 
     driven = ferry_km = 0.0
     next_emit = 0.0
@@ -448,14 +451,18 @@ def estimate_fuel_cost(
         raise FuelPriceError(f'could not find the destination "{destination}" on the map')
     # Stops that can't be found are skipped rather than failing the whole lookup - the
     # note says which ones, and the route is then just a bit shorter than planned.
-    via, skipped_stops = [], []
+    via, via_names, skipped_stops = [], [], []
     for stop in stops[:8]:
         point = geocode(stop)
-        (via if point else skipped_stops).append(point or stop)
+        if point:
+            via.append(point)
+            via_names.append(stop)
+        else:
+            skipped_stops.append(stop)
 
-    out_km, out_ferry, out_points = _osrm_route([start, *via, end])
+    out_km, out_ferry, out_points = _osrm_route([start, *via, end], [origin, *via_names, destination])
     if via:
-        back_km, back_ferry, back_points = _osrm_route([end, start])
+        back_km, back_ferry, back_points = _osrm_route([end, start], [destination, origin])
     else:
         # Same road back - mirror the outbound points instead of asking OSRM again.
         back_km, back_ferry = out_km, out_ferry

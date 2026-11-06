@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState, type Dispatch, type RefObject, type S
 import type { Edge, Node } from 'reactflow'
 import { API_BASE } from '../shared/apiBase'
 import { TRIGGER_NODE_TYPES, expandGraph, sanitizeData, sleep, timestamp } from './canvasGraph'
-import type { BlockDataPatch, BlockNodeData, CostBreakdown, FormField } from '../nodes/types'
-import type { TripPdf } from './TripPdfCard'
+import type { BlockDataPatch, BlockNodeData, CostBreakdown, FormField, TripSummary } from '../nodes/types'
 
 export interface RunStep {
   node_id: string | null
@@ -13,7 +12,7 @@ export interface RunStep {
   branch?: string
   options?: string[]
   costBreakdown?: CostBreakdown | null
-  pdf?: TripPdf | null
+  tripSummary?: TripSummary | null
 }
 
 export interface StoredVariable {
@@ -88,7 +87,7 @@ export function useWorkflowRun({
 }: UseWorkflowRunArgs) {
   const [logs, setLogs] = useState<string[]>([])
   const [costSummary, setCostSummary] = useState<CostBreakdown | null>(null)
-  const [tripPdf, setTripPdf] = useState<TripPdf | null>(null)
+  const [tripSummary, setTripSummary] = useState<TripSummary | null>(null)
   const [running, setRunning] = useState(false)
   const [variables, setVariables] = useState<Record<string, StoredVariable>>({})
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null)
@@ -151,7 +150,7 @@ export function useWorkflowRun({
         }
         addLog(step.message)
         if (step.costBreakdown) setCostSummary(step.costBreakdown)
-        if (step.pdf) setTripPdf(step.pdf)
+        if (step.tripSummary) setTripSummary(step.tripSummary)
         await sleep(450)
       }
 
@@ -293,8 +292,8 @@ export function useWorkflowRun({
     setLogs,
     costSummary,
     setCostSummary,
-    tripPdf,
-    setTripPdf,
+    tripSummary,
+    setTripSummary,
     running,
     variables,
     pendingChoice,

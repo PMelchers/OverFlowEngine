@@ -156,7 +156,7 @@ function CanvasInner({
     setPrivacyModeState(on)
   }, [])
 
-  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, ratingRequest, dismissRating, learnedNotes, dismissLearned, addLog, runWorkflow, resolveChoice, wipeData } =
+  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, tripSummary, setTripSummary, variables, pendingChoice, ratingRequest, dismissRating, learnedNotes, dismissLearned, addLog, runWorkflow, resolveChoice, wipeData } =
     useWorkflowRun({ nodesRef, edgesRef, flowIdRef: runFlowIdRef, setNodes, updateNodeData, authedFetch, privacyModeRef })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
@@ -464,8 +464,8 @@ function CanvasInner({
           variables={variables}
           costSummary={costSummary}
           onCloseCostSummary={() => setCostSummary(null)}
-          tripPdf={tripPdf}
-          onCloseTripPdf={() => setTripPdf(null)}
+          tripSummary={tripSummary}
+          onCloseTripSummary={() => setTripSummary(null)}
           logs={logs}
           onClearLogs={() => setLogs([])}
         />
