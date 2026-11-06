@@ -1,4 +1,4 @@
-import { FileDown } from 'lucide-react'
+import { Route } from 'lucide-react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import BlockHeader from '../shared/BlockHeader'
 import GridSnapBox from '../shared/GridSnapBox'
@@ -16,7 +16,7 @@ export default function TripSummaryNode({ data }: NodeProps<TripSummaryBlockData
       }`}
     >
       <Handle type="target" position={Position.Left} className="!bg-slate-500" />
-      <BlockHeader icon={<FileDown className="h-3 w-3" />} badgeClassName="bg-slate-600">
+      <BlockHeader icon={<Route className="h-3 w-3" />} badgeClassName="bg-slate-600">
         <input
           type="text"
           value={data.label}
@@ -33,6 +33,31 @@ export default function TripSummaryNode({ data }: NodeProps<TripSummaryBlockData
         onChange={(e) => data.onChange?.({ activityContext: e.target.value })}
         className="nodrag mb-2 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100"
       />
+
+      <label className="mb-1 block text-[11px] font-medium text-slate-700 dark:text-slate-300">Route directions</label>
+      <input
+        type="text"
+        value={data.origin ?? ''}
+        placeholder="from, e.g. {startingAddress}"
+        onChange={(e) => data.onChange?.({ origin: e.target.value })}
+        className="nodrag mb-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100"
+      />
+      <div className="mb-2 grid grid-cols-2 gap-1">
+        <input
+          type="text"
+          value={data.waypoints ?? ''}
+          placeholder="stops, e.g. {routeActivities}"
+          onChange={(e) => data.onChange?.({ waypoints: e.target.value })}
+          className="nodrag rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100"
+        />
+        <input
+          type="text"
+          value={data.transportMode ?? ''}
+          placeholder="transport, e.g. {transportMode}"
+          onChange={(e) => data.onChange?.({ transportMode: e.target.value })}
+          className="nodrag rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </div>
 
       <div className="mb-2 grid grid-cols-2 gap-1">
         <input
@@ -87,8 +112,9 @@ export default function TripSummaryNode({ data }: NodeProps<TripSummaryBlockData
       />
 
       <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-        Builds a clean PDF - itinerary, route links, cost table - from the fields above, and gives
-        you a download button in the sidebar. Any field left blank is left out of the PDF.
+        Shows the trip in the app - itinerary, turn-by-turn route directions, route links and
+        cost table - with an Open button in the sidebar. Directions are made for car, bike and
+        walking trips (blank transport means car). Any field left blank is left out.
       </p>
 
       <Handle type="source" position={Position.Right} className="!bg-slate-500" />

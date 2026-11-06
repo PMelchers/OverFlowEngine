@@ -38,6 +38,26 @@ _borders_lock = threading.Lock()
 _borders: list[tuple[str, tuple[float, float, float, float], list[list[list[tuple[float, float]]]]]] | None = None
 
 
+# OSRM snaps every route point to the nearest road and reports how far it had to move it.
+# A real address is metres from a road; tens of km means Nominatim matched a vague query
+# to the wrong place (a start of "Home" landed in Washington State and OSRM, which only
+# has European roads, quietly began the route in Ireland). Callers reject the route then.
+MAX_ROAD_SNAP_KM = 25
+
+
+def far_from_road(osrm_body: dict, names: list[str]) -> str | None:
+    """Step-log-safe complaint about the first route point OSRM had to move more than
+    MAX_ROAD_SNAP_KM to reach a road, or None when every point sits on the road network."""
+    for waypoint, name in zip(osrm_body.get("waypoints") or [], names):
+        km = (waypoint.get("distance") or 0) / 1000
+        if km > MAX_ROAD_SNAP_KM:
+            return (
+                f'"{name}" was found on the map {km:,.0f} km from the nearest road it can route on - '
+                "probably the wrong place, use a full address or city name"
+            )
+    return None
+
+
 class BordersUnavailable(Exception):
     """The country borders file couldn't be downloaded or read."""
 

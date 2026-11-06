@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 import re
@@ -9,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from . import models, providers, calendar_providers, tripsummary
+from . import models, providers, calendar_providers, directions
 from .accommodation_prices import AccommodationPriceError, fetch_accommodation_price
 from .fuel_prices import FuelPriceError, estimate_fuel_cost, is_own_car
 from .conditions import evaluate_conditions
@@ -71,7 +70,10 @@ def _classify_json_failure(text: str) -> str:
     step message so a repeat failure gives an actual clue instead of a generic shrug."""
     stripped = text.strip()
     if "[" not in stripped:
-        return "the model replied with prose instead of JSON"
+        # Quote how the reply began - "prose" alone doesn't say whether the model was
+        # narrating its searches, asking a question, or refusing.
+        opening = " ".join(stripped.split())[:90]
+        return f'the model replied with prose instead of JSON ("{opening}...")' if opening else "the model replied with nothing"
     opens, closes = stripped.count("["), stripped.count("]")
     if opens > closes:
         return "the reply looks cut off mid-array (likely ran out of response length)"
@@ -1049,10 +1051,12 @@ def _advance(db: Session, state: dict) -> dict:
                         used_fallback = False
                         if items is None:
                             # First attempt wasn't valid JSON - before giving up, ask the
-                            # model (plain call, no web search needed this time - the prices
-                            # are already in `reply`, this is a formatting fix) to reformat
-                            # its own answer. Cheap and recovers a real answer far more often
-                            # than immediately falling back to zeroed-out placeholders.
+                            # model again without web search (the research is already done).
+                            # The repair call gets the original request, not just the reply:
+                            # a reply that is pure prose ("I'll look up prices for...") has no
+                            # prices to reformat, so a "just fix the formatting" call can only
+                            # answer with more prose. With the list of lines in hand it can
+                            # use whatever prices the notes do contain and estimate the rest.
                             logger.warning(
                                 "Cost Estimate reply wasn't valid JSON (%s); retrying with a repair "
                                 "call. Original reply was %d chars, starts with: %r",
@@ -1061,17 +1065,17 @@ def _advance(db: Session, state: dict) -> dict:
                                 reply[:200],
                             )
                             repair_system = (
-                                "You reformat malformed text into strict JSON. Extract every price "
-                                "estimate you can find in the given text and output ONLY a JSON array "
-                                'matching this schema, nothing else: [{"name": "...", "category": '
-                                '"route_activity"|"destination_activity"|"accommodation"|"transport", '
-                                '"estimated_cost": <number>, "currency": "...", "note": "..."}]. Keep '
-                                "every price and category from the original text - don't invent new "
-                                "line items, just fix the formatting."
+                                system_prompt.replace("Use web search to find realistic, current prices. ", "")
+                                + " You can't search now: use the prices in the research notes below where "
+                                "they exist, and your best real-world estimate for every other line (say so "
+                                'in "note"). Start your reply with "[" and end it with "]".'
+                            )
+                            repair_message = (
+                                user_message + "\n\nResearch notes from an earlier search:\n" + reply[:6000]
                             )
                             try:
                                 repair_reply = providers.call_model(
-                                    cred.provider, cred.api_key, model, repair_system, reply[:6000]
+                                    cred.provider, cred.api_key, model, repair_system, repair_message
                                 )
                                 items = _try_parse_cost_json(repair_reply, target_currency)
                             except providers.ModelCallError:
@@ -1143,6 +1147,9 @@ def _advance(db: Session, state: dict) -> dict:
 
         elif ntype == "tripSummary":
             destination = _render_message(data.get("activityContext", ""), eval_vars)
+            origin = _render_message(data.get("origin", ""), eval_vars)
+            stops_raw = _render_message(data.get("waypoints", ""), eval_vars)
+            transport = _render_message(data.get("transportMode", ""), eval_vars)
             check_in = _render_message(data.get("checkInDate", ""), eval_vars)
             check_out = _render_message(data.get("checkOutDate", ""), eval_vars)
             itinerary = _render_message(data.get("itinerary", ""), eval_vars)
@@ -1159,10 +1166,14 @@ def _advance(db: Session, state: dict) -> dict:
                 return "" if not stripped or _VAR_PATTERN.fullmatch(stripped) else stripped
 
             destination = _clean(destination)
+            origin = _clean(origin)
+            transport = _clean(transport)
+            # "|"-separated, the format Suggest Activities saves its route stops in.
+            stops = [s.strip() for s in _clean(stops_raw).split("|") if s.strip()]
             date_range = " - ".join(p for p in (_clean(check_in), _clean(check_out)) if p)
             itinerary = _clean(itinerary)
             route_links = [
-                (link_label, url)
+                {"label": link_label, "url": url}
                 for link_label, url in (("Google Maps", _clean(google_link)), ("Apple Maps", _clean(apple_link)))
                 if url
             ]
@@ -1174,26 +1185,49 @@ def _advance(db: Session, state: dict) -> dict:
                 except json.JSONDecodeError:
                     cost_breakdown = None
 
+            # The in-app route description. Missing directions never fail the block - the
+            # itinerary/costs are still worth showing, and the note says why there's no route.
+            route_directions = None
+            directions_note = ""
+            profile = directions.travel_profile(transport)
+            if not origin or not destination:
+                directions_note = "no route directions - fill in both a starting point and a destination"
+            elif profile is None:
+                directions_note = f'no route directions for travel by "{transport}" - only car, bike and walking routes are described'
+            else:
+                try:
+                    route_directions = directions.build_directions(origin, stops, destination, profile)
+                except directions.DirectionsError as exc:
+                    directions_note = f"no route directions: {exc}"
+
             if not destination and not itinerary and not route_links and not cost_breakdown:
-                message = f'"{label}" has nothing to put in a PDF yet - connect an itinerary, route, or cost block first'
-                pdf_payload = None
+                message = f'"{label}" has nothing to summarize yet - connect an itinerary, route, or cost block first'
+                summary_payload = None
                 failed = True
             else:
-                pdf_bytes = tripsummary.build_trip_pdf(
-                    destination=destination,
-                    date_range=date_range,
-                    itinerary=itinerary,
-                    route_links=route_links,
-                    cost_breakdown=cost_breakdown,
-                )
-                pdf_payload = {
-                    "filename": f"trip-{re.sub(r'[^a-zA-Z0-9]+', '-', destination).strip('-').lower() or 'summary'}.pdf",
-                    "base64": base64.b64encode(pdf_bytes).decode("ascii"),
+                summary_payload = {
+                    "destination": destination,
+                    "origin": origin,
+                    "dateRange": date_range,
+                    "itinerary": itinerary,
+                    "routeLinks": route_links,
+                    "costBreakdown": cost_breakdown,
+                    "directions": route_directions,
+                    "directionsNote": directions_note,
                 }
-                message = f'"{label}" built a {len(pdf_bytes) // 1024 or 1} KB trip summary PDF'
+                if route_directions:
+                    route_part = (
+                        f'{route_directions["distanceKm"]:g} km route with '
+                        f'{sum(len(leg["steps"]) for leg in route_directions["legs"])} directions'
+                    )
+                    if route_directions["skippedStops"]:
+                        route_part += f' (could not place: {", ".join(route_directions["skippedStops"])})'
+                else:
+                    route_part = directions_note
+                message = f'"{label}" built the trip summary - {route_part}'
 
             steps.append(
-                {"node_id": node_id, "type": ntype, "label": label, "message": message, "pdf": pdf_payload}
+                {"node_id": node_id, "type": ntype, "label": label, "message": message, "tripSummary": summary_payload}
             )
 
         elif ntype == "mapsAction":

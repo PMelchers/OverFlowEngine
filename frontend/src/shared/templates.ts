@@ -322,8 +322,11 @@ export const TEMPLATES: WorkflowTemplate[] = [
         position: { x: 10 * STEP, y: 400 },
         data: {
           kind: 'tripSummary',
-          label: 'Trip PDF',
+          label: 'Trip Summary',
           activityContext: '{destinationAddress}',
+          origin: '{startingAddress}',
+          waypoints: '{routeActivities}',
+          transportMode: '{transportMode}',
           checkInDate: '{tripStartDate}',
           checkOutDate: '{tripEndDate}',
           itinerary: '{vacationPlan}',
@@ -352,7 +355,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
       { id: 'e-googleRoute-appleRoute', source: 'googleRoute', target: 'appleRoute' },
       // Chained after both routes (not run in parallel off suggestActivities) so it's
       // guaranteed to start only once googleMapsRoute/appleMapsRoute are already saved -
-      // the Trip PDF block below needs both of those plus the cost breakdown to exist.
+      // the Trip Summary block below needs both of those plus the cost breakdown to exist.
       { id: 'e-appleRoute-costEstimate', source: 'appleRoute', target: 'costEstimate' },
       // Reuses suggestModel's AI Model block (a second edge from the same node) instead
       // of another Model block on the canvas - one connected key can feed several blocks.

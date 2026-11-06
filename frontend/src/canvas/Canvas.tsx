@@ -145,7 +145,7 @@ function CanvasInner({
     [setNodes],
   )
 
-  const { logs, setLogs, costSummary, setCostSummary, tripPdf, setTripPdf, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
+  const { logs, setLogs, costSummary, setCostSummary, tripSummary, setTripSummary, variables, pendingChoice, addLog, runWorkflow, resolveChoice, wipeData } =
     useWorkflowRun({ nodesRef, edgesRef, flowIdRef: runFlowIdRef, setNodes, updateNodeData, authedFetch })
 
   // Which real apps are actually connected (right now, only Google/Microsoft Calendar
@@ -440,8 +440,8 @@ function CanvasInner({
           variables={variables}
           costSummary={costSummary}
           onCloseCostSummary={() => setCostSummary(null)}
-          tripPdf={tripPdf}
-          onCloseTripPdf={() => setTripPdf(null)}
+          tripSummary={tripSummary}
+          onCloseTripSummary={() => setTripSummary(null)}
           logs={logs}
           onClearLogs={() => setLogs([])}
         />
